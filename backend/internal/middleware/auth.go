@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	middlewareErrors "note-taking-app/internal/errors"
-	"note-taking-app/internal/services"
+	middlewareErrors "backend/internal/errors"
+	"backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,7 +28,7 @@ func Auth(tokenService *services.JWTService) gin.HandlerFunc {
 		}
 
 		tokenString := parts[1]
-		err := tokenService.ValidateAccessToken(tokenString)
+		userID, err := tokenService.ValidateAccessToken(tokenString)
 		if err != nil {
 			if errors.Is(err, middlewareErrors.ErrInvalidToken) || errors.Is(err, middlewareErrors.ErrExpiredToken) {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
@@ -40,6 +40,7 @@ func Auth(tokenService *services.JWTService) gin.HandlerFunc {
 			return
 		}
 
+		c.Set("userID", userID)
 		c.Next()
 	}
 }

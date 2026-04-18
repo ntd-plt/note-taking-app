@@ -3,8 +3,8 @@ package services
 import (
 	"time"
 
-	"note-taking-app/internal/configs"
-	"note-taking-app/internal/errors"
+	"backend/internal/configs"
+	"backend/internal/errors"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -54,42 +54,72 @@ func (s *JWTService) GenerateRefreshToken(userID uuid.UUID) (string, error) {
 	return tokenString, nil
 }
 
-func (s *JWTService) ValidateAccessToken(tokenString string) error {
+func (s *JWTService) ValidateAccessToken(tokenString string) (uuid.UUID, error) {
 	config, err := configs.Load()
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return config.JWTSecret, nil
+		return []byte(config.JWTSecret), nil
 	})
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
 	if !token.Valid {
-		return errors.ErrInvalidToken
+		return uuid.Nil, errors.ErrInvalidToken
 	}
 
-	return nil
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return uuid.Nil, errors.ErrInvalidToken
+	}
+
+	userIDStr, ok := claims["user_id"].(string)
+	if !ok {
+		return uuid.Nil, errors.ErrInvalidToken
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return uuid.Nil, errors.ErrInvalidToken
+	}
+
+	return userID, nil
 }
 
-func (s *JWTService) ValidateRefreshToken(tokenString string) error {
+func (s *JWTService) ValidateRefreshToken(tokenString string) (uuid.UUID, error) {
 	config, err := configs.Load()
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return config.JWTSecret, nil
+		return []byte(config.JWTSecret), nil
 	})
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
 	if !token.Valid {
-		return errors.ErrInvalidToken
+		return uuid.Nil, errors.ErrInvalidToken
 	}
 
-	return nil
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return uuid.Nil, errors.ErrInvalidToken
+	}
+
+	userIDStr, ok := claims["user_id"].(string)
+	if !ok {
+		return uuid.Nil, errors.ErrInvalidToken
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return uuid.Nil, errors.ErrInvalidToken
+	}
+
+	return userID, nil
 }

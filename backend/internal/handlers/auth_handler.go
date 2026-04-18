@@ -3,8 +3,8 @@ package handlers
 import (
 	"net/http"
 
-	"note-taking-app/internal/pkg"
-	"note-taking-app/internal/services"
+	"backend/internal/pkg"
+	"backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -34,26 +34,32 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, pkg.NewAuthResponse(token))
+	c.JSON(http.StatusOK, pkg.NewAuthResponse(token.AccessToken, token.RefreshToken))
 }
 
 func (h *AuthHandler) Logout() {
 }
 
 func (h *AuthHandler) Signup(c *gin.Context) {
+	var req pkg.SignupResponse
 	if err := c.ShouldBindJSON(&req); err != nil {
-		var req pkg.SignupResponse
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	token, err := h.authService.Signup(req.Name, req.Email, req.Password)
+	err := h.authService.Signup(req.Name, req.Email, req.Password)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, pkg.NewAuthResponse(token))
+	token, err := h.authService.Login(req.Email, req.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, pkg.NewAuthResponse(token.AccessToken, token.RefreshToken))
 }
 
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
@@ -63,11 +69,11 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
-	token, err := h.tokenService.RefreshToken(req.Token)
+	token, err := h.authService.RefreshToken(req.Token)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, pkg.NewAuthResponse(token))
+	c.JSON(http.StatusOK, pkg.NewAuthResponse(token, ""))
 }

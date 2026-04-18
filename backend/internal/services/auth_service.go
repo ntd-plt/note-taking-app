@@ -1,11 +1,11 @@
 package services
 
 import (
-	"note-taking-app/internal/database"
-	"note-taking-app/internal/errors"
-	user "note-taking-app/internal/model"
-	"note-taking-app/internal/pkg"
-	"note-taking-app/internal/pkg/hash"
+	"backend/internal/database"
+	"backend/internal/errors"
+	user "backend/internal/model"
+	"backend/internal/pkg"
+	"backend/internal/pkg/hash"
 )
 
 type AuthService struct {
@@ -51,7 +51,15 @@ func (s *AuthService) Signup(name, email, password string) error {
 	}
 
 	passwordHash, err := s.hasher.Hash([]byte(password))
-	s.db.CreateUser(*user.New().WithEmail(email).WithPasswordHash(passwordHash).WithUsername(name))
+	if err != nil {
+		return err
+	}
+
+	newUser := user.New().WithEmail(email).WithPasswordHash(passwordHash).WithUsername(name)
+	if err := s.db.AddUser(*newUser); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -60,4 +68,15 @@ func (s *AuthService) Logout() error {
 }
 
 func (s *AuthService) RefreshToken(token string) (string, error) {
+	userID, err := s.tokenService.ValidateRefreshToken(token)
+	if err != nil {
+		return "", err
+	}
+
+	accessToken, err := s.tokenService.GenerateAccessToken(userID)
+	if err != nil {
+		return "", err
+	}
+
+	return accessToken, nil
 }
