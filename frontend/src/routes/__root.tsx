@@ -1,26 +1,45 @@
-import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router"
-import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
-import { TanStackDevtools } from "@tanstack/react-devtools"
+import {
+  HeadContent,
+  Outlet,
+  RouterProvider,
+  Scripts,
+  createRootRouteWithContext,
+} from '@tanstack/react-router'
+import {
+  TanStackRouterDevtools,
+  TanStackRouterDevtoolsPanel,
+} from '@tanstack/react-router-devtools'
+import { TanStackDevtools } from '@tanstack/react-devtools'
+import type { AuthState } from '@/shared'
 
-import appCss from "../styles.css?url"
+import appCss from '../styles.css?url'
 
-export const Route = createRootRoute({
+interface MyRouterContext {
+  auth: AuthState
+}
+
+export const Route = createRootRouteWithContext<MyRouterContext>()({
+  component: () => (
+    <RootDocument>
+      <App />
+    </RootDocument>
+  ),
   head: () => ({
     meta: [
       {
-        charSet: "utf-8",
+        charSet: 'utf-8',
       },
       {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
+        name: 'viewport',
+        content: 'width=device-width, initial-scale=1',
       },
       {
-        title: "TanStack Start Starter",
+        title: 'TanStack Start Starter',
       },
     ],
     links: [
       {
-        rel: "stylesheet",
+        rel: 'stylesheet',
         href: appCss,
       },
     ],
@@ -31,7 +50,6 @@ export const Route = createRootRoute({
       <p>The requested page could not be found.</p>
     </main>
   ),
-  shellComponent: RootDocument,
 })
 
 function RootDocument({ children }: { children: React.ReactNode }) {
@@ -44,11 +62,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         {children}
         <TanStackDevtools
           config={{
-            position: "bottom-right",
+            position: 'bottom-right',
           }}
           plugins={[
             {
-              name: "Tanstack Router",
+              name: 'Tanstack Router',
               render: <TanStackRouterDevtoolsPanel />,
             },
           ]}
@@ -56,5 +74,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <Scripts />
       </body>
     </html>
+  )
+}
+
+function App() {
+  return (
+    <>
+      <Outlet />
+      <TanStackRouterDevtools />
+    </>
   )
 }

@@ -1,10 +1,9 @@
-import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -12,14 +11,17 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-export const Route = createFileRoute('/signup/')({ component: SignUpPage })
-
-function SignUpPage() {
+export function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Signup for new account</CardTitle>
+          <CardTitle>Login to your account</CardTitle>
+          <CardAction>
+            <Button variant="link">
+              <Link to="/signup">Sign Up</Link>
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           <form>
@@ -36,6 +38,12 @@ function SignUpPage() {
               <div className="grid gap-2">
                 <div className="flex items-center">
                   <Label htmlFor="password">Password</Label>
+                  <a
+                    href="#"
+                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
+                  >
+                    Forgot your password?
+                  </a>
                 </div>
                 <Input id="password" type="password" required />
               </div>
@@ -44,14 +52,8 @@ function SignUpPage() {
         </CardContent>
         <CardFooter className="flex-col gap-2">
           <Button type="submit" className="w-full">
-            Signup
+            Login
           </Button>
-          <div className="flex w-full flex-row items-center justify-between">
-            <span>Already have an account?</span>
-            <Button variant="link">
-              <Link to="/login">Login</Link>
-            </Button>
-          </div>
         </CardFooter>
       </Card>
     </div>

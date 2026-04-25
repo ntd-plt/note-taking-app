@@ -1,17 +1,60 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { Button } from "@/components/ui/button"
+import { createFileRoute } from '@tanstack/react-router'
+import { Button } from '@/components/ui/button'
+import { Header } from '@/shared'
+import { validateSession } from '#/shared/api'
 
-export const Route = createFileRoute("/")({ component: App })
+export const Route = createFileRoute('/')({
+  component: App,
+  loader: () => validateSession(),
+})
 
 function App() {
+  const handleLogout = () => {
+    console.log('Logging out...')
+    // In a real app, you would handle logout logic here
+  }
+  const data = Route.useLoaderData()
+
+  const userData = data.user
+    ? {
+        email: 'tung',
+        name: data.user.username,
+        avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=John',
+      }
+    : null
+
   return (
-    <div className="flex min-h-svh p-6">
-      <div className="flex max-w-md min-w-0 flex-col gap-4 text-sm leading-loose">
-        <div>
-          <h1 className="font-medium">Project ready!</h1>
-          <p>You may now add components and start building.</p>
-          <p>We&apos;ve already added the button component for you.</p>
-          <Button className="mt-2">Button</Button>
+    <div className="min-h-screen">
+      <Header user={userData} onLogout={handleLogout} />
+      <div className="container mx-auto p-6">
+        <div className="mx-auto max-w-4xl">
+          <h1 className="mb-4 text-3xl font-bold">Welcome to NoteApp</h1>
+          <p className="mb-6 text-lg text-muted-foreground">
+            A simple and elegant note-taking application built with modern web
+            technologies.
+          </p>
+
+          <div className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="rounded-lg border p-6">
+              <h2 className="mb-3 text-xl font-semibold">Get Started</h2>
+              <p className="mb-4 text-muted-foreground">
+                Create your first note and start organizing your thoughts.
+              </p>
+              <Button asChild>
+                <a href="/notes">Create Note</a>
+              </Button>
+            </div>
+
+            <div className="rounded-lg border p-6">
+              <h2 className="mb-3 text-xl font-semibold">Your Notes</h2>
+              <p className="mb-4 text-muted-foreground">
+                View and manage all your notes in one place.
+              </p>
+              <Button variant="outline" asChild>
+                <a href="/notes">View All Notes</a>
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

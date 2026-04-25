@@ -3,7 +3,6 @@ node_modules
 dist
 dist-ssr
 *.local
-count.txt
 .env
 .nitro
 .tanstack
@@ -12,3 +11,4 @@ count.txt
 .vinxi
 __unconfig*
 todos.json
+.vite
