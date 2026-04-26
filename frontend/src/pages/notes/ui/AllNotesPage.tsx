@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { SidebarProvider } from '#/components/ui/sidebar'
+import { Editor } from './Editor'
+import { SidebarInset, SidebarProvider } from '#/components/ui/sidebar'
 import { AppSidebar, type NoteSidebarData } from './Sidebar'
 
 export function AllNotesPage() {
@@ -71,6 +72,9 @@ export function AllNotesPage() {
     <>
       <SidebarProvider>
         <AppSidebar data={data}></AppSidebar>
+        <SidebarInset>
+          <Editor></Editor>
+        </SidebarInset>
       </SidebarProvider>
     </>
   )

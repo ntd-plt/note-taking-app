@@ -1,29 +1,19 @@
 import {
   HeadContent,
   Outlet,
-  RouterProvider,
   Scripts,
-  createRootRouteWithContext,
+  createRootRoute,
 } from '@tanstack/react-router'
 import {
   TanStackRouterDevtools,
   TanStackRouterDevtoolsPanel,
 } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
-import type { AuthState } from '@/shared'
 
 import appCss from '../styles.css?url'
 
-interface MyRouterContext {
-  auth: AuthState
-}
-
-export const Route = createRootRouteWithContext<MyRouterContext>()({
-  component: () => (
-    <RootDocument>
-      <App />
-    </RootDocument>
-  ),
+export const Route = createRootRoute({
+  component: () => <App />,
   head: () => ({
     meta: [
       {
@@ -33,14 +23,33 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         name: 'viewport',
         content: 'width=device-width, initial-scale=1',
       },
-      {
-        title: 'TanStack Start Starter',
-      },
     ],
     links: [
+      { rel: 'stylesheet', href: appCss },
       {
-        rel: 'stylesheet',
-        href: appCss,
+        rel: 'apple-touch-icon',
+        sizes: '180x180',
+        href: '/apple-touch-icon.png',
+      },
+      {
+        rel: 'icon',
+        type: 'image/png',
+        sizes: '32x32',
+        href: '/favicon-32x32.png',
+      },
+      {
+        rel: 'icon',
+        type: 'image/png',
+        sizes: '16x16',
+        href: '/favicon-16x16.png',
+      },
+      { rel: 'manifest', href: '/site.webmanifest', color: '#fffff' },
+      { rel: 'icon', href: '/favicon.ico' },
+    ],
+    scripts: [
+      {
+        src: '/customScript.js',
+        type: 'text/javascript',
       },
     ],
   }),
@@ -52,36 +61,23 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
   ),
 })
 
-function RootDocument({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <TanStackDevtools
-          config={{
-            position: 'bottom-right',
-          }}
-          plugins={[
-            {
-              name: 'Tanstack Router',
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-          ]}
-        />
-        <Scripts />
-      </body>
-    </html>
-  )
-}
-
 function App() {
   return (
     <>
+      <HeadContent />
       <Outlet />
-      <TanStackRouterDevtools />
+      <TanStackDevtools
+        config={{
+          position: 'bottom-right',
+        }}
+        plugins={[
+          {
+            name: 'Tanstack Router',
+            render: <TanStackRouterDevtoolsPanel />,
+          },
+        ]}
+      />
+      <Scripts />
     </>
   )
 }
