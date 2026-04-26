@@ -1,26 +1,40 @@
+'use client'
 // src/Tiptap.tsx
-import { useEditor, EditorContent, EditorContext } from '@tiptap/react'
+import { useEditor, EditorContent, EditorContext, Tiptap } from '@tiptap/react'
+import { NodeViewWrapper } from '@tiptap/react'
 import { FloatingMenu, BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
-import { useMemo } from 'react'
+import { SlashCommand } from './SlashCommandExtension'
+import { useEffect } from 'react'
+import { SlashCommandMenu } from './CommandList'
 
-const Editor = () => {
+export default function Editor() {
   const editor = useEditor({
-    immediatelyRender: false,
-    extensions: [StarterKit], // define your extension array
-    content: '<p>Hello World!</p>', // initial content
+    extensions: [StarterKit, SlashCommand],
+    content: '<p>Type <strong>/</strong> to open the command menu…</p>',
+    editorProps: {
+      attributes: {
+        class: 'prose max-w-none focus:outline-none min-h-[200px] p-4',
+      },
+    },
   })
 
-  const providerValue = useMemo(() => ({ editor }), [editor])
-
   return (
-    <EditorContext.Provider value={providerValue}>
+    <div className="border border-gray-200 rounded-lg">
       <EditorContent editor={editor} />
-      <FloatingMenu editor={editor}>This is the floating menu</FloatingMenu>
-      <BubbleMenu editor={editor ? editor : undefined}>
-        This is the bubble menu
-      </BubbleMenu>
-    </EditorContext.Provider>
+      <SlashCommandMenu />
+    </div>
+  )
+}
+
+export const BlockWrapper = (props: any) => {
+  return (
+    <NodeViewWrapper className="group relative">
+      <div className="absolute -left-6 opacity-0 group-hover:opacity-100">
+        ⋮⋮
+      </div>
+      {props.children}
+    </NodeViewWrapper>
   )
 }
 
