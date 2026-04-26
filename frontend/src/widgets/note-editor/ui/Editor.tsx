@@ -1,16 +1,30 @@
 'use client'
 // src/Tiptap.tsx
-import { useEditor, EditorContent, EditorContext, Tiptap } from '@tiptap/react'
+import { useEditor, EditorContent } from '@tiptap/react'
 import { NodeViewWrapper } from '@tiptap/react'
-import { FloatingMenu, BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import { SlashCommand } from './SlashCommandExtension'
-import { useEffect } from 'react'
-import { SlashCommandMenu } from './CommandList'
+import { SlashMenuProvider, useSlashMenu } from './CommandList'
 
 export default function Editor() {
+  return (
+    <SlashMenuProvider>
+      <EditorWithSlash />
+    </SlashMenuProvider>
+  )
+}
+
+function EditorWithSlash() {
+  const { renderSlashMenu } = useSlashMenu()
   const editor = useEditor({
-    extensions: [StarterKit, SlashCommand],
+    extensions: [
+      StarterKit,
+      SlashCommand.configure({
+        suggestion: {
+          render: renderSlashMenu,
+        },
+      }),
+    ],
     content: '<p>Type <strong>/</strong> to open the command menu…</p>',
     editorProps: {
       attributes: {
@@ -18,11 +32,9 @@ export default function Editor() {
       },
     },
   })
-
   return (
     <div className="border border-gray-200 rounded-lg">
       <EditorContent editor={editor} />
-      <SlashCommandMenu />
     </div>
   )
 }

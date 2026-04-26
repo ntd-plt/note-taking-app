@@ -1,22 +1,7 @@
 // SlashCommandExtension.ts
 import { Extension } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion'
-import { renderSlashMenu } from './CommandList'
-
-export interface SlashCommandItem {
-  title: string
-  description?: string
-  keywords?: string[]
-  icon: string
-  command: (props: { editor: Editor; range: Range }) => void
-}
-
-import type { Editor } from '@tiptap/core'
-import type { Range } from '@tiptap/core'
-
-export type SlashCommandOptions = {
-  suggestion: Omit<SuggestionOptions<SlashCommandItem>, 'editor'>
-}
+import type { SlashCommandItem, SlashCommandOptions } from '../model'
 
 export const SlashCommand = Extension.create<SlashCommandOptions>({
   name: 'slashCommand',
@@ -36,8 +21,6 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
                 kw.toLowerCase().includes(query.toLowerCase()),
               ),
           ).slice(0, 10),
-
-        render: renderSlashMenu,
 
         command: ({ editor, range, props }) => {
           props.command({ editor, range })

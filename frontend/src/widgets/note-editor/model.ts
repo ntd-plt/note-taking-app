@@ -1,0 +1,31 @@
+import type { Editor, Range } from '@tiptap/react'
+import type { SuggestionOptions, SuggestionProps } from '@tiptap/suggestion'
+
+export type MenuState =
+  | { status: 'closed' }
+  | {
+      status: 'open'
+      items: SlashCommandItem[]
+      selectedIndex: number
+      position: { top: number; left: number }
+      command: (item: SlashCommandItem) => void
+    }
+
+export interface SlashCommandItem {
+  title: string
+  description?: string
+  keywords?: string[]
+  icon: string
+  command: (props: { editor: Editor; range: Range }) => void
+}
+
+export type SlashCommandOptions = {
+  suggestion: Omit<SuggestionOptions<SlashCommandItem>, 'editor'>
+}
+
+export type MenuAction =
+  | { type: 'OPEN'; props: SuggestionProps<SlashCommandItem> }
+  | { type: 'UPDATE'; props: SuggestionProps<SlashCommandItem> }
+  | { type: 'MOVE'; direction: 'up' | 'down' }
+  | { type: 'SELECT' }
+  | { type: 'CLOSE' }

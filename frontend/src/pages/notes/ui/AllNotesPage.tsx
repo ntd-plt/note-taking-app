@@ -1,4 +1,4 @@
-import Editor from './Editor'
+import Editor from '@/widgets/note-editor/ui/Editor'
 import { SidebarInset, SidebarProvider } from '#/components/ui/sidebar'
 import { AppSidebar, type NoteSidebarData } from './Sidebar'
 
