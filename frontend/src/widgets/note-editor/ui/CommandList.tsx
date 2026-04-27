@@ -187,9 +187,6 @@ export function SlashCommandMenu() {
   )
 }
 
-// ─── renderSlashMenu ───────────────────────────────────────────────────────────
-// Same signature as before — just fires bus events instead of managing tippy.
-
 export function makeRenderSlashMenu(
   dispatchRef: React.RefObject<React.Dispatch<MenuAction>>,
   keyDownRef: React.RefObject<((p: SuggestionKeyDownProps) => boolean) | null>,

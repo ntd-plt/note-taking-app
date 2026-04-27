@@ -2,6 +2,10 @@
 import { Extension } from '@tiptap/core'
 import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion'
 import type { SlashCommandItem, SlashCommandOptions } from '../model'
+import { EditorState, Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
+
+const ghostKey = new PluginKey<{ suggestion: string }>('ghostText')
 
 export const SlashCommand = Extension.create<SlashCommandOptions>({
   name: 'slashCommand',
@@ -35,9 +39,64 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
         editor: this.editor,
         ...this.options.suggestion,
       }),
+      new Plugin({
+        key: new PluginKey('ghostText'),
+        state: {
+          init(_config, state) {
+            return { suggestion: 'Type / to open command menu…' }
+          },
+          apply(tr, prev) {
+            const suggestion = tr.getMeta(ghostKey)
+            return suggestion !== undefined ? { suggestion } : prev
+          },
+        },
+        props: {
+          handleKeyDown(view, event) {
+            // const { suggestion } = ghostKey.getState(view.state)!
+
+            // Any other key clears ghost (except modifier keys)
+            if (
+              // suggestion &&
+              !['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)
+            ) {
+              view.dispatch(view.state.tr.setMeta(ghostKey, ''))
+            }
+
+            return false
+          },
+
+          decorations(state) {
+            const isOnEmptyLine = checkEmptyLine(state)
+
+            const { selection } = state
+            const pos = selection.$head.pos
+
+            const ghost = document.createElement('span')
+            ghost.className = 'ghost-text italic text-sm'
+            if (isOnEmptyLine) {
+              ghost.textContent = 'Type / to open command menu…'
+            } else {
+              ghost.textContent = ''
+            }
+            ghost.style.cssText =
+              'opacity: 0.4; pointer-events: none; user-select: none;'
+
+            return DecorationSet.create(state.doc, [
+              Decoration.widget(pos, ghost, { side: 1 }),
+            ])
+          },
+        },
+      }),
     ]
   },
 })
+
+function checkEmptyLine(state: EditorState): boolean {
+  const { $head } = state.selection
+  // Get the current block node (paragraph, heading, etc.)
+  const node = $head.parent
+  return node.textContent === ''
+}
 
 // ─── Default command list ─────────────────────────────────────────────────────
 

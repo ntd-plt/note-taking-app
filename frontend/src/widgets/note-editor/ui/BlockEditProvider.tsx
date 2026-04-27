@@ -1,17 +1,35 @@
+import { Button } from '#/components/ui/button'
 import type { EditorView } from '@tiptap/pm/view'
 import { Extension } from '@tiptap/react'
+import { GripVertical, GripVerticalIcon } from 'lucide-react'
 import { Plugin, PluginKey } from 'prosemirror-state'
 import type React from 'react'
-import { createContext, useContext, useState } from 'react'
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react'
+import {
+  BlockEditMenu,
+  reducer,
+  type BlockEditMenuAction,
+  type BlockEditMenuItem,
+  type BlockEditMenuState,
+} from './BlockEditMenu'
 
 export type HoverPosition = {
-  top: number
-  left: number
+  rect: DOMRect
+  nodePos: number
 }
 
 export type BlockEditContextValue = {
   setHoverPos: React.Dispatch<React.SetStateAction<HoverPosition | null>>
   hoverPos: HoverPosition | null
+  state: BlockEditMenuState
+  dispatch: React.Dispatch<BlockEditMenuAction>
 }
 
 const BlockEditContext = createContext<BlockEditContextValue | null>(null)
@@ -44,9 +62,7 @@ export function makeHandleDOMEvents() {
 }
 
 export function MakeExtension(
-  setHoverPos: React.Dispatch<
-    React.SetStateAction<{ top: number; left: number } | null>
-  >,
+  setHoverPos: React.Dispatch<React.SetStateAction<HoverPosition | null>>,
 ) {
   return Extension.create({
     name: 'my-extension',
@@ -57,11 +73,12 @@ export function MakeExtension(
 
           state: {
             init() {
-              return { count: 0 }
+              return {}
             },
             apply(tr, value) {
               if (tr.docChanged) {
-                return { count: value.count + 1 }
+                setHoverPos(null)
+                return {}
               }
               return value
             },
@@ -82,15 +99,8 @@ export function MakeExtension(
                     const dom: Node | null = view.nodeDOM(resolvedNode.pos)
                     if (dom instanceof Element) {
                       const rect = dom.getBoundingClientRect()
-                      setHoverPos({
-                        top: rect.top,
-                        left: rect.left,
-                      })
-                    } else {
-                      setHoverPos(null)
+                      setHoverPos({ rect, nodePos: resolvedNode.pos })
                     }
-                  } else {
-                    setHoverPos(null)
                   }
                 }
 
@@ -109,57 +119,61 @@ export function MakeExtension(
 
 export function BlockEditProvider({ children }: { children: React.ReactNode }) {
   const [hoverPos, setHoverPos] = useState<HoverPosition | null>(null)
-  const value = { hoverPos, setHoverPos }
+  const [state, dispatch] = useReducer(reducer, { status: 'closed' })
+  const value = useMemo(
+    () => ({ state, dispatch, hoverPos, setHoverPos }),
+    [hoverPos, state],
+  )
   return (
-    <div>
-      <BlockEditContext.Provider value={value}>
-        {children}
-        {hoverPos && (
-          <BlockHandle position={{ top: hoverPos.top, left: hoverPos.left }} />
-        )}
-      </BlockEditContext.Provider>
-    </div>
+    <BlockEditContext.Provider value={value}>
+      {children}
+      <BlockHandle hoverPos={hoverPos} />
+    </BlockEditContext.Provider>
   )
 }
 
-export function BlockHandle({
-  position,
-}: {
-  position: { top: number; left: number } | null
-}) {
-  const [lastPos, setLastPos] = useState<HoverPosition | null>(null)
-  if (position && position !== lastPos) {
-    setLastPos(position)
-  }
+export function BlockHandle({ hoverPos }: { hoverPos: HoverPosition | null }) {
+  const rect = hoverPos?.rect
+  const { dispatch } = useBlockEdit()
+  const dom = useRef<HTMLDivElement>(null)
+  const height = dom.current?.getBoundingClientRect().height ?? 0
+  const width = dom.current?.getBoundingClientRect().width ?? 0
   return (
-    lastPos && (
-      <>
-        <div
-          style={{
-            position: 'absolute',
-            top: lastPos.top,
-            left: lastPos.left,
-            width: 0,
-            height: 0,
-            pointerEvents: 'none',
-          }}
-          aria-hidden
-          className="absolute -left-6 opacity-0 group-hover:opacity-100"
-        ></div>
-        <div
-          className="text"
-          style={{
-            position: 'fixed',
-            top: lastPos.top + 2.5,
-            left: lastPos.left - 15,
-            zIndex: 50,
-            width: 10,
-            padding: 0,
+    <>
+      <div
+        style={{
+          position: 'absolute',
+          top: rect?.top ?? 0,
+          left: rect?.left ?? 0,
+          width: 0,
+          height: 0,
+          pointerEvents: 'none',
+        }}
+        aria-hidden
+        className="absolute -left-6 opacity-0 group-hover:opacity-100"
+      ></div>
+      <div
+        ref={dom}
+        className="text"
+        style={{
+          opacity: rect ? 100 : 0,
+          position: 'fixed',
+          top: (rect?.top ?? 0) + (rect?.height ?? 0) / 2 - height / 2,
+          left: (rect?.left ?? 0) - 15 - width / 2,
+          zIndex: rect ? 50 : -50,
+        }}
+      >
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="py-4"
+          onClick={() => {
+            dispatch({ type: 'OPEN' })
           }}
         >
-          ⠿
-        </div>
-      </>
-    )
+          <GripVertical strokeWidth={2} className="size-4 opacity-75" />
+        </Button>
+      </div>
+    </>
   )
 }

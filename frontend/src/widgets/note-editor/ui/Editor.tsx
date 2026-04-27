@@ -1,17 +1,16 @@
 'use client'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { TextStyleKit } from '@tiptap/extension-text-style'
-import { NodeViewWrapper } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { SlashCommand } from './SlashCommandExtension'
 import { SlashMenuProvider, useSlashMenu } from './CommandList'
-import { EditorState } from '@tiptap/pm/state'
 
 import {
   BlockEditProvider,
   MakeExtension,
   useBlockEdit,
 } from './BlockEditProvider'
+import { BlockEditMenu } from './BlockEditMenu'
 
 export default function Editor() {
   return (
@@ -37,16 +36,17 @@ function EditorWithSlash() {
       }),
       MakeExtension(setHoverPos),
     ],
-    content: '<p>Type <strong>/</strong> to open the command menu…</p>',
+    content: '',
     editorProps: {
       attributes: {
-        class: 'prose max-w-none focus:outline-none min-h-[200px] p-8',
+        class: 'prose max-w-none focus:outline-none min-h-[200px] px-16 pt-8',
       },
     },
   })
   return (
     <div className="border border-gray-200 rounded-lg">
       <EditorContent editor={editor} />
+      <BlockEditMenu editor={editor} />
     </div>
   )
 }
