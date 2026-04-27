@@ -1,10 +1,12 @@
 'use client'
 import { useEditor, EditorContent } from '@tiptap/react'
+import { TextStyleKit } from '@tiptap/extension-text-style'
 import { NodeViewWrapper } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { SlashCommand } from './SlashCommandExtension'
 import { SlashMenuProvider, useSlashMenu } from './CommandList'
 import { EditorState } from '@tiptap/pm/state'
+
 import {
   BlockEditProvider,
   MakeExtension,
@@ -27,6 +29,7 @@ function EditorWithSlash() {
   const editor = useEditor({
     extensions: [
       StarterKit,
+      TextStyleKit,
       SlashCommand.configure({
         suggestion: {
           render: renderSlashMenu,
@@ -37,11 +40,10 @@ function EditorWithSlash() {
     content: '<p>Type <strong>/</strong> to open the command menu…</p>',
     editorProps: {
       attributes: {
-        class: 'prose max-w-none focus:outline-none min-h-[200px] p-4',
+        class: 'prose max-w-none focus:outline-none min-h-[200px] p-8',
       },
     },
   })
-  editor.view.posAtCoords
   return (
     <div className="border border-gray-200 rounded-lg">
       <EditorContent editor={editor} />

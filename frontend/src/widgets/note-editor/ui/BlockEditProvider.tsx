@@ -31,9 +31,7 @@ export function makeHandleDOMEvents() {
       const coords = { left: event.clientX, top: event.clientY }
       const pos = view.posAtCoords(coords)
       if (pos) {
-        console.log('doc position:', pos.pos)
         const resolved = view.state.doc.resolve(pos.pos)
-        console.log(resolved.node(1))
         const dom: Node | null = view.nodeDOM(resolved.pos)
         if (dom instanceof Element) {
         } else {
@@ -100,7 +98,6 @@ export function MakeExtension(
               },
             },
             handleTextInput(view, from, to, text) {
-              console.log('typed:', text)
               return false // allow default behavior
             },
           },

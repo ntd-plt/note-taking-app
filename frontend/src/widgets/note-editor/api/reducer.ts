@@ -18,19 +18,12 @@ export function reducer(state: MenuState, action: MenuAction): MenuState {
     case 'MOVE': {
       if (state.status !== 'open') return state
       const len = state.items.length
-      const next =
-        action.direction === 'up'
-          ? (state.selectedIndex - 1 + len) % len
-          : (state.selectedIndex + 1) % len
-      return { ...state, selectedIndex: next }
+      const newIndex =
+        action.index < 0 ? len - 1 : action.index >= len ? 0 : action.index
+      return { ...state, selectedIndex: newIndex }
     }
 
     case 'CLOSE':
-      return { status: 'closed' }
-    case 'SELECT':
-      if (state.status !== 'open') return state
-      const item = state.items[state.selectedIndex]
-      state.command(item)
       return { status: 'closed' }
   }
 }

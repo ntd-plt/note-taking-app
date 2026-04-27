@@ -48,6 +48,9 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
     keywords: ['h1', 'heading', 'title'],
     icon: 'H1',
     command: ({ editor, range }) => {
+      console.log('Range', range)
+      // props.command({ editor, range })
+      console.log(editor.getHTML())
       editor
         .chain()
         .focus()
@@ -66,7 +69,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
         .chain()
         .focus()
         .deleteRange(range)
-        .setNode('heading', { level: 2 })
+        .toggleHeading({ level: 2 })
         .run()
     },
   },
@@ -80,7 +83,7 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
         .chain()
         .focus()
         .deleteRange(range)
-        .setNode('heading', { level: 3 })
+        .toggleHeading({ level: 3 })
         .run()
     },
   },

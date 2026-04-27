@@ -73,9 +73,7 @@ export function SlashMenuProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function SlashCommandMenu() {
-  const [open, setOpen] = useState(true)
   const { state, dispatch, keyDownRef } = useSlashMenu()
-  // Keyboard handler — called by renderSlashMenu's onKeyDown.
   keyDownRef.current = useCallback(
     ({ event }: SuggestionKeyDownProps): boolean => {
       if (state.status !== 'open') return false
@@ -84,28 +82,36 @@ export function SlashCommandMenu() {
           dispatch({ type: 'CLOSE' })
           return true
         case 'ArrowUp':
-          dispatch({ type: 'MOVE', direction: 'up' })
+          dispatch({ type: 'MOVE', index: state.selectedIndex - 1 })
           return true
         case 'ArrowDown':
-          dispatch({ type: 'MOVE', direction: 'down' })
+          dispatch({ type: 'MOVE', index: state.selectedIndex + 1 })
           return true
         case 'Enter':
-          dispatch({ type: 'SELECT' })
+          dispatch({ type: 'CLOSE' })
+          const item = state.items[state.selectedIndex]
+          state.command(item)
           return true
         default:
           return false
       }
     },
-    [state.status, dispatch],
+    [state, dispatch],
   )
   if (state.status !== 'open') return null
-  console.log(state)
 
   const { items, selectedIndex, position } = state
   const selectedValue = items[selectedIndex]?.title ?? ''
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={state.status === 'open'}
+      onOpenChange={(open) => {
+        if (!open) {
+          dispatch({ type: 'CLOSE' })
+        }
+      }}
+    >
       {/*
         PopoverAnchor isn't used here — we position the content manually via
         a fixed anchor div placed at the cursor coordinates.
@@ -140,7 +146,7 @@ export function SlashCommandMenu() {
             if (idx !== -1)
               dispatch({
                 type: 'MOVE',
-                direction: idx > selectedIndex ? 'down' : 'up',
+                index: idx,
               })
           }}
         >
@@ -151,11 +157,13 @@ export function SlashCommandMenu() {
                 <CommandItem
                   key={item.title}
                   value={item.title}
-                  onSelect={() => {
+                  data-selected={index === selectedIndex}
+                  onSelect={(value) => {
+                    const idx = items.findIndex((i) => i.title === value)
+                    const item = state.items[idx]
                     state.command(item)
                     dispatch({ type: 'CLOSE' })
                   }}
-                  data-selected={index === selectedIndex}
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <span className="flex items-center justify-center w-7 h-7 shrink-0 rounded border bg-muted font-mono text-[11px] font-semibold">
@@ -196,7 +204,8 @@ export function makeRenderSlashMenu(
     },
 
     onKeyDown(props: SuggestionKeyDownProps): boolean {
-      return keyDownRef?.current?.(props) ?? false
+      const val = keyDownRef?.current?.(props) ?? false
+      return val
     },
 
     onExit() {
