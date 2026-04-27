@@ -33,12 +33,6 @@ import type { SlashCommandItem } from '../model'
 import type { MenuAction, MenuState } from '../model'
 import { reducer } from '../api/reducer'
 
-// ─── Event bus ────────────────────────────────────────────────────────────────
-// Bridges Tiptap's imperative suggestion lifecycle into React state.
-
-// ─── SlashCommandMenu component ────────────────────────────────────────────────
-// Mount this once, anywhere above your editor in the tree (e.g. in Editor.tsx).
-
 export type SlashMenuContextValue = {
   keyDownRef?: any
   state: MenuState
