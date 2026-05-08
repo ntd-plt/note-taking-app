@@ -13,23 +13,29 @@ import {
   useState,
 } from 'react'
 import {
-  BlockEditMenu,
-  reducer,
+  blockEditMenuReducer,
   type BlockEditMenuAction,
-  type BlockEditMenuItem,
   type BlockEditMenuState,
 } from './BlockEditMenu'
+import { BlockHandle } from './BlockHandle'
 
-export type HoverPosition = {
+export type HoveredNodeData = {
   rect: DOMRect
   nodePos: number
 }
 
 export type BlockEditContextValue = {
-  setHoverPos: React.Dispatch<React.SetStateAction<HoverPosition | null>>
-  hoverPos: HoverPosition | null
+  setHoverPos: React.Dispatch<React.SetStateAction<HoveredNodeData | null>>
+  hoverPos: HoveredNodeData | null
+  mouseInside: boolean
+  setMouseInside: React.Dispatch<React.SetStateAction<boolean>>
   state: BlockEditMenuState
   dispatch: React.Dispatch<BlockEditMenuAction>
+}
+
+export type BlockHandleState = {
+  visible: boolean
+  position: HoveredNodeData | null
 }
 
 const BlockEditContext = createContext<BlockEditContextValue | null>(null)
@@ -62,7 +68,8 @@ export function makeHandleDOMEvents() {
 }
 
 export function MakeExtension(
-  setHoverPos: React.Dispatch<React.SetStateAction<HoverPosition | null>>,
+  setMouseInside: React.Dispatch<React.SetStateAction<boolean>>,
+  setHoverPos: React.Dispatch<React.SetStateAction<HoveredNodeData | null>>,
 ) {
   return Extension.create({
     name: 'my-extension',
@@ -86,6 +93,9 @@ export function MakeExtension(
 
           props: {
             handleDOMEvents: {
+              mouseenter: () => {
+                setMouseInside(true)
+              },
               mousemove: (view, event) => {
                 const coords = { left: event.clientX, top: event.clientY }
                 const pos = view.posAtCoords(coords)
@@ -107,9 +117,6 @@ export function MakeExtension(
                 return false // don’t block default behavior
               },
             },
-            handleTextInput(view, from, to, text) {
-              return false // allow default behavior
-            },
           },
         }),
       ]
@@ -118,62 +125,27 @@ export function MakeExtension(
 }
 
 export function BlockEditProvider({ children }: { children: React.ReactNode }) {
-  const [hoverPos, setHoverPos] = useState<HoverPosition | null>(null)
-  const [state, dispatch] = useReducer(reducer, { status: 'closed' })
+  const [hoverPos, setHoverPos] = useState<HoveredNodeData | null>(null)
+  const [state, dispatch] = useReducer(blockEditMenuReducer, {
+    status: 'closed',
+  })
+  const [mouseInside, setMouseInside] = useState(false)
   const value = useMemo(
-    () => ({ state, dispatch, hoverPos, setHoverPos }),
+    () => ({
+      state,
+      dispatch,
+      hoverPos,
+      setHoverPos,
+      mouseInside,
+      setMouseInside,
+    }),
     [hoverPos, state],
   )
   return (
-    <BlockEditContext.Provider value={value}>
+    <BlockEditContext value={value}>
       {children}
-      <BlockHandle hoverPos={hoverPos} />
-    </BlockEditContext.Provider>
+      <BlockHandle hoverPos={hoverPos} mouseInside={mouseInside} />
+    </BlockEditContext>
   )
 }
 
-export function BlockHandle({ hoverPos }: { hoverPos: HoverPosition | null }) {
-  const rect = hoverPos?.rect
-  const { dispatch } = useBlockEdit()
-  const dom = useRef<HTMLDivElement>(null)
-  const height = dom.current?.getBoundingClientRect().height ?? 0
-  const width = dom.current?.getBoundingClientRect().width ?? 0
-  return (
-    <>
-      <div
-        style={{
-          position: 'absolute',
-          top: rect?.top ?? 0,
-          left: rect?.left ?? 0,
-          width: 0,
-          height: 0,
-          pointerEvents: 'none',
-        }}
-        aria-hidden
-        className="absolute -left-6 opacity-0 group-hover:opacity-100"
-      ></div>
-      <div
-        ref={dom}
-        className="text"
-        style={{
-          opacity: rect ? 100 : 0,
-          position: 'fixed',
-          top: (rect?.top ?? 0) + (rect?.height ?? 0) / 2 - height / 2,
-          left: (rect?.left ?? 0) - 15 - width / 2,
-          zIndex: rect ? 50 : -50,
-        }}
-      >
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          className="py-4"
-          onClick={() => {
-            dispatch({ type: 'OPEN' })
-          }}
-        >
-          <GripVertical strokeWidth={2} className="size-4 opacity-75" />
-        </Button>
-      </div>
-    </>
-  )
-}

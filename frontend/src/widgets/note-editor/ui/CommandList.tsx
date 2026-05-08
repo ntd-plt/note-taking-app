@@ -65,10 +65,10 @@ export function SlashMenuProvider({ children }: { children: React.ReactNode }) {
     [state],
   )
   return (
-    <SlashMenuContext.Provider value={value}>
+    <SlashMenuContext value={value}>
       {children}
       <SlashCommandMenu />
-    </SlashMenuContext.Provider>
+    </SlashMenuContext>
   )
 }
 
@@ -205,7 +205,8 @@ export function makeRenderSlashMenu(
       return val
     },
 
-    onExit() {
+    onExit(props: SuggestionProps<SlashCommandItem>) {
+      props.editor.chain().focus().deleteRange(props.range).run()
       dispatchRef.current({ type: 'CLOSE' })
     },
   }

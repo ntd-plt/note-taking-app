@@ -5,11 +5,21 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { Popover, PopoverContent } from '@/components/ui/popover'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Editor } from '@tiptap/react'
 
-import { ArrowRight } from 'lucide-react'
+import {
+  ArrowBigLeftIcon,
+  ArrowBigRightDashIcon,
+  ArrowBigRightIcon,
+  ArrowLeftCircleIcon,
+  ArrowRight,
+  ArrowRightIcon,
+  DeleteIcon,
+} from 'lucide-react'
 import { useBlockEdit } from './BlockEditProvider'
+import type { ComponentType, JSX } from 'react'
+import type React from 'react'
 
 export type BlockEditMenuAction =
   | { type: 'OPEN' }
@@ -38,7 +48,7 @@ export interface BlockEditMenuItem {
   title: string
   description?: string
   keywords?: string[]
-  icon: string
+  icon: string | ComponentType
   command: (props?: CommandProps) => void
 }
 
@@ -65,9 +75,9 @@ export function BlockEditMenu({ editor }: { editor: Editor }) {
         PopoverAnchor isn't used here — we position the content manually via
         a fixed anchor div placed at the cursor coordinates.
       */}
-      <div
+      <PopoverAnchor
         style={{
-          position: 'absolute',
+          position: 'fixed',
           top: position.top,
           left: position.left,
           width: 0,
@@ -77,15 +87,12 @@ export function BlockEditMenu({ editor }: { editor: Editor }) {
         aria-hidden
       />
       <PopoverContent
-        style={{
-          position: 'fixed',
-          top: position.top,
-          left: position.left - 280,
-          zIndex: 50,
-          width: 240,
-          padding: 0,
-        }}
         // Prevent PopoverContent from trying to portal itself relative to a trigger.
+        side="left"
+        align="start"
+        alignOffset={-10}
+        sideOffset={30}
+        className="w-60 p-0"
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <Command
@@ -100,8 +107,10 @@ export function BlockEditMenu({ editor }: { editor: Editor }) {
           }}
         >
           <CommandList>
-            <CommandEmpty>No results</CommandEmpty>
-            <CommandGroup>
+            <CommandEmpty className="py-6 text-center text-sm text-gray-500">
+              No results found
+            </CommandEmpty>
+            <CommandGroup className="overflow-auto p-1">
               {items.map((item, index) => (
                 <CommandItem
                   key={item.title}
@@ -112,8 +121,11 @@ export function BlockEditMenu({ editor }: { editor: Editor }) {
                     const item = state.items[idx]
                     item.command({ dispatch, nodePos, editor })
                   }}
-                  className="flex items-center cursor-pointer"
+                  className="flex items-center gap-2 cursor-pointer"
                 >
+                  <span className="flex items-center justify-center w-7 h-7 shrink-0 rounded border bg-muted font-mono text-[11px] font-semibold">
+                    {renderIcon(item.icon)}
+                  </span>
                   <span className="flex flex-col">
                     <span className="text-sm font-medium">{item.title}</span>
                     {item.description && (
@@ -122,7 +134,6 @@ export function BlockEditMenu({ editor }: { editor: Editor }) {
                       </span>
                     )}
                   </span>
-                  <ArrowRight />
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -133,11 +144,18 @@ export function BlockEditMenu({ editor }: { editor: Editor }) {
   )
 }
 
-export function reducer(
+function renderIcon(icon: string | React.ComponentType) {
+  if (typeof icon == 'string') {
+    return <span>{icon}</span>
+  }
+  const Icon = icon
+  return <Icon />
+}
+
+export function blockEditMenuReducer(
   state: BlockEditMenuState,
   action: BlockEditMenuAction,
 ): BlockEditMenuState {
-  console.log('Menu reducer', action)
   switch (action.type) {
     case 'OPEN':
     case 'UPDATE':
@@ -180,10 +198,32 @@ export function reducer(
 export const BLOCK_EDIT_COMMANDS: BlockEditMenuItem[] = [
   {
     title: 'Turn into',
-    icon: '->',
+    icon: ArrowBigRightIcon,
     command: (props?: CommandProps) => {
       props?.dispatch({ type: 'SUBMENU' })
       // Should not close the menu
+      return false
+    },
+  },
+  {
+    title: 'Delete',
+    icon: DeleteIcon,
+    command: (props?: CommandProps) => {
+      // const curNode = props?.editor.state.selection.$head.before()
+      if (!props) return
+      const { editor, nodePos, dispatch } = props
+      editor
+        .chain()
+        .focus(nodePos - 1)
+        .command(({ tr }) => {
+          const node = tr.doc.nodeAt(nodePos)
+          if (!node) return false
+
+          tr.delete(nodePos - 1, nodePos + node.nodeSize)
+          return true
+        })
+        .run()
+      dispatch({ type: 'CLOSE' })
       return false
     },
   },
@@ -192,7 +232,7 @@ export const BLOCK_EDIT_COMMANDS: BlockEditMenuItem[] = [
 export const BLOCK_EDIT_SUBCOMMANDS: BlockEditMenuItem[] = [
   {
     title: 'Back',
-    icon: '->',
+    icon: ArrowBigLeftIcon,
     command: (props?: CommandProps) => {
       props?.dispatch({ type: 'BACK' })
     },

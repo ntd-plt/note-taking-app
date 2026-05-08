@@ -1,7 +1,6 @@
 import type { MenuAction, MenuState } from '../model'
 
 export function reducer(state: MenuState, action: MenuAction): MenuState {
-  console.log('Menu reducer', action)
   switch (action.type) {
     case 'OPEN':
     case 'UPDATE':

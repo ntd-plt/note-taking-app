@@ -183,6 +183,14 @@ body {
   margin: 0.5rem 0;
 }
 
+.tiptap ol {
+  list-style-type: decimal;
+}
+
+.tiptap ul {
+  list-style-type: disc;
+}
+
 .tiptap li {
   margin: 0.25rem 0;
 }
@@ -231,10 +239,9 @@ body {
   text-underline-offset: 2px;
 }
 
-/* Placeholder */
-.tiptap p.is-editor-empty:first-child::before {
+.ProseMirror :is(p, h1, h2, h3, li).is-empty::before {
   content: attr(data-placeholder);
-  color: hsl(var(--muted-foreground));
+  color: #aaa;
   pointer-events: none;
   float: left;
   height: 0;

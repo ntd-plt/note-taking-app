@@ -1,6 +1,8 @@
 import Editor from '@/widgets/note-editor/ui/Editor'
 import { SidebarInset, SidebarProvider } from '#/components/ui/sidebar'
 import { AppSidebar, type NoteSidebarData } from './Sidebar'
+import { Card, CardContent, CardHeader, CardTitle } from '#/components/ui/card'
+import { Button } from '#/components/ui/button'
 
 export function AllNotesPage() {
   // Sample notes data
