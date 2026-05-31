@@ -22,7 +22,7 @@ interface NotesState {
   updateNoteTitle: (id: string, title: string) => void
   updateNoteContent: (id: string, content: string) => void
   updateNoteIcon: (id: string, icon: string | undefined) => void
-  toggleFavorite: (id: string) => void
+  setFavorite: (id: string, isFavorite: boolean) => void
   toggleExpand: (id: string) => void
   setActiveNoteId: (id: string | null) => void
   setSearchQuery: (query: string) => void
@@ -169,7 +169,7 @@ const initialNotes: Note[] = [
     `,
     createdAt: new Date('2026-05-31T08:30:00.000Z').toISOString(),
     updatedAt: new Date('2026-05-31T08:30:00.000Z').toISOString(),
-  }
+  },
 ]
 
 export const useNotesStore = create<NotesState>()(
@@ -219,12 +219,15 @@ export const useNotesStore = create<NotesState>()(
 
         set((state) => {
           const idsToDelete = getIdsToDelete(id, state.notes)
-          const remainingNotes = state.notes.filter((n) => !idsToDelete.includes(n.id))
+          const remainingNotes = state.notes.filter(
+            (n) => !idsToDelete.includes(n.id),
+          )
 
           // If the deleted note was active, set active to another note
           let newActiveNoteId = state.activeNoteId
           if (state.activeNoteId && idsToDelete.includes(state.activeNoteId)) {
-            newActiveNoteId = remainingNotes.length > 0 ? remainingNotes[0].id : null
+            newActiveNoteId =
+              remainingNotes.length > 0 ? remainingNotes[0].id : null
           }
 
           return {
@@ -239,7 +242,7 @@ export const useNotesStore = create<NotesState>()(
           notes: state.notes.map((n) =>
             n.id === id
               ? { ...n, title, updatedAt: new Date().toISOString() }
-              : n
+              : n,
           ),
         }))
       },
@@ -249,7 +252,7 @@ export const useNotesStore = create<NotesState>()(
           notes: state.notes.map((n) =>
             n.id === id
               ? { ...n, content, updatedAt: new Date().toISOString() }
-              : n
+              : n,
           ),
         }))
       },
@@ -257,15 +260,17 @@ export const useNotesStore = create<NotesState>()(
       updateNoteIcon: (id, icon) => {
         set((state) => ({
           notes: state.notes.map((n) =>
-            n.id === id ? { ...n, icon, updatedAt: new Date().toISOString() } : n
+            n.id === id
+              ? { ...n, icon, updatedAt: new Date().toISOString() }
+              : n,
           ),
         }))
       },
 
-      toggleFavorite: (id) => {
+      setFavorite: (id, isFavorite) => {
         set((state) => ({
           notes: state.notes.map((n) =>
-            n.id === id ? { ...n, isFavorite: !n.isFavorite } : n
+            n.id === id ? { ...n, isFavorite: isFavorite } : n,
           ),
         }))
       },
@@ -273,7 +278,7 @@ export const useNotesStore = create<NotesState>()(
       toggleExpand: (id) => {
         set((state) => ({
           notes: state.notes.map((n) =>
-            n.id === id ? { ...n, isExpanded: !n.isExpanded } : n
+            n.id === id ? { ...n, isExpanded: !n.isExpanded } : n,
           ),
         }))
       },
@@ -302,7 +307,11 @@ export const useNotesStore = create<NotesState>()(
         }
 
         // Helper to duplicate descendants recursively
-        const dupDescendants = (oldParentId: string, newParentId: string, list: Note[]): Note[] => {
+        const dupDescendants = (
+          oldParentId: string,
+          newParentId: string,
+          list: Note[],
+        ): Note[] => {
           const children = list.filter((n) => n.parentId === oldParentId)
           let added: Note[] = []
 
@@ -334,6 +343,6 @@ export const useNotesStore = create<NotesState>()(
     }),
     {
       name: 'note-taking-workspace-storage',
-    }
-  )
+    },
+  ),
 )
