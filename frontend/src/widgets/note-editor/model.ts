@@ -2,6 +2,23 @@ import type { CommandProps, Editor, Range } from '@tiptap/react'
 import type { SuggestionOptions, SuggestionProps } from '@tiptap/suggestion'
 import type { ComponentType } from 'react'
 
+export interface Note {
+  id: string
+  title: string
+  content: string
+  parentId: string | null
+  isFavorite?: boolean
+  isExpanded?: boolean
+  icon?: string // Emoji string, e.g., "🚀"
+  createdAt: string
+  updatedAt: string
+}
+
+export type HoveredNodeData = {
+  rect: DOMRect
+  nodePos: number
+}
+
 export type MenuState =
   | { status: 'closed' }
   | {
@@ -35,7 +52,7 @@ export interface BlockEditMenuItem {
   description?: string
   keywords?: string[]
   icon: string | ComponentType
-  command: (props?: CommandProps) => void
+  command: (props?: BlockEditMenuItemCommandProps) => void
 }
 
 export interface BlockEditMenuItemCommandProps {
@@ -44,3 +61,10 @@ export interface BlockEditMenuItemCommandProps {
   dispatch: React.Dispatch<BlockEditMenuAction>
 }
 
+export type BlockEditMenuAction =
+  | { type: 'OPEN' }
+  | { type: 'UPDATE' }
+  | { type: 'SUBMENU' }
+  | { type: 'BACK' }
+  | { type: 'MOVE'; index: number }
+  | { type: 'CLOSE' }

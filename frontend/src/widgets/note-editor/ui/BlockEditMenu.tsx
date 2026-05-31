@@ -8,9 +8,7 @@ import {
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Editor } from '@tiptap/react'
 
-import { useBlockEdit } from './BlockEditProvider'
 import type React from 'react'
-import type { BlockEditMenuAction } from '../state/useBlockEditMenuStore'
 import { useBlockHandleStore } from '../state/useBlockHandleStore'
 
 export function BlockEditMenu({ editor }: { editor: Editor | null }) {

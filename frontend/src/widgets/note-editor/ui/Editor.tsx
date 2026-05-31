@@ -6,17 +6,14 @@ import StarterKit from '@tiptap/starter-kit'
 import { SlashCommand } from '../plugins/SlashCommandExtension'
 import { SlashMenuProvider, useSlashMenu } from './CommandList'
 import { Placeholder } from '@tiptap/extensions'
-import { Star, Calendar, Sparkles, FileText, PlusCircle } from 'lucide-react'
+import { FileText, PlusCircle } from 'lucide-react'
 
-import {
-  BlockEditProvider,
-  MakeExtension,
-  useBlockEdit,
-} from './BlockEditProvider'
+import { BlockEditProvider, useBlockEdit } from './BlockEditProvider'
 import { BlockEditMenu } from './BlockEditMenu'
 import { Card, CardContent } from '#/components/ui/card'
 import { useNotesStore } from '../hooks/useNotesStore'
 import { EditorHeader } from './EditorHeader'
+import { MakeBlockHandleExtension } from '../plugins/BlockHandleExtension'
 
 export default function Editor() {
   return (
@@ -83,7 +80,7 @@ function EditorWithSlash() {
           render: renderSlashMenu,
         },
       }),
-      MakeExtension(setMouseInside, setHoverPos),
+      MakeBlockHandleExtension(setMouseInside, setHoverPos),
     ],
     content: currentNote?.content || '',
     editorProps: {
