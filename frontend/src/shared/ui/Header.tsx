@@ -57,11 +57,11 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
         <NavigationMenu className="hidden md:flex">
           <NavigationMenuList>
             <NavigationMenuItem>
-              <Link to="/">
-                <NavigationMenuLink className="text-sm font-medium">
+              <NavigationMenuLink asChild>
+                <Link to="/" className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all">
                   Home
-                </NavigationMenuLink>
-              </Link>
+                </Link>
+              </NavigationMenuLink>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuTrigger className="text-sm font-medium">
@@ -70,41 +70,41 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
               <NavigationMenuContent>
                 <ul className="grid w-64 p-2">
                   <li>
-                    <Link to="/notes">
-                      <NavigationMenuLink className="block select-none rounded-md p-3 hover:bg-muted">
+                    <NavigationMenuLink asChild>
+                      <Link to="/notes" className="block select-none rounded-md p-3 hover:bg-muted">
                         <div className="text-sm font-medium">All Notes</div>
                         <p className="text-sm text-muted-foreground">
                           View and manage all your notes
                         </p>
-                      </NavigationMenuLink>
-                    </Link>
+                      </Link>
+                    </NavigationMenuLink>
                   </li>
                   <li>
-                    <Link to="/notes">
-                      <NavigationMenuLink className="block select-none rounded-md p-3 hover:bg-muted">
+                    <NavigationMenuLink asChild>
+                      <Link to="/notes" className="block select-none rounded-md p-3 hover:bg-muted">
                         <div className="text-sm font-medium">Create Note</div>
                         <p className="text-sm text-muted-foreground">
                           Create a new note
                         </p>
-                      </NavigationMenuLink>
-                    </Link>
+                      </Link>
+                    </NavigationMenuLink>
                   </li>
                 </ul>
               </NavigationMenuContent>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <Link to="/profile">
-                <NavigationMenuLink className="text-sm font-medium">
+              <NavigationMenuLink asChild>
+                <Link to="/profile" className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all">
                   Profile
-                </NavigationMenuLink>
-              </Link>
+                </Link>
+              </NavigationMenuLink>
             </NavigationMenuItem>
             <NavigationMenuItem>
-              <Link to="/settings">
-                <NavigationMenuLink className="text-sm font-medium">
+              <NavigationMenuLink asChild>
+                <Link to="/settings" className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all">
                   Settings
-                </NavigationMenuLink>
-              </Link>
+                </Link>
+              </NavigationMenuLink>
             </NavigationMenuItem>
           </NavigationMenuList>
         </NavigationMenu>

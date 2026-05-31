@@ -1,22 +1,13 @@
-import { Button } from '#/components/ui/button'
 import type { EditorView } from '@tiptap/pm/view'
 import { Extension } from '@tiptap/react'
-import { GripVertical, GripVerticalIcon } from 'lucide-react'
 import { Plugin, PluginKey } from 'prosemirror-state'
 import type React from 'react'
-import {
-  createContext,
-  useContext,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-} from 'react'
+import { createContext, useContext, useMemo, useReducer, useState } from 'react'
 import {
   blockEditMenuReducer,
   type BlockEditMenuAction,
   type BlockEditMenuState,
-} from './BlockEditMenu'
+} from '../state/useBlockEditMenuStore'
 import { BlockHandle } from './BlockHandle'
 
 export type HoveredNodeData = {
@@ -36,6 +27,10 @@ export type BlockEditContextValue = {
 export type BlockHandleState = {
   visible: boolean
   position: HoveredNodeData | null
+
+  moveHandle: (pos: HoveredNodeData) => void
+  show: () => void
+  hide: () => void
 }
 
 const BlockEditContext = createContext<BlockEditContextValue | null>(null)
@@ -148,4 +143,3 @@ export function BlockEditProvider({ children }: { children: React.ReactNode }) {
     </BlockEditContext>
   )
 }
-

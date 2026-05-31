@@ -246,3 +246,19 @@ body {
   float: left;
   height: 0;
 }
+/**/
+/* .ProseMirror > * { */
+/*   padding: 6px 8px; */
+/*   margin: 2px 0; */
+/**/
+  /* border-radius: 8px; */
+/**/
+/*   transition: */
+/*     background-color 200ms ease, */
+/*     transform 200ms ease; */
+/* } */
+/**/
+/* .ProseMirror > *:hover { */
+/*   background: var(--accent); */
+/* } */
+/**/
