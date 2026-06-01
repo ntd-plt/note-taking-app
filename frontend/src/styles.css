@@ -246,12 +246,13 @@ body {
   float: left;
   height: 0;
 }
+
 /**/
 /* .ProseMirror > * { */
 /*   padding: 6px 8px; */
 /*   margin: 2px 0; */
 /**/
-  /* border-radius: 8px; */
+/* border-radius: 8px; */
 /**/
 /*   transition: */
 /*     background-color 200ms ease, */
@@ -262,3 +263,26 @@ body {
 /*   background: var(--accent); */
 /* } */
 /**/
+
+.block-handle-hovered {
+  background-color: hsl(0 0% 96%);
+  box-shadow: 0 0 0 6px hsl(0 0% 96%);
+  /* or your theme's muted color */
+  border-radius: 2px;
+  transition:
+    background-color 0.1s ease,
+    box-shadow 0.1s ease;
+}
+
+li.block-handle-hovered {
+  box-shadow: 0 0 0 6px hsl(0 0% 96%), -1.5em 0 0 6px hsl(0 0% 96%);
+}
+
+/* Dark mode variant */
+.dark .block-handle-hovered {
+  background-color: hsl(0 0% 14%);
+}
+
+.dark li.block-handle-hovered {
+  box-shadow: 0 0 0 6px hsl(0 0% 14%), -1.5em 0 0 6px hsl(0 0% 14%);
+}

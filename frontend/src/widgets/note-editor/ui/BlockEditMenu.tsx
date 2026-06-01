@@ -8,16 +8,34 @@ import {
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Editor } from '@tiptap/react'
 
-import type React from 'react'
-import { useBlockHandleStore } from '../state/useBlockHandleStore'
+import React from 'react'
+import { useBlockEditMenuStore } from '../state/useBlockEditMenuStore'
+import { useBlockHandleState } from '../hooks/useBlockHandleState'
 
 export function BlockEditMenu({ editor }: { editor: Editor | null }) {
-  const { state, dispatch, hoverPos } = useBlockHandleStore()
-  const position = hoverPos?.rect
+  const { dispatch, ...state } = useBlockEditMenuStore()
+  const { hoveredNode } = useBlockHandleState(editor)
+  const { rect, rowNumber } = hoveredNode || {}
 
-  if (!editor || state?.status !== 'open' || !position) return null
-  const nodePos = hoverPos.nodePos
+  // Snapshot position when the menu first opens. The live rect/nodePos will be
+  // cleared when the mouse enters the Radix popover (portaled to body, outside
+  // the wrapper div), so we freeze the anchor for the menu's lifetime.
+  const anchorRect = React.useRef<DOMRect | null>(null)
+  const anchorNodePos = React.useRef<number | null>(null)
 
+  if (state.status === 'open') {
+    if (rect && anchorRect.current === null) anchorRect.current = rect
+    if (rowNumber !== null && anchorNodePos.current === null)
+      anchorNodePos.current = rowNumber ?? null
+  } else {
+    anchorRect.current = null
+    anchorNodePos.current = null
+  }
+
+  if (!editor || state.status !== 'open' || !anchorRect.current) return null
+
+  const position = anchorRect.current
+  const frozenNodePos = anchorNodePos.current
   const { items, selectedIndex } = state
   const selectedValue = items[selectedIndex]?.title ?? ''
 
@@ -78,7 +96,9 @@ export function BlockEditMenu({ editor }: { editor: Editor | null }) {
                   onSelect={(value) => {
                     const idx = items.findIndex((i) => i.title === value)
                     const item = state.items[idx]
-                    item.command({ dispatch, nodePos, editor })
+                    if (frozenNodePos !== null) {
+                      item.command({ dispatch, nodePos: frozenNodePos, editor })
+                    }
                   }}
                   className="flex items-center gap-2 cursor-pointer"
                 >

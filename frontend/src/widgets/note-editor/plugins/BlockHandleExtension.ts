@@ -1,58 +1,123 @@
-import type { HoveredNodeData } from '../model'
-
 import { Extension } from '@tiptap/react'
 import { Plugin, PluginKey } from 'prosemirror-state'
+import type { ResolvedPos } from '@tiptap/pm/model'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 
-const myPluginKey = new PluginKey('myPlugin')
+export const BLOCK_HANDLE_PLUGIN_KEY = new PluginKey('block-handle-plugin')
 
-export function MakeBlockHandleExtension(
-  setMouseInside: React.Dispatch<React.SetStateAction<boolean>>,
-  setHoverPos: React.Dispatch<React.SetStateAction<HoveredNodeData | null>>,
-) {
+export type HoveredNode = {
+  rowNumber: number
+  rect: DOMRect
+  type: 'paragraph' | 'heading' | 'bulletList' | 'orderedList' | string // include custom block types
+}
+
+export type BlockHandlePluginState = {
+  isMouseInside: boolean
+  hoveredNode: HoveredNode | null
+}
+
+/**
+ * Walks down the resolved position from depth 1 and returns the position
+ * (before the node) of the first block that is NOT a list wrapper.
+ *
+ * This ensures:
+ *  - Regular blocks (paragraph, heading…) → resolved at depth 1
+ *  - List items → resolved at depth 2, skipping the bulletList/orderedList
+ *  - Nested lists → resolved at the innermost listItem
+ */
+function resolveHandleNode(resolved: ResolvedPos): {
+  row: number
+  type: string
+} | null {
+  for (let depth = 1; depth <= resolved.depth; depth++) {
+    const node = resolved.node(depth)
+    const isListWrapper =
+      node.type.name === 'bulletList' || node.type.name === 'orderedList'
+    if (!isListWrapper) {
+      return {
+        row: resolved.before(depth),
+        type: node.type.name,
+      }
+    }
+  }
+  return null
+}
+
+export function BlockHandleExtension() {
   return Extension.create({
-    name: 'my-extension',
+    name: 'block-handle-extension',
     addProseMirrorPlugins() {
       return [
         new Plugin({
-          key: myPluginKey,
+          key: BLOCK_HANDLE_PLUGIN_KEY,
 
           state: {
-            init() {
-              return {}
+            init(): BlockHandlePluginState {
+              return { isMouseInside: false, hoveredNode: null }
             },
-            apply(tr, value) {
-              if (tr.docChanged) {
-                setHoverPos(null)
-                return {}
-              }
+            apply(tr, value): BlockHandlePluginState {
+              const meta: BlockHandlePluginState | undefined = tr.getMeta(
+                BLOCK_HANDLE_PLUGIN_KEY,
+              )
+              if (meta) return meta
+              if (tr.docChanged)
+                return { isMouseInside: false, hoveredNode: null }
               return value
             },
           },
 
           props: {
+            decorations(state) {
+              const pluginState = BLOCK_HANDLE_PLUGIN_KEY.getState(state)
+              if (
+                !pluginState ||
+                !pluginState.hoveredNode
+              )
+                return null
+
+              const { rowNumber } = pluginState.hoveredNode
+              const node = state.doc.nodeAt(rowNumber)
+              if (!node) return DecorationSet.empty
+              return DecorationSet.create(state.doc, [
+                Decoration.node(
+                  rowNumber,
+                  rowNumber + node.nodeSize,
+                  {
+                    class: 'block-handle-hovered',
+                  },
+                ),
+              ])
+            },
             handleDOMEvents: {
-              mouseenter: () => {
-                setMouseInside(true)
-              },
               mousemove: (view, event) => {
                 const coords = { left: event.clientX, top: event.clientY }
                 const pos = view.posAtCoords(coords)
-                if (pos) {
-                  const resolved = view.state.doc.resolve(pos.pos)
-                  const node = resolved.node(1)
-                  if (node) {
-                    const resolvedNode = view.state.doc.resolve(
-                      resolved.before(1),
+                if (!pos) return false
+
+                const resolved = view.state.doc.resolve(pos.pos)
+                const { row, type } = resolveHandleNode(resolved) || {
+                  row: null,
+                  type: null,
+                }
+
+                if (row !== null) {
+                  const dom = view.nodeDOM(row)
+                  if (dom instanceof Element) {
+                    const rect = dom.getBoundingClientRect()
+                    view.dispatch(
+                      view.state.tr.setMeta(BLOCK_HANDLE_PLUGIN_KEY, {
+                        isMouseInside: true,
+                        hoveredNode: {
+                          rowNumber: row,
+                          rect,
+                          type,
+                        },
+                      }),
                     )
-                    const dom: Node | null = view.nodeDOM(resolvedNode.pos)
-                    if (dom instanceof Element) {
-                      const rect = dom.getBoundingClientRect()
-                      setHoverPos({ rect, nodePos: resolvedNode.pos })
-                    }
                   }
                 }
 
-                return false // don’t block default behavior
+                return false // don't block default behavior
               },
             },
           },

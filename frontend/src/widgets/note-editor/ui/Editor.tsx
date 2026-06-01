@@ -8,26 +8,27 @@ import { SlashMenuProvider, useSlashMenu } from './CommandList'
 import { Placeholder } from '@tiptap/extensions'
 import { FileText, PlusCircle } from 'lucide-react'
 
-import { BlockEditProvider, useBlockEdit } from './BlockEditProvider'
 import { BlockEditMenu } from './BlockEditMenu'
+import { BlockHandle } from './BlockHandle'
 import { Card, CardContent } from '#/components/ui/card'
 import { useNotesStore } from '../hooks/useNotesStore'
 import { EditorHeader } from './EditorHeader'
-import { MakeBlockHandleExtension } from '../plugins/BlockHandleExtension'
+import {
+  BlockHandleExtension,
+  BLOCK_HANDLE_PLUGIN_KEY,
+} from '../plugins/BlockHandleExtension'
+import { useBlockHandleState } from '../hooks/useBlockHandleState'
 
 export default function Editor() {
   return (
     <SlashMenuProvider>
-      <BlockEditProvider>
-        <EditorWithSlash />
-      </BlockEditProvider>
+      <EditorWithSlash />
     </SlashMenuProvider>
   )
 }
 
 function EditorWithSlash() {
   const { renderSlashMenu } = useSlashMenu()
-  const { setHoverPos, setMouseInside } = useBlockEdit()
 
   // Zustand Notes Store Bindings
   const {
@@ -80,7 +81,7 @@ function EditorWithSlash() {
           render: renderSlashMenu,
         },
       }),
-      MakeBlockHandleExtension(setMouseInside, setHoverPos),
+      BlockHandleExtension(),
     ],
     content: currentNote?.content || '',
     editorProps: {
@@ -100,6 +101,17 @@ function EditorWithSlash() {
     },
   })
 
+  const { hoveredNode } = useBlockHandleState(editor)
+  console.log(hoveredNode?.type)
+  const isList = hoveredNode?.type === 'listItem'
+  let rect = hoveredNode?.rect ?? null
+  const offset = 20
+  const adjustedRect = new DOMRectReadOnly(
+    (rect?.x ?? 0) + (!isList ? 0 : -offset),
+    rect?.y,
+    (rect?.width ?? 0) + (!isList ? 0 : offset),
+    rect?.height,
+  )
   // Sync editor content when the active note changes
   React.useEffect(() => {
     if (editor && currentNote) {
@@ -144,32 +156,51 @@ function EditorWithSlash() {
     )
   }
 
+  const handleMouseLeave = () => {
+    if (editor?.view) {
+      editor.view.dispatch(
+        editor.view.state.tr.setMeta(BLOCK_HANDLE_PLUGIN_KEY, {
+          isMouseInside: false,
+          hoveredNode: null,
+        }),
+      )
+    }
+  }
+
   return (
     <>
-      <Card className="h-full border-none shadow-none rounded-none bg-background flex flex-col overflow-y-auto">
-        {/* Editor Page Header / Meta Block */}
-        <EditorHeader
-          note={currentNote}
-          onNoteTitleChange={(newTitle: string) => {
-            updateNoteTitle(currentNote.id, newTitle)
-          }}
-          onIconChange={(newIcon) => {
-            updateNoteIcon(currentNote.id, newIcon)
-          }}
-          onFavoriteStateChange={(isFav) => {
-            setFavorite(currentNote.id, isFav)
-          }}
-        ></EditorHeader>
+      {/* Wrapper captures mouseleave for the editor+handle area as a unit.
+          BlockHandle is position:fixed but DOM-descendent, so moving editor→handle
+          does NOT trigger this. Only exiting both does. */}
+      <div className="h-full" onMouseLeave={handleMouseLeave}>
+        <Card className="h-full border-none shadow-none rounded-none bg-background flex flex-col overflow-y-auto">
+          {/* Editor Page Header / Meta Block */}
+          <EditorHeader
+            note={currentNote}
+            onNoteTitleChange={(newTitle: string) => {
+              updateNoteTitle(currentNote.id, newTitle)
+            }}
+            onIconChange={(newIcon) => {
+              updateNoteIcon(currentNote.id, newIcon)
+            }}
+            onFavoriteStateChange={(isFav) => {
+              setFavorite(currentNote.id, isFav)
+            }}
+          ></EditorHeader>
 
-        {/* TipTap Rich Text Editor Container */}
-        <CardContent className="flex-1 max-w-4xl mx-auto w-full px-0">
-          <div className="prose prose-neutral max-w-none dark:prose-invert">
-            <EditorContent editor={editor} />
-          </div>
-        </CardContent>
-      </Card>
+          {/* TipTap Rich Text Editor Container */}
+          <CardContent className="flex-1 max-w-4xl mx-auto w-full px-0">
+            <div className="prose prose-neutral max-w-none dark:prose-invert">
+              <EditorContent editor={editor} />
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Notion-style block hover floating menu (Shadcn + Tiptap) */}
+        {/* Handle is inside the wrapper so mouse editor→handle won't clear rect */}
+        <BlockHandle rect={adjustedRect} />
+      </div>
+
+      {/* Menu is outside — Radix portals it to body anyway */}
       <BlockEditMenu editor={editor} />
     </>
   )

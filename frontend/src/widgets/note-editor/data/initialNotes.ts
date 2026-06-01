@@ -3,7 +3,7 @@ import type { Note } from '../model'
 const initialNotes: Note[] = [
   {
     id: 'getting-started',
-    title: '🚀 Getting Started',
+    title: 'Getting Started',
     parentId: null,
     isFavorite: true,
     isExpanded: true,
@@ -47,7 +47,7 @@ const initialNotes: Note[] = [
   },
   {
     id: 'weekly-sync',
-    title: '📅 Weekly Team Sync',
+    title: 'Weekly Team Sync',
     parentId: 'work-space',
     isFavorite: true,
     isExpanded: false,
@@ -71,7 +71,7 @@ const initialNotes: Note[] = [
   },
   {
     id: 'product-roadmap',
-    title: '🎯 Q3 Product Roadmap',
+    title: 'Q3 Product Roadmap',
     parentId: 'work-space',
     isFavorite: false,
     isExpanded: false,
@@ -96,7 +96,7 @@ const initialNotes: Note[] = [
     isExpanded: true,
     icon: '🏠',
     content: `
-      <h2>🏠 Personal Vault</h2>
+      <h2>Personal Vault</h2>
       <p>A place for your journals, reading list, travel plans, and fitness logs.</p>
     `,
     createdAt: new Date('2026-05-30T12:00:00.000Z').toISOString(),
@@ -124,7 +124,7 @@ const initialNotes: Note[] = [
   },
   {
     id: 'movies-to-watch',
-    title: '🎬 Movies to Watch',
+    title: 'Movies to Watch',
     parentId: 'personal-space',
     isFavorite: false,
     isExpanded: false,
