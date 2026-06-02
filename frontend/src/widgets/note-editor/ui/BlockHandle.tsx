@@ -14,7 +14,7 @@ export function BlockHandle({ rect }: { rect: DOMRect | null }) {
     <div
       ref={domRef}
       style={{
-        position: 'fixed',
+        position: 'absolute',
         top: (rect?.top ?? 0) + (rect?.height ?? 0) / 2 - handleHeight / 2,
         left: (rect?.left ?? 0) - 15 - handleWidth / 2,
         opacity: rect ? 1 : 0,

@@ -101,17 +101,35 @@ function EditorWithSlash() {
     },
   })
 
+  const cardRef = React.useRef<HTMLDivElement>(null)
   const { hoveredNode } = useBlockHandleState(editor)
-  console.log(hoveredNode?.type)
   const isList = hoveredNode?.type === 'listItem'
   let rect = hoveredNode?.rect ?? null
   const offset = 20
-  const adjustedRect = new DOMRectReadOnly(
-    (rect?.x ?? 0) + (!isList ? 0 : -offset),
-    rect?.y,
-    (rect?.width ?? 0) + (!isList ? 0 : offset),
-    rect?.height,
-  )
+
+  const [adjustedRect, setAdjustedRect] =
+    React.useState<DOMRectReadOnly | null>(null)
+
+  React.useLayoutEffect(() => {
+    if (rect && cardRef.current) {
+      const cardEl = cardRef.current
+      const cardRect = cardEl.getBoundingClientRect()
+
+      const top = rect.top - cardRect.top + cardEl.scrollTop
+      const left = rect.left - cardRect.left + cardEl.scrollLeft
+
+      setAdjustedRect(
+        new DOMRectReadOnly(
+          left + (!isList ? 0 : -offset),
+          top,
+          rect.width + (!isList ? 0 : offset),
+          rect.height,
+        ),
+      )
+    } else {
+      setAdjustedRect(null)
+    }
+  }, [rect, isList])
   // Sync editor content when the active note changes
   React.useEffect(() => {
     if (editor && currentNote) {
@@ -173,7 +191,10 @@ function EditorWithSlash() {
           BlockHandle is position:fixed but DOM-descendent, so moving editor→handle
           does NOT trigger this. Only exiting both does. */}
       <div className="h-full" onMouseLeave={handleMouseLeave}>
-        <Card className="h-full border-none shadow-none rounded-none bg-background flex flex-col overflow-y-auto">
+        <Card
+          ref={cardRef}
+          className="relative h-full border-none shadow-none rounded-none bg-background flex flex-col overflow-y-auto"
+        >
           {/* Editor Page Header / Meta Block */}
           <EditorHeader
             note={currentNote}
@@ -194,10 +215,10 @@ function EditorWithSlash() {
               <EditorContent editor={editor} />
             </div>
           </CardContent>
-        </Card>
 
-        {/* Handle is inside the wrapper so mouse editor→handle won't clear rect */}
-        <BlockHandle rect={adjustedRect} />
+          {/* Handle is inside the wrapper and now inside Card so scroll tracks it */}
+          <BlockHandle rect={adjustedRect} />
+        </Card>
       </div>
 
       {/* Menu is outside — Radix portals it to body anyway */}
