@@ -26,6 +26,15 @@ const initialNotes: Note[] = [
         <li><strong>Favorites</strong>: Star your most important notes for quick access at the top.</li>
         <li><strong>Quick Find</strong>: Click "Quick Find" or press <code>Ctrl+K</code> to instantly search across all notes.</li>
       </ul>
+      <p>Hello</p>
+      <div data-type="custom-layout" data-columns="1fr 1fr">
+        <div data-type="layout-cell">
+          <p>This paragraph goes inside the left column.</p>
+        </div>
+        <div data-type="layout-cell">
+          <p>This paragraph goes inside the wider right column.</p>
+        </div>
+      </div>
     `,
     createdAt: new Date('2026-05-30T10:00:00.000Z').toISOString(),
     updatedAt: new Date('2026-05-30T10:00:00.000Z').toISOString(),

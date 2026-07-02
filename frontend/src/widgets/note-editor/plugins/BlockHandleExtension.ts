@@ -33,7 +33,8 @@ function resolveHandleNode(resolved: ResolvedPos): {
     const node = resolved.node(depth)
     const isListWrapper =
       node.type.name === 'bulletList' || node.type.name === 'orderedList'
-    if (!isListWrapper) {
+    const isCustomLayoutNode = node.type.name === 'customLayout' || node.type.name === 'layoutCell'
+    if (!isListWrapper && !isCustomLayoutNode) {
       return {
         row: resolved.before(depth),
         type: node.type.name,
@@ -69,23 +70,15 @@ export function BlockHandleExtension() {
           props: {
             decorations(state) {
               const pluginState = BLOCK_HANDLE_PLUGIN_KEY.getState(state)
-              if (
-                !pluginState ||
-                !pluginState.hoveredNode
-              )
-                return null
+              if (!pluginState || !pluginState.hoveredNode) return null
 
               const { rowNumber } = pluginState.hoveredNode
               const node = state.doc.nodeAt(rowNumber)
               if (!node) return DecorationSet.empty
               return DecorationSet.create(state.doc, [
-                Decoration.node(
-                  rowNumber,
-                  rowNumber + node.nodeSize,
-                  {
-                    class: 'block-handle-hovered',
-                  },
-                ),
+                Decoration.node(rowNumber, rowNumber + node.nodeSize, {
+                  class: 'block-handle-hovered',
+                }),
               ])
             },
             handleDOMEvents: {

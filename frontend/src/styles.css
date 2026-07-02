@@ -264,18 +264,24 @@ body {
 /* } */
 /**/
 
+[data-type="layout-cell"] {
+  padding-left: 1em;
+}
+
 .block-handle-hovered {
   background-color: hsl(0 0% 96%);
-  box-shadow: 0 0 0 6px hsl(0 0% 96%);
+  box-shadow: 0 0 0 4px hsl(0 0% 96%);
   /* or your theme's muted color */
-  border-radius: 2px;
+  border-radius: 1px;
   transition:
     background-color 0.1s ease,
     box-shadow 0.1s ease;
 }
 
 li.block-handle-hovered {
-  box-shadow: 0 0 0 6px hsl(0 0% 96%), -1.5em 0 0 6px hsl(0 0% 96%);
+  box-shadow:
+    0 0 0 6px hsl(0 0% 96%),
+    -1.5em 0 0 6px hsl(0 0% 96%);
 }
 
 /* Dark mode variant */
@@ -284,5 +290,13 @@ li.block-handle-hovered {
 }
 
 .dark li.block-handle-hovered {
-  box-shadow: 0 0 0 6px hsl(0 0% 14%), -1.5em 0 0 6px hsl(0 0% 14%);
+  box-shadow:
+    0 0 0 6px hsl(0 0% 14%),
+    -1.5em 0 0 6px hsl(0 0% 14%);
+}
+
+/* Add this in your global CSS file */
+[data-node-view-wrapper].custom-layout-grid>[data-node-view-content],
+[data-node-view-wrapper].custom-layout-grid>[data-node-view-content]>[data-node-view-content-react] {
+  display: contents;
 }

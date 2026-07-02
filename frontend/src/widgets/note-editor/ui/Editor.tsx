@@ -18,6 +18,8 @@ import {
   BLOCK_HANDLE_PLUGIN_KEY,
 } from '../plugins/BlockHandleExtension'
 import { useBlockHandleState } from '../hooks/useBlockHandleState'
+import { BubbleMenu } from './BubbleMenu'
+import { CustomLayout, LayoutCell } from './CustomNode'
 
 export default function Editor() {
   return (
@@ -53,6 +55,8 @@ function EditorWithSlash() {
     extensions: [
       StarterKit,
       TextStyleKit,
+      CustomLayout,
+      LayoutCell,
       Placeholder.configure({
         includeChildren: true,
         placeholder: ({ node, editor }) => {
@@ -223,6 +227,7 @@ function EditorWithSlash() {
 
       {/* Menu is outside — Radix portals it to body anyway */}
       <BlockEditMenu editor={editor} />
+      <BubbleMenu editor={editor} />
     </>
   )
 }

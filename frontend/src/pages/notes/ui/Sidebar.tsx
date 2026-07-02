@@ -296,7 +296,15 @@ export function AppSidebar({ data: initialData }: NodeSidebarProps) {
 
               {/* Settings Trigger */}
               <SidebarMenuItem>
-                <SidebarMenuButton className="w-full text-muted-foreground/90 transition-all hover:bg-sidebar-accent/60">
+                <SidebarMenuButton
+                  className="w-full text-muted-foreground/90 transition-all hover:bg-sidebar-accent/60"
+                  onClick={() => {
+                    navigate({
+                      to: '/',
+                    })
+                    console.log('Hello')
+                  }}
+                >
                   <Settings className="mr-2 h-4 w-4 text-muted-foreground/75" />
                   <span className="text-xs font-medium">
                     Settings & Members

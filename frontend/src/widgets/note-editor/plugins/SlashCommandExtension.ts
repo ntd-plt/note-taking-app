@@ -11,7 +11,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
     return {
       suggestion: {
         char: '/',
-        startOfLine: false,
+        startOfLine: true,
         allowSpaces: false,
 
         items: ({ query }): SlashCommandItem[] =>
