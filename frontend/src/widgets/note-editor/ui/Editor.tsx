@@ -14,10 +14,10 @@ import { Card, CardContent } from '#/components/ui/card'
 import { useNotesStore } from '../hooks/useNotesStore'
 import { EditorHeader } from './EditorHeader'
 import {
-  BlockHandleExtension,
-  BLOCK_HANDLE_PLUGIN_KEY,
-} from '../plugins/BlockHandleExtension'
-import { useBlockHandleState } from '../hooks/useBlockHandleState'
+  NodeHoverExtension,
+  NODE_HOVER_PLUGIN_KEY,
+} from '../plugins/NodeHoverExtension'
+import { useNodeHoverState } from '../hooks/useNodeHoverState'
 import { BubbleMenu } from './BubbleMenu'
 import { CustomLayout, LayoutCell } from './CustomNode'
 
@@ -85,7 +85,7 @@ function EditorWithSlash() {
           render: renderSlashMenu,
         },
       }),
-      BlockHandleExtension(),
+      NodeHoverExtension,
     ],
     content: currentNote?.content || '',
     editorProps: {
@@ -106,7 +106,7 @@ function EditorWithSlash() {
   })
 
   const cardRef = React.useRef<HTMLDivElement>(null)
-  const { hoveredNode } = useBlockHandleState(editor)
+  const { hoveredNode } = useNodeHoverState(editor)
   const isList = hoveredNode?.type === 'listItem'
   let rect = hoveredNode?.rect ?? null
   const offset = 20
@@ -181,7 +181,7 @@ function EditorWithSlash() {
   const handleMouseLeave = () => {
     if (editor?.view) {
       editor.view.dispatch(
-        editor.view.state.tr.setMeta(BLOCK_HANDLE_PLUGIN_KEY, {
+        editor.view.state.tr.setMeta(NODE_HOVER_PLUGIN_KEY, {
           isMouseInside: false,
           hoveredNode: null,
         }),

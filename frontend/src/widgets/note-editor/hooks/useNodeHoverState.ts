@@ -1,24 +1,24 @@
 import type { Editor } from '@tiptap/react'
 import { useEffect, useState } from 'react'
 import {
-  BLOCK_HANDLE_PLUGIN_KEY,
-  type BlockHandlePluginState,
-} from '../plugins/BlockHandleExtension'
+  NODE_HOVER_PLUGIN_KEY,
+  type NodeHoverPluginState,
+} from '../plugins/NodeHoverExtension'
 
-const DEFAULT_PLUGIN_STATE: BlockHandlePluginState = {
+const DEFAULT_PLUGIN_STATE: NodeHoverPluginState = {
   isMouseInside: false,
   hoveredNode: null,
 }
 
-export const useBlockHandleState = (editor: Editor | null) => {
+export const useNodeHoverState = (editor: Editor | null) => {
   const [pluginState, setPluginState] =
-    useState<BlockHandlePluginState>(DEFAULT_PLUGIN_STATE)
+    useState<NodeHoverPluginState>(DEFAULT_PLUGIN_STATE)
 
   useEffect(() => {
     if (!editor) return
 
     const onTransaction = () => {
-      const state = BLOCK_HANDLE_PLUGIN_KEY.getState(editor.state)
+      const state = NODE_HOVER_PLUGIN_KEY.getState(editor.state)
       setPluginState(state ?? DEFAULT_PLUGIN_STATE)
     }
 
@@ -27,5 +27,6 @@ export const useBlockHandleState = (editor: Editor | null) => {
       editor.off('transaction', onTransaction)
     }
   }, [editor])
+
   return pluginState
 }

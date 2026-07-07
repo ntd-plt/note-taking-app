@@ -10,11 +10,11 @@ import { Editor } from '@tiptap/react'
 
 import React from 'react'
 import { useBlockEditMenuStore } from '../state/useBlockEditMenuStore'
-import { useBlockHandleState } from '../hooks/useBlockHandleState'
+import { useNodeHoverState } from '../hooks/useNodeHoverState'
 
 export function BlockEditMenu({ editor }: { editor: Editor | null }) {
   const { dispatch, ...state } = useBlockEditMenuStore()
-  const { hoveredNode } = useBlockHandleState(editor)
+  const { hoveredNode } = useNodeHoverState(editor)
   const { rect, rowNumber } = hoveredNode || {}
 
   // Snapshot position when the menu first opens. The live rect/nodePos will be
