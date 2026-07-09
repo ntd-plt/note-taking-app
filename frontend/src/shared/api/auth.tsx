@@ -1,25 +1,21 @@
-import type { AuthState } from './models'
+import { apiClient } from './client'
+import type {
+  AuthState,
+  LoginCredentials,
+  RegisterCredentials,
+  AuthResponse,
+} from '../models'
 
 export async function validateSession(): Promise<AuthState> {
   try {
-    if (true) {
-      return {
-        user: {
-          id: '123',
-          username: 'Tung Phan',
-          email: 'tung@example.com',
-        },
-        isAuthenticated: true,
-      }
-    } else {
-      const response = await fetch('/api/auth/validate')
-      const data = await response.json()
+    const data = await apiClient.get<{ authenticated: boolean; user: any }>(
+      '/api/auth/validate',
+    )
 
-      if (data.authenticated && data.user) {
-        return {
-          user: data.user,
-          isAuthenticated: data.authenticated,
-        }
+    if (data.authenticated && data.user) {
+      return {
+        user: data.user,
+        isAuthenticated: data.authenticated,
       }
     }
   } catch (error) {
@@ -29,4 +25,34 @@ export async function validateSession(): Promise<AuthState> {
     user: null,
     isAuthenticated: false,
   }
+}
+
+export async function login(
+  credentials: LoginCredentials,
+): Promise<AuthResponse> {
+  const data = await apiClient.post<AuthResponse>(
+    '/api/auth/login',
+    credentials,
+  )
+  if (data.token) {
+    localStorage.setItem('auth_token', data.token)
+  }
+  return data
+}
+
+export async function register(
+  credentials: RegisterCredentials,
+): Promise<AuthResponse> {
+  const data = await apiClient.post<AuthResponse>(
+    '/api/auth/register',
+    credentials,
+  )
+  if (data.token) {
+    localStorage.setItem('auth_token', data.token)
+  }
+  return data
+}
+
+export async function logout(): Promise<void> {
+  localStorage.removeItem('auth_token')
 }
