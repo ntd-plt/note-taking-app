@@ -1,12 +1,10 @@
 package handlers
 
 import (
-	"fmt"
-	"net/http"
-
 	"backend/internal/database"
 	"backend/internal/model"
 	"backend/internal/services"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -32,8 +30,9 @@ func (h *NotesHandler) CreateNote(c *gin.Context) {
 	}
 
 	var req struct {
-		Title   string `json:"title" binding:"required"`
-		Content string `json:"content" binding:"required"`
+		Title    string     `json:"title" binding:"required"`
+		Content  string     `json:"content" binding:"required"`
+		FolderID *uuid.UUID `json:"folder_id"` // nil to create the note outside any folder
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -46,7 +45,7 @@ func (h *NotesHandler) CreateNote(c *gin.Context) {
 		UserID:  userID.(uuid.UUID),
 	}
 
-	createdNote, err := h.db.CreateNote(note)
+	createdNote, err := h.db.CreateNote(note, req.FolderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -62,15 +61,13 @@ func (h *NotesHandler) GetNote(c *gin.Context) {
 		return
 	}
 
-	noteID := c.Param("id")
-	var noteIDInt int
-	_, err := fmt.Sscanf(noteID, "%d", &noteIDInt)
+	noteID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid note id"})
 		return
 	}
 
-	note, err := h.db.GetNoteByID(noteIDInt)
+	note, err := h.db.GetNoteByID(noteID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "note not found"})
 		return
@@ -107,15 +104,13 @@ func (h *NotesHandler) UpdateNote(c *gin.Context) {
 		return
 	}
 
-	noteID := c.Param("id")
-	var noteIDInt int
-	_, err := fmt.Sscanf(noteID, "%d", &noteIDInt)
+	noteID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid note id"})
 		return
 	}
 
-	note, err := h.db.GetNoteByID(noteIDInt)
+	note, err := h.db.GetNoteByID(noteID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "note not found"})
 		return
@@ -153,15 +148,13 @@ func (h *NotesHandler) DeleteNote(c *gin.Context) {
 		return
 	}
 
-	noteID := c.Param("id")
-	var noteIDInt int
-	_, err := fmt.Sscanf(noteID, "%d", &noteIDInt)
+	noteID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid note id"})
 		return
 	}
 
-	note, err := h.db.GetNoteByID(noteIDInt)
+	note, err := h.db.GetNoteByID(noteID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "note not found"})
 		return
@@ -172,7 +165,7 @@ func (h *NotesHandler) DeleteNote(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.DeleteNote(noteIDInt); err != nil {
+	if err := h.db.DeleteNote(noteID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

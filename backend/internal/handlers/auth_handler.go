@@ -1,10 +1,9 @@
 package handlers
 
 import (
-	"net/http"
-
 	"backend/internal/pkg"
 	"backend/internal/services"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
