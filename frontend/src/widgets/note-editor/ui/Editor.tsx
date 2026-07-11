@@ -11,7 +11,7 @@ import { FileText, PlusCircle } from 'lucide-react'
 import { BlockEditMenu } from './BlockEditMenu'
 import { BlockHandle } from './BlockHandle'
 import { Card, CardContent } from '#/components/ui/card'
-import { useNotesStore } from '../hooks/useNotesStore'
+import { useNotesStore, useNotesQuery, useUpdateNote, useCreateNote } from '../index'
 import { EditorHeader } from './EditorHeader'
 import {
   NodeHoverExtension,
@@ -32,16 +32,11 @@ export default function Editor() {
 function EditorWithSlash() {
   const { renderSlashMenu } = useSlashMenu()
 
-  // Zustand Notes Store Bindings
-  const {
-    notes,
-    activeNoteId,
-    updateNoteTitle,
-    updateNoteContent,
-    updateNoteIcon,
-    setFavorite,
-    addNote,
-  } = useNotesStore()
+  // TanStack Query & Zustand Bindings
+  const { data: notes = [] } = useNotesQuery()
+  const { activeNoteId } = useNotesStore()
+  const { updateNote } = useUpdateNote()
+  const createNoteMutation = useCreateNote()
 
   const currentNote = notes.find((n) => n.id === activeNoteId)
 
@@ -99,8 +94,8 @@ function EditorWithSlash() {
       const activeId = currentNoteRef.current?.id
       if (activeId) {
         const html = editor.getHTML()
-        // Save to Zustand store
-        updateNoteContent(activeId, html)
+        // Save to server (debounced)
+        updateNote(activeId, { content: html })
       }
     },
   })
@@ -147,7 +142,7 @@ function EditorWithSlash() {
 
   // Handle adding a default note when all are deleted
   const handleCreateFirstPage = () => {
-    addNote(null, 'Welcome to my new page')
+    createNoteMutation.mutate({ parentId: null, title: 'Welcome to my new page' })
   }
 
   if (!currentNote) {
@@ -203,13 +198,13 @@ function EditorWithSlash() {
           <EditorHeader
             note={currentNote}
             onNoteTitleChange={(newTitle: string) => {
-              updateNoteTitle(currentNote.id, newTitle)
+              updateNote(currentNote.id, { title: newTitle })
             }}
             onIconChange={(newIcon) => {
-              updateNoteIcon(currentNote.id, newIcon)
+              updateNote(currentNote.id, { icon: newIcon })
             }}
             onFavoriteStateChange={(isFav) => {
-              setFavorite(currentNote.id, isFav)
+              updateNote(currentNote.id, { isFavorite: isFav })
             }}
           ></EditorHeader>
 

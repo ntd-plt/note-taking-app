@@ -3,7 +3,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
-import { Star, Calendar, Sparkles } from 'lucide-react'
+import { Star, Calendar } from 'lucide-react'
 import type { Note } from '../model'
 import { cn } from '#/lib/utils'
 
@@ -44,7 +44,7 @@ export type EditorHeaderProps = {
   onFavoriteStateChange: (isFav: boolean) => void | undefined
 }
 
-import { useNotesStore, type Folder } from '@/widgets/note-editor'
+import { useNotesStore, type Folder, useResolveFullPath, useFoldersQuery } from '@/widgets/note-editor'
 import * as React from 'react'
 
 export function EditorHeader({
@@ -53,13 +53,15 @@ export function EditorHeader({
   onNoteTitleChange,
   onIconChange,
 }: EditorHeaderProps) {
-  const { resolveFullPath, folders, savingNoteId } = useNotesStore()
+  const { data: folders = [] } = useFoldersQuery()
+  const resolveFullPath = useResolveFullPath()
+  const savingNoteId = useNotesStore((state) => state.savingNoteId)
   const [breadcrumbs, setBreadcrumbs] = React.useState<Folder[]>([])
 
   // Re-fetch breadcrumbs when current note, its parentId, or folders change
   React.useEffect(() => {
     let active = true
-    resolveFullPath(currentNote.id).then((path) => {
+    resolveFullPath(currentNote, folders).then((path) => {
       if (active) {
         setBreadcrumbs(path)
       }
@@ -67,7 +69,7 @@ export function EditorHeader({
     return () => {
       active = false
     }
-  }, [currentNote.id, currentNote.parentId, folders, resolveFullPath])
+  }, [currentNote.id, currentNote.parentId, folders, resolveFullPath, currentNote])
 
   return (
     <div className="w-full max-w-4xl mx-auto pt-10 px-8 flex flex-col gap-4">

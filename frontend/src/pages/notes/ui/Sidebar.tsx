@@ -1,6 +1,18 @@
 import * as React from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useNotesStore, type SidebarItem } from '@/widgets/note-editor'
+import {
+  useNotesStore,
+  useNotesQuery,
+  useFoldersQuery,
+  useCreateNote,
+  useDeleteNote,
+  useDuplicateNote,
+  useCreateFolder,
+  useDeleteFolder,
+  useUpdateFolder,
+  useUpdateNote,
+  type SidebarItem,
+} from '@/widgets/note-editor'
 import {
   Sidebar,
   SidebarContent,
@@ -67,33 +79,26 @@ export interface NodeSidebarProps {
 export function AppSidebar() {
   const navigate = useNavigate()
 
+  // Queries
+  const { data: notes = [] } = useNotesQuery()
+  const { data: folders = [] } = useFoldersQuery()
+
+  // Mutations
+  const createNoteMutation = useCreateNote()
+  const deleteNoteMutation = useDeleteNote()
+  const duplicateNoteMutation = useDuplicateNote()
+  const createFolderMutation = useCreateFolder()
+  const deleteFolderMutation = useDeleteFolder()
+  const updateFolderMutation = useUpdateFolder()
+  const { updateNote } = useUpdateNote()
+
   // Zustand store bindings
   const {
-    notes,
-    folders,
     activeNoteId,
     searchQuery,
-    addNote,
-    deleteNote,
-    updateNoteIcon,
-    toggleFavorite,
     setActiveNoteId,
     setSearchQuery,
-    duplicateNote,
-    fetchFolders,
-    fetchNotes,
-    addFolder,
-    deleteFolder,
-    updateFolderName,
-    updateFolderIcon,
-    toggleFolderExpand,
   } = useNotesStore()
-
-  // Load folders and notes on component mount
-  React.useEffect(() => {
-    fetchFolders()
-    fetchNotes()
-  }, [fetchFolders, fetchNotes])
 
   // Find active note from URL params if available
   const params = useParams({ strict: false }) as { noteId?: string }
@@ -189,18 +194,13 @@ export function AppSidebar() {
 
   // Handlers
   const handleCreateNewPage = (parentId: string | null = null) => {
-    const title = 'Untitled Note'
-    const newId = addNote(parentId, title)
-    navigate({
-      to: '/notes/$noteId',
-      params: { noteId: newId },
-    })
+    createNoteMutation.mutate({ parentId, title: 'Untitled Note' })
   }
 
   const handleCreateNewFolder = async (parentId: string | null = null) => {
     const name = window.prompt('Enter folder name', 'New Folder')
     if (name && name.trim() !== '') {
-      await addFolder(parentId, name.trim())
+      createFolderMutation.mutate({ parentId, name: name.trim() })
     }
   }
 
@@ -208,7 +208,7 @@ export function AppSidebar() {
     e.stopPropagation()
     e.preventDefault()
     if (confirm('Delete this note permanently?')) {
-      deleteNote(id)
+      deleteNoteMutation.mutate(id)
       if (currentNoteId === id) {
         const remaining = notes.filter((n) => n.id !== id)
         if (remaining.length > 0) {
@@ -223,11 +223,11 @@ export function AppSidebar() {
     }
   }
 
-  const handleDeleteFolder = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteFolder = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
     if (confirm('Delete this folder and all its contents?')) {
-      await deleteFolder(id)
+      deleteFolderMutation.mutate(id)
       // Check if current note was inside deleted folder structure
       const stillExists = notes.some((n) => n.id === currentNoteId)
       if (!stillExists) {
@@ -247,12 +247,9 @@ export function AppSidebar() {
   const handleDuplicatePage = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    const newId = duplicateNote(id)
-    if (newId) {
-      navigate({
-        to: '/notes/$noteId',
-        params: { noteId: newId },
-      })
+    const note = notes.find((n) => n.id === id)
+    if (note) {
+      duplicateNoteMutation.mutate(note)
     }
   }
 
@@ -306,7 +303,7 @@ export function AppSidebar() {
           </DropdownMenu>
         </SidebarHeader>
 
-        {/* Sidebar Main Navigation Content */}
+        {/* Sidebar Navigation Content */}
         <SidebarContent className="px-2 pt-2">
           {/* Quick Actions Group */}
           <SidebarGroup className="p-0">
@@ -387,7 +384,7 @@ export function AppSidebar() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          toggleFavorite(note.id)
+                          updateNote(note.id, { isFavorite: false })
                         }}
                         className="opacity-0 group-hover:opacity-100 p-0.5 rounded-sm hover:bg-sidebar-accent-foreground/10 text-muted-foreground hover:text-primary transition-all shrink-0"
                         title="Remove from Favorites"
@@ -444,11 +441,23 @@ export function AppSidebar() {
                       onDeleteNote={handleDeletePage}
                       onDeleteFolder={handleDeleteFolder}
                       onDuplicateNote={handleDuplicatePage}
-                      onToggleFavorite={toggleFavorite}
-                      onToggleFolderExpand={toggleFolderExpand}
-                      onUpdateFolderIcon={updateFolderIcon}
-                      onUpdateNoteIcon={updateNoteIcon}
-                      onUpdateFolderName={updateFolderName}
+                      onToggleFavorite={(id) => {
+                        const note = notes.find((n) => n.id === id)
+                        if (note) updateNote(id, { isFavorite: !note.isFavorite })
+                      }}
+                      onToggleFolderExpand={(id) => {
+                        const f = folders.find((fol) => fol.id === id)
+                        if (f) updateFolderMutation.mutate({ id, updates: { isExpanded: !f.isExpanded } })
+                      }}
+                      onUpdateFolderIcon={(id, icon) => {
+                        updateFolderMutation.mutate({ id, updates: { icon } })
+                      }}
+                      onUpdateNoteIcon={(id, icon) => {
+                        updateNote(id, { icon })
+                      }}
+                      onUpdateFolderName={(id, name) => {
+                        updateFolderMutation.mutate({ id, updates: { name } })
+                      }}
                     />
                   ))}
                 </SidebarMenu>
@@ -467,9 +476,6 @@ export function AppSidebar() {
                   <SidebarMenuButton className="w-full text-muted-foreground/80 hover:bg-destructive/10 hover:text-destructive transition-all">
                     <Trash2 className="mr-2 h-4 w-4 opacity-75" />
                     <span className="text-xs">Archive / Trash</span>
-                    <span className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded-full font-semibold opacity-70">
-                      0
-                    </span>
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
