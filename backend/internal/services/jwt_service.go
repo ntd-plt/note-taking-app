@@ -1,6 +1,7 @@
 package services
 
 import (
+	stderrors "errors"
 	"time"
 
 	"backend/internal/configs"
@@ -54,6 +55,13 @@ func (s *JWTService) GenerateRefreshToken(userID uuid.UUID) (string, error) {
 	return tokenString, nil
 }
 
+func classifyParseErr(err error) error {
+	if stderrors.Is(err, jwt.ErrTokenExpired) {
+		return errors.ErrExpiredToken
+	}
+	return errors.ErrInvalidToken
+}
+
 func (s *JWTService) ValidateAccessToken(tokenString string) (uuid.UUID, error) {
 	config, err := configs.Load()
 	if err != nil {
@@ -64,7 +72,7 @@ func (s *JWTService) ValidateAccessToken(tokenString string) (uuid.UUID, error) 
 		return []byte(config.JWTSecret), nil
 	})
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, classifyParseErr(err)
 	}
 
 	if !token.Valid {
@@ -99,7 +107,7 @@ func (s *JWTService) ValidateRefreshToken(tokenString string) (uuid.UUID, error)
 		return []byte(config.JWTSecret), nil
 	})
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, classifyParseErr(err)
 	}
 
 	if !token.Valid {
