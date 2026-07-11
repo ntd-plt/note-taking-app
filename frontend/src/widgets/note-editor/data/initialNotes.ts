@@ -6,7 +6,6 @@ const initialNotes: Note[] = [
     title: 'Getting Started',
     parentId: null,
     isFavorite: true,
-    isExpanded: true,
     icon: '🚀',
     content: `
       <h2>Welcome to your new workspace!</h2>
@@ -21,45 +20,20 @@ const initialNotes: Note[] = [
       <p></p>
       <h3>📂 Notion Sidebar features:</h3>
       <ul>
-        <li><strong>Collapsible hierarchy</strong>: Click the arrow next to a note to reveal sub-notes.</li>
-        <li><strong>Quick Actions</strong>: Hover over any sidebar item to add a sub-note (<code>+</code>) or open options (<code>...</code>).</li>
+        <li><strong>Collapsible hierarchy</strong>: Click the arrow next to a folder to reveal subfolders and sub-notes.</li>
+        <li><strong>Quick Actions</strong>: Hover over any sidebar item to add a note or folder.</li>
         <li><strong>Favorites</strong>: Star your most important notes for quick access at the top.</li>
         <li><strong>Quick Find</strong>: Click "Quick Find" or press <code>Ctrl+K</code> to instantly search across all notes.</li>
       </ul>
-      <p>Hello</p>
-      <div data-type="custom-layout" data-columns="1fr 1fr">
-        <div data-type="layout-cell">
-          <p>This paragraph goes inside the left column.</p>
-        </div>
-        <div data-type="layout-cell">
-          <p>This paragraph goes inside the wider right column.</p>
-        </div>
-      </div>
     `,
     createdAt: new Date('2026-05-30T10:00:00.000Z').toISOString(),
     updatedAt: new Date('2026-05-30T10:00:00.000Z').toISOString(),
-  },
-  {
-    id: 'work-space',
-    title: '💼 Work',
-    parentId: null,
-    isFavorite: false,
-    isExpanded: true,
-    icon: '💼',
-    content: `
-      <h2>Work Workspace</h2>
-      <p>Manage your projects, team documents, and meetings here.</p>
-      <p>Create nested notes inside this folder to organize weekly syncs, plans, and task lists.</p>
-    `,
-    createdAt: new Date('2026-05-30T11:00:00.000Z').toISOString(),
-    updatedAt: new Date('2026-05-30T11:00:00.000Z').toISOString(),
   },
   {
     id: 'weekly-sync',
     title: 'Weekly Team Sync',
     parentId: 'work-space',
     isFavorite: true,
-    isExpanded: false,
     icon: '📅',
     content: `
       <h2>Weekly Team Sync - May 31, 2026</h2>
@@ -83,7 +57,6 @@ const initialNotes: Note[] = [
     title: 'Q3 Product Roadmap',
     parentId: 'work-space',
     isFavorite: false,
-    isExpanded: false,
     icon: '🎯',
     content: `
       <h2>🎯 Q3 Product Roadmap</h2>
@@ -98,25 +71,10 @@ const initialNotes: Note[] = [
     updatedAt: new Date('2026-05-31T09:30:00.000Z').toISOString(),
   },
   {
-    id: 'personal-space',
-    title: '🏠 Personal',
-    parentId: null,
-    isFavorite: false,
-    isExpanded: true,
-    icon: '🏠',
-    content: `
-      <h2>Personal Vault</h2>
-      <p>A place for your journals, reading list, travel plans, and fitness logs.</p>
-    `,
-    createdAt: new Date('2026-05-30T12:00:00.000Z').toISOString(),
-    updatedAt: new Date('2026-05-30T12:00:00.000Z').toISOString(),
-  },
-  {
     id: 'groceries',
     title: '🛒 Grocery List',
     parentId: 'personal-space',
     isFavorite: false,
-    isExpanded: false,
     icon: '🛒',
     content: `
       <h2>🛒 Grocery List</h2>
@@ -136,7 +94,6 @@ const initialNotes: Note[] = [
     title: 'Movies to Watch',
     parentId: 'personal-space',
     isFavorite: false,
-    isExpanded: false,
     icon: '🎬',
     content: `
       <h2>🎬 Movies & Shows reading list</h2>

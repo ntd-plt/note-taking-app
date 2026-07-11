@@ -3,21 +3,9 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
-import { Star, Calendar, Sparkles, FileText, PlusCircle } from 'lucide-react'
-import type { Note } from '../hooks/useNotesStore'
+import { Star, Calendar, Sparkles } from 'lucide-react'
+import type { Note } from '../model'
 import { cn } from '#/lib/utils'
-
-// Format date helper
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 const EMOJI_LIST = [
   '📄',
@@ -37,6 +25,18 @@ const EMOJI_LIST = [
   '🍀',
 ]
 
+// Format date helper
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 export type EditorHeaderProps = {
   note: Note
   onNoteTitleChange: (newTitle: string) => void | undefined
@@ -44,14 +44,54 @@ export type EditorHeaderProps = {
   onFavoriteStateChange: (isFav: boolean) => void | undefined
 }
 
+import { useNotesStore, type Folder } from '@/widgets/note-editor'
+import * as React from 'react'
+
 export function EditorHeader({
   note: currentNote,
   onFavoriteStateChange,
   onNoteTitleChange,
   onIconChange,
 }: EditorHeaderProps) {
+  const { resolveFullPath, folders, savingNoteId } = useNotesStore()
+  const [breadcrumbs, setBreadcrumbs] = React.useState<Folder[]>([])
+
+  // Re-fetch breadcrumbs when current note, its parentId, or folders change
+  React.useEffect(() => {
+    let active = true
+    resolveFullPath(currentNote.id).then((path) => {
+      if (active) {
+        setBreadcrumbs(path)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [currentNote.id, currentNote.parentId, folders, resolveFullPath])
+
   return (
     <div className="w-full max-w-4xl mx-auto pt-10 px-8 flex flex-col gap-4">
+      {/* Dynamic Breadcrumbs */}
+      {breadcrumbs.length > 0 && (
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/80 font-medium select-none animate-in fade-in slide-in-from-top-1 duration-200">
+          <span className="hover:text-foreground cursor-pointer transition-colors">Workspace</span>
+          {breadcrumbs.map((folder) => (
+            <React.Fragment key={folder.id}>
+              <span className="text-muted-foreground/40 font-normal">/</span>
+              <span className="hover:text-foreground transition-colors cursor-pointer flex items-center gap-1.5">
+                <span className="text-xs">{folder.icon || '📁'}</span>
+                <span>{folder.name}</span>
+              </span>
+            </React.Fragment>
+          ))}
+          <span className="text-muted-foreground/40 font-normal">/</span>
+          <span className="text-foreground/90 font-semibold flex items-center gap-1.5">
+            <span className="text-xs">{currentNote.icon || '📄'}</span>
+            <span className="truncate max-w-[120px]">{currentNote.title || 'Untitled Note'}</span>
+          </span>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         {/* Emoji Selector / Page Icon */}
         <div className="flex items-center gap-2">
@@ -98,10 +138,18 @@ export function EditorHeader({
             <Calendar className="h-3 w-3" /> Updated:{' '}
             {formatDate(currentNote.updatedAt)}
           </span>
-          <span className="flex items-center gap-1 text-primary">
-            <Sparkles className="h-3 w-3 fill-primary/10 text-primary" /> Notion
-            style
-          </span>
+          <span className="h-3 w-px bg-border/20" />
+          {savingNoteId === currentNote.id ? (
+            <span className="flex items-center gap-1 text-amber-500 font-semibold animate-pulse">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Saving...
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-emerald-500 font-semibold">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Saved
+            </span>
+          )}
         </div>
       </div>
 

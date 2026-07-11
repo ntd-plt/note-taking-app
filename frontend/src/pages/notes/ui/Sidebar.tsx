@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import { useNotesStore, type Note } from '@/widgets/note-editor'
+import { useNotesStore, type SidebarItem } from '@/widgets/note-editor'
 import {
   Sidebar,
   SidebarContent,
@@ -13,14 +13,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  useSidebar,
 } from '@/components/ui/sidebar'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -36,40 +34,20 @@ import {
 import {
   ChevronRight,
   Plus,
-  MoreHorizontal,
   Search,
   Settings,
   Star,
   Trash2,
-  Copy,
   ChevronsUpDown,
   LogOut,
   User,
-  CreditCard,
   PlusCircle,
   HelpCircle,
   Undo,
+  FolderPlus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-
-// Beautiful, curated list of standard emojis for Notion pages
-const EMOJI_LIST = [
-  '📄',
-  '🚀',
-  '💡',
-  '📝',
-  '💼',
-  '📅',
-  '🎯',
-  '🏠',
-  '🛒',
-  '🎬',
-  '🔑',
-  '🎨',
-  '🍕',
-  '⚡',
-  '🍀',
-]
+import NoteTreeItem from './NodeTreeItem'
 
 export interface NoteSidebarData {
   spaces: {
@@ -86,25 +64,36 @@ export interface NodeSidebarProps {
   data?: NoteSidebarData
 }
 
-export function AppSidebar({ data: initialData }: NodeSidebarProps) {
+export function AppSidebar() {
   const navigate = useNavigate()
-  const { isMobile } = useSidebar()
 
   // Zustand store bindings
   const {
     notes,
+    folders,
     activeNoteId,
     searchQuery,
     addNote,
     deleteNote,
-    updateNoteTitle,
     updateNoteIcon,
     toggleFavorite,
-    toggleExpand,
     setActiveNoteId,
     setSearchQuery,
     duplicateNote,
+    fetchFolders,
+    fetchNotes,
+    addFolder,
+    deleteFolder,
+    updateFolderName,
+    updateFolderIcon,
+    toggleFolderExpand,
   } = useNotesStore()
+
+  // Load folders and notes on component mount
+  React.useEffect(() => {
+    fetchFolders()
+    fetchNotes()
+  }, [fetchFolders, fetchNotes])
 
   // Find active note from URL params if available
   const params = useParams({ strict: false }) as { noteId?: string }
@@ -131,26 +120,76 @@ export function AppSidebar({ data: initialData }: NodeSidebarProps) {
     return () => document.removeEventListener('keydown', down)
   }, [])
 
-  // Workspace selector state
-  const [currentWorkspace, setCurrentWorkspace] =
-    React.useState('Personal Workspace')
+  // Construct combined folders & notes hierarchical tree
+  const sidebarTree = React.useMemo(() => {
+    const rootItems: SidebarItem[] = []
+    const itemsByParent: Record<string, SidebarItem[]> = {}
 
-  // Group notes into tree hierarchy
-  const buildNoteTree = (parentId: string | null): Note[] => {
-    return notes
-      .filter((n) => n.parentId === parentId)
-      .sort(
-        (a, b) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      )
-  }
+    // Group folders
+    folders.forEach((folder) => {
+      const item: SidebarItem = {
+        type: 'folder',
+        id: folder.id,
+        data: folder,
+        children: [],
+      }
 
-  const rootNotes = buildNoteTree(null)
+      if (folder.parentId === null) {
+        rootItems.push(item)
+      } else {
+        itemsByParent[folder.parentId] = itemsByParent[folder.parentId] || []
+        itemsByParent[folder.parentId].push(item)
+      }
+    })
+
+    // Group notes
+    notes.forEach((note) => {
+      const item: SidebarItem = {
+        type: 'note',
+        id: note.id,
+        data: note,
+      }
+
+      if (note.parentId === null) {
+        rootItems.push(item)
+      } else {
+        itemsByParent[note.parentId] = itemsByParent[note.parentId] || []
+        itemsByParent[note.parentId].push(item)
+      }
+    })
+
+    // Recursively wire children (folders first, then notes)
+    const assemble = (items: SidebarItem[]) => {
+      items.forEach((item) => {
+        if (item.type === 'folder') {
+          const children = itemsByParent[item.id] || []
+          item.children = children.sort((a, b) => {
+            if (a.type !== b.type) return a.type === 'folder' ? -1 : 1
+            const nameA = a.type === 'folder' ? a.data.name : a.data.title
+            const nameB = b.type === 'folder' ? b.data.name : b.data.title
+            return nameA.localeCompare(nameB)
+          })
+          assemble(item.children)
+        }
+      })
+    }
+
+    assemble(rootItems)
+
+    // Sort top-level items
+    return rootItems.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'folder' ? -1 : 1
+      const nameA = a.type === 'folder' ? a.data.name : a.data.title
+      const nameB = b.type === 'folder' ? b.data.name : b.data.title
+      return nameA.localeCompare(nameB)
+    })
+  }, [folders, notes])
+
   const favoriteNotes = notes.filter((n) => n.isFavorite)
 
   // Handlers
   const handleCreateNewPage = (parentId: string | null = null) => {
-    const title = parentId ? 'Untitled Sub-page' : 'Untitled Note'
+    const title = 'Untitled Note'
     const newId = addNote(parentId, title)
     navigate({
       to: '/notes/$noteId',
@@ -158,20 +197,49 @@ export function AppSidebar({ data: initialData }: NodeSidebarProps) {
     })
   }
 
+  const handleCreateNewFolder = async (parentId: string | null = null) => {
+    const name = window.prompt('Enter folder name', 'New Folder')
+    if (name && name.trim() !== '') {
+      await addFolder(parentId, name.trim())
+    }
+  }
+
   const handleDeletePage = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    deleteNote(id)
-    // If deleted the current note, navigate back to notes index or first available note
-    if (currentNoteId === id) {
-      const remaining = notes.filter((n) => n.id !== id)
-      if (remaining.length > 0) {
-        navigate({
-          to: '/notes/$noteId',
-          params: { noteId: remaining[0].id },
-        })
-      } else {
-        navigate({ to: '/notes' })
+    if (confirm('Delete this note permanently?')) {
+      deleteNote(id)
+      if (currentNoteId === id) {
+        const remaining = notes.filter((n) => n.id !== id)
+        if (remaining.length > 0) {
+          navigate({
+            to: '/notes/$noteId',
+            params: { noteId: remaining[0].id },
+          })
+        } else {
+          navigate({ to: '/notes' })
+        }
+      }
+    }
+  }
+
+  const handleDeleteFolder = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (confirm('Delete this folder and all its contents?')) {
+      await deleteFolder(id)
+      // Check if current note was inside deleted folder structure
+      const stillExists = notes.some((n) => n.id === currentNoteId)
+      if (!stillExists) {
+        const remaining = notes.filter((n) => n.id !== currentNoteId)
+        if (remaining.length > 0) {
+          navigate({
+            to: '/notes/$noteId',
+            params: { noteId: remaining[0].id },
+          })
+        } else {
+          navigate({ to: '/notes' })
+        }
       }
     }
   }
@@ -209,10 +277,7 @@ export function AppSidebar({ data: initialData }: NodeSidebarProps) {
                     TP
                   </div>
                   <div className="flex flex-col text-left">
-                    <span className="text-xs font-semibold tracking-wide text-sidebar-foreground">
-                      {currentWorkspace}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-[10px] font-semibold tracking-wide text-sidebar-foreground">
                       Lam Tung (Free Plan)
                     </span>
                   </div>
@@ -226,44 +291,10 @@ export function AppSidebar({ data: initialData }: NodeSidebarProps) {
               side="bottom"
               sideOffset={6}
             >
-              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground px-2 py-1.5">
-                Workspaces
-              </DropdownMenuLabel>
-              <DropdownMenuGroup>
-                <DropdownMenuItem
-                  onClick={() => setCurrentWorkspace('Personal Workspace')}
-                  className={cn(
-                    'flex items-center justify-between text-xs px-2 py-1.5 cursor-pointer',
-                    currentWorkspace === 'Personal Workspace' &&
-                      'bg-sidebar-accent font-medium text-primary',
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🏠</span> Personal Workspace
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setCurrentWorkspace('Work Workspace')}
-                  className={cn(
-                    'flex items-center justify-between text-xs px-2 py-1.5 cursor-pointer',
-                    currentWorkspace === 'Work Workspace' &&
-                      'bg-sidebar-accent font-medium text-primary',
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">💼</span> Work Workspace
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem className="text-xs px-2 py-1.5 cursor-pointer">
                   <User className="mr-2 h-3.5 w-3.5 opacity-60" />
                   <span>Profile Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-xs px-2 py-1.5 cursor-pointer">
-                  <CreditCard className="mr-2 h-3.5 w-3.5 opacity-60" />
-                  <span>Billing & Plan</span>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
@@ -302,7 +333,7 @@ export function AppSidebar({ data: initialData }: NodeSidebarProps) {
                     navigate({
                       to: '/',
                     })
-                    console.log('Hello')
+                    console.log('Settings clicked')
                   }}
                 >
                   <Settings className="mr-2 h-4 w-4 text-muted-foreground/75" />
@@ -376,36 +407,48 @@ export function AppSidebar({ data: initialData }: NodeSidebarProps) {
               <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-muted-foreground/80 uppercase">
                 Private Pages
               </SidebarGroupLabel>
-              <button
-                onClick={() => handleCreateNewPage(null)}
-                className="rounded-sm p-0.5 text-muted-foreground/60 hover:bg-sidebar-accent/70 hover:text-primary transition-all"
-                title="Create a new root page"
-              >
-                <Plus className="h-3 w-3" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleCreateNewFolder(null)}
+                  className="rounded-sm p-0.5 text-muted-foreground/60 hover:bg-sidebar-accent/70 hover:text-primary transition-all cursor-pointer"
+                  title="Create a new root folder"
+                >
+                  <FolderPlus className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => handleCreateNewPage(null)}
+                  className="rounded-sm p-0.5 text-muted-foreground/60 hover:bg-sidebar-accent/70 hover:text-primary transition-all cursor-pointer"
+                  title="Create a new root note"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
             </div>
 
             <SidebarGroupContent>
-              {rootNotes.length === 0 ? (
+              {sidebarTree.length === 0 ? (
                 <div className="px-3 py-2 text-[11px] text-muted-foreground/60 italic">
                   No pages yet. Click + to add one.
                 </div>
               ) : (
                 <SidebarMenu className="space-y-0.5 px-0.5">
-                  {rootNotes.map((note) => (
+                  {sidebarTree.map((item) => (
                     <NoteTreeItem
-                      key={note.id}
-                      note={note}
-                      allNotes={notes}
+                      key={item.id}
+                      item={item}
                       currentNoteId={currentNoteId}
                       depth={0}
                       onSelectNote={handleSelectNote}
-                      onAddSubNote={handleCreateNewPage}
+                      onAddNote={handleCreateNewPage}
+                      onAddFolder={handleCreateNewFolder}
                       onDeleteNote={handleDeletePage}
+                      onDeleteFolder={handleDeleteFolder}
                       onDuplicateNote={handleDuplicatePage}
                       onToggleFavorite={toggleFavorite}
-                      onToggleExpand={toggleExpand}
-                      onUpdateIcon={updateNoteIcon}
+                      onToggleFolderExpand={toggleFolderExpand}
+                      onUpdateFolderIcon={updateFolderIcon}
+                      onUpdateNoteIcon={updateNoteIcon}
+                      onUpdateFolderName={updateFolderName}
                     />
                   ))}
                 </SidebarMenu>
@@ -425,7 +468,7 @@ export function AppSidebar({ data: initialData }: NodeSidebarProps) {
                     <Trash2 className="mr-2 h-4 w-4 opacity-75" />
                     <span className="text-xs">Archive / Trash</span>
                     <span className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded-full font-semibold opacity-70">
-                      {notes.length === 0 ? 0 : 0}
+                      0
                     </span>
                   </SidebarMenuButton>
                 </DropdownMenuTrigger>
@@ -562,212 +605,5 @@ export function AppSidebar({ data: initialData }: NodeSidebarProps) {
         </Command>
       </CommandDialog>
     </>
-  )
-}
-
-interface NoteTreeItemProps {
-  note: Note
-  allNotes: Note[]
-  currentNoteId: string | null
-  depth: number
-  onSelectNote: (id: string) => void
-  onAddSubNote: (parentId: string) => void
-  onDeleteNote: (id: string, e: React.MouseEvent) => void
-  onDuplicateNote: (id: string, e: React.MouseEvent) => void
-  onToggleFavorite: (id: string) => void
-  onToggleExpand: (id: string) => void
-  onUpdateIcon: (id: string, icon: string | undefined) => void
-}
-
-function NoteTreeItem({
-  note,
-  allNotes,
-  currentNoteId,
-  depth,
-  onSelectNote,
-  onAddSubNote,
-  onDeleteNote,
-  onDuplicateNote,
-  onToggleFavorite,
-  onToggleExpand,
-  onUpdateIcon,
-}: NoteTreeItemProps) {
-  const children = allNotes
-    .filter((n) => n.parentId === note.id)
-    .sort(
-      (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    )
-
-  const hasChildren = children.length > 0
-  const isExpanded = !!note.isExpanded
-  const isActive = currentNoteId === note.id
-
-  const handleToggleExpand = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onToggleExpand(note.id)
-  }
-
-  return (
-    <div className="flex flex-col">
-      <div
-        onClick={() => onSelectNote(note.id)}
-        style={{ paddingLeft: `${depth * 10 + 6}px` }}
-        className={cn(
-          'group flex items-center justify-between rounded-md py-1.5 pr-2 text-xs transition-all duration-150 cursor-pointer relative',
-          isActive
-            ? 'bg-primary/10 text-primary font-semibold shadow-2xs border-l-2 border-primary pl-[6px]'
-            : 'text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-foreground',
-        )}
-      >
-        <div className="flex items-center gap-1 truncate w-full pr-14">
-          {/* Chevron Collapse Toggle */}
-          <button
-            onClick={handleToggleExpand}
-            className={cn(
-              'p-0.5 rounded-sm hover:bg-sidebar-accent-foreground/10 text-muted-foreground/60 transition-all shrink-0',
-              !hasChildren && 'opacity-0 cursor-default',
-            )}
-            disabled={!hasChildren}
-          >
-            <ChevronRight
-              className={cn(
-                'h-3 w-3 transform transition-transform duration-200',
-                isExpanded && 'rotate-90 text-primary',
-              )}
-            />
-          </button>
-
-          {/* Emoji Icon Button with Dropdown picker */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                onClick={(e) => e.stopPropagation()}
-                className="text-sm px-0.5 rounded hover:bg-sidebar-accent-foreground/10 shrink-0 select-none cursor-pointer transition-all"
-                title="Change Emoji"
-              >
-                {note.icon || '📄'}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              className="p-2 grid grid-cols-5 gap-1 w-44"
-              align="start"
-            >
-              {EMOJI_LIST.map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onUpdateIcon(note.id, emoji)
-                  }}
-                  className="flex h-6 w-6 items-center justify-center rounded text-sm hover:bg-sidebar-accent transition-all cursor-pointer"
-                >
-                  {emoji}
-                </button>
-              ))}
-              <DropdownMenuSeparator className="col-span-5 my-1" />
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onUpdateIcon(note.id, '📄')
-                }}
-                className="col-span-5 text-[10px] text-center text-muted-foreground hover:text-foreground py-1 bg-muted/40 hover:bg-muted rounded transition-all cursor-pointer"
-              >
-                Reset Default Icon
-              </button>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Note Title */}
-          <span className="truncate">{note.title || 'Untitled Note'}</span>
-        </div>
-
-        {/* Floating Quick Action Buttons on Hover */}
-        <div className="absolute right-2 opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity duration-150 shrink-0">
-          {/* Quick Add Sub-Page */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onAddSubNote(note.id)
-            }}
-            className="p-0.5 rounded-sm hover:bg-sidebar-accent-foreground/10 text-muted-foreground/75 hover:text-primary transition-all"
-            title="Add a sub-page"
-          >
-            <Plus className="h-3 w-3" />
-          </button>
-
-          {/* More Actions Dropdown Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                onClick={(e) => e.stopPropagation()}
-                className="p-0.5 rounded-sm hover:bg-sidebar-accent-foreground/10 text-muted-foreground/75 hover:text-foreground transition-all"
-                title="More actions"
-              >
-                <MoreHorizontal className="h-3 w-3" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              className="w-44 text-xs"
-              align="end"
-              side="right"
-              sideOffset={5}
-            >
-              <DropdownMenuItem
-                onClick={() => onToggleFavorite(note.id)}
-                className="cursor-pointer text-xs"
-              >
-                <Star
-                  className={cn(
-                    'mr-2 h-3.5 w-3.5 opacity-60',
-                    note.isFavorite && 'fill-primary text-primary opacity-100',
-                  )}
-                />
-                <span>
-                  {note.isFavorite ? 'Unfavorite' : 'Add to Favorites'}
-                </span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => onDuplicateNote(note.id, e)}
-                className="cursor-pointer text-xs"
-              >
-                <Copy className="mr-2 h-3.5 w-3.5 opacity-60" />
-                <span>Duplicate</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={(e) => onDeleteNote(note.id, e)}
-                className="cursor-pointer text-destructive hover:text-destructive focus:bg-destructive/10 text-xs"
-              >
-                <Trash2 className="mr-2 h-3.5 w-3.5 opacity-60 text-destructive" />
-                <span>Delete Page</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {/* Recursive children tree */}
-      {isExpanded && hasChildren && (
-        <div className="flex flex-col mt-0.5">
-          {children.map((child) => (
-            <NoteTreeItem
-              key={child.id}
-              note={child}
-              allNotes={allNotes}
-              currentNoteId={currentNoteId}
-              depth={depth + 1}
-              onSelectNote={onSelectNote}
-              onAddSubNote={onAddSubNote}
-              onDeleteNote={onDeleteNote}
-              onDuplicateNote={onDuplicateNote}
-              onToggleFavorite={onToggleFavorite}
-              onToggleExpand={onToggleExpand}
-              onUpdateIcon={onUpdateIcon}
-            />
-          ))}
-        </div>
-      )}
-    </div>
   )
 }

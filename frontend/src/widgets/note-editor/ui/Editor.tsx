@@ -100,7 +100,7 @@ function EditorWithSlash() {
       if (activeId) {
         const html = editor.getHTML()
         // Save to Zustand store
-        useNotesStore.getState().updateNoteContent(activeId, html)
+        updateNoteContent(activeId, html)
       }
     },
   })
