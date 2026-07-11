@@ -1,22 +1,21 @@
 package handlers
 
 import (
+	"net/http"
+
 	"backend/internal/pkg"
 	"backend/internal/services"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 type AuthHandler struct {
-	authService  *services.AuthService
-	tokenService *services.JWTService
+	authService *services.AuthService
 }
 
-func New(authService *services.AuthService, tokenService *services.JWTService) *AuthHandler {
+func New(authService *services.AuthService) *AuthHandler {
 	return &AuthHandler{
-		authService:  authService,
-		tokenService: tokenService,
+		authService: authService,
 	}
 }
 

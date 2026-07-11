@@ -1,18 +1,17 @@
 package handlers
 
 import (
+	"net/http"
+
 	"backend/internal/database"
 	"backend/internal/model"
-	"backend/internal/services"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type NotesHandler struct {
-	db           database.Database
-	tokenService *services.JWTService
+	db database.Database
 }
 
 type CreateNoteRequest struct {
@@ -35,10 +34,9 @@ type DeleteNotesRequest struct {
 	IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
 }
 
-func NewNotesHandler(db database.Database, tokenService *services.JWTService) *NotesHandler {
+func NewNotesHandler(db database.Database) *NotesHandler {
 	return &NotesHandler{
-		db:           db,
-		tokenService: tokenService,
+		db: db,
 	}
 }
 

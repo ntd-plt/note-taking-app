@@ -1,19 +1,18 @@
 package handlers
 
 import (
-	"backend/internal/database"
-	"backend/internal/model"
-	"backend/internal/services"
 	"net/http"
 	"time"
+
+	"backend/internal/database"
+	"backend/internal/model"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type FoldersHandler struct {
-	db           database.Database
-	tokenService *services.JWTService
+	db database.Database
 }
 
 type FolderResponse struct {
@@ -46,10 +45,9 @@ type DeleteFoldersRequest struct {
 	IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
 }
 
-func NewFoldersHandler(db database.Database, tokenService *services.JWTService) *FoldersHandler {
+func NewFoldersHandler(db database.Database) *FoldersHandler {
 	return &FoldersHandler{
-		db:           db,
-		tokenService: tokenService,
+		db: db,
 	}
 }
 

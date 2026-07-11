@@ -35,9 +35,9 @@ func main() {
 	authService := services.NewAuthService(db, hasher)
 
 	tokenService := services.NewJWTService()
-	authHandler := handlers.New(authService, tokenService)
-	notesHandler := handlers.NewNotesHandler(db, tokenService)
-	foldersHandler := handlers.NewFoldersHandler(db, tokenService)
+	authHandler := handlers.New(authService)
+	notesHandler := handlers.NewNotesHandler(db)
+	foldersHandler := handlers.NewFoldersHandler(db)
 
 	router := NewRouter(authHandler, notesHandler, foldersHandler, tokenService, !cfg.IsProduction())
 	router.Run(":8080")
