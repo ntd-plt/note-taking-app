@@ -5,11 +5,20 @@ import (
 	"backend/internal/middleware"
 	"backend/internal/services"
 
+	_ "backend/docs"
+
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func NewRouter(authHandler *handlers.AuthHandler, notesHandler *handlers.NotesHandler, foldersHandler *handlers.FoldersHandler, tokenService *services.JWTService) *gin.Engine {
+func NewRouter(authHandler *handlers.AuthHandler, notesHandler *handlers.NotesHandler, foldersHandler *handlers.FoldersHandler, tokenService *services.JWTService, enableSwagger bool) *gin.Engine {
 	router := gin.Default()
+
+	if enableSwagger {
+		router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	}
+
 	authGroup := router.Group("/auth")
 	{
 		authGroup.POST("/login", authHandler.Login)

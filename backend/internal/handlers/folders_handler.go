@@ -26,6 +26,26 @@ type FolderResponse struct {
 	Children       []model.Item `json:"children,omitempty"`
 }
 
+type CreateFolderRequest struct {
+	Name           string     `json:"name" binding:"required"`
+	ParentFolderID *uuid.UUID `json:"parent_folder_id"`
+	UserID         uuid.UUID  `json:"user_id" binding:"required"`
+}
+
+type UpdateFolderItem struct {
+	ID             uuid.UUID  `json:"id" binding:"required"`
+	Name           string     `json:"name"`
+	ParentFolderID *uuid.UUID `json:"parent_folder_id"`
+}
+
+type UpdateFoldersRequest struct {
+	Folders []UpdateFolderItem `json:"folders" binding:"required,min=1"`
+}
+
+type DeleteFoldersRequest struct {
+	IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
+}
+
 func NewFoldersHandler(db database.Database, tokenService *services.JWTService) *FoldersHandler {
 	return &FoldersHandler{
 		db:           db,
@@ -33,12 +53,20 @@ func NewFoldersHandler(db database.Database, tokenService *services.JWTService) 
 	}
 }
 
+// CreateFolder godoc
+// @Summary      Create a folder
+// @Description  Creates a new folder, optionally nested inside a parent folder
+// @Tags         folders
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      CreateFolderRequest  true  "Folder to create"
+// @Success      201      {object}  model.Folder
+// @Failure      400      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/folders [post]
 func (h *FoldersHandler) CreateFolder(c *gin.Context) {
-	var req struct {
-		Name           string     `json:"name" binding:"required"`
-		ParentFolderID *uuid.UUID `json:"parent_folder_id"`
-		UserID         uuid.UUID  `json:"user_id" binding:"required"`
-	}
+	var req CreateFolderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -59,6 +87,19 @@ func (h *FoldersHandler) CreateFolder(c *gin.Context) {
 	c.JSON(http.StatusCreated, createdFolder)
 }
 
+// GetFolder godoc
+// @Summary      Get a folder
+// @Description  Returns a folder along with its direct child folders and notes
+// @Tags         folders
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Folder ID"
+// @Success      200  {object}  FolderResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/folders/{id} [get]
 func (h *FoldersHandler) GetFolder(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -105,6 +146,16 @@ func (h *FoldersHandler) GetFolder(c *gin.Context) {
 	})
 }
 
+// GetFolders godoc
+// @Summary      List folders
+// @Description  Returns all folders owned by the authenticated user
+// @Tags         folders
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   model.Folder
+// @Failure      401  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/folders [get]
 func (h *FoldersHandler) GetFolders(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -121,6 +172,20 @@ func (h *FoldersHandler) GetFolders(c *gin.Context) {
 	c.JSON(http.StatusOK, folders)
 }
 
+// UpdateFolders godoc
+// @Summary      Update multiple folders
+// @Description  Updates the name and/or parent of one or more folders in a single batch
+// @Tags         folders
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      UpdateFoldersRequest  true  "Folders to update"
+// @Success      200      {array}   model.Folder
+// @Failure      400      {object}  map[string]string
+// @Failure      403      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/folders [put]
 func (h *FoldersHandler) UpdateFolders(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -128,13 +193,7 @@ func (h *FoldersHandler) UpdateFolders(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Folders []struct {
-			ID             uuid.UUID  `json:"id" binding:"required"`
-			Name           string     `json:"name"`
-			ParentFolderID *uuid.UUID `json:"parent_folder_id"`
-		} `json:"folders" binding:"required,min=1"`
-	}
+	var req UpdateFoldersRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -181,6 +240,20 @@ func (h *FoldersHandler) UpdateFolders(c *gin.Context) {
 	c.JSON(http.StatusOK, folders)
 }
 
+// DeleteFolders godoc
+// @Summary      Delete multiple folders
+// @Description  Deletes one or more folders owned by the authenticated user in a single batch
+// @Tags         folders
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      DeleteFoldersRequest  true  "Folder IDs to delete"
+// @Success      200      {object}  map[string]string
+// @Failure      400      {object}  map[string]string
+// @Failure      403      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/folders [delete]
 func (h *FoldersHandler) DeleteFolders(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -188,9 +261,7 @@ func (h *FoldersHandler) DeleteFolders(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
-	}
+	var req DeleteFoldersRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

@@ -15,6 +15,26 @@ type NotesHandler struct {
 	tokenService *services.JWTService
 }
 
+type CreateNoteRequest struct {
+	Title    string     `json:"title" binding:"required"`
+	Content  string     `json:"content" binding:"required"`
+	FolderID *uuid.UUID `json:"folder_id"` // nil to create the note outside any folder
+}
+
+type UpdateNoteItem struct {
+	ID      uuid.UUID `json:"id" binding:"required"`
+	Title   string    `json:"title"`
+	Content string    `json:"content"`
+}
+
+type UpdateNotesRequest struct {
+	Notes []UpdateNoteItem `json:"notes" binding:"required,min=1"`
+}
+
+type DeleteNotesRequest struct {
+	IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
+}
+
 func NewNotesHandler(db database.Database, tokenService *services.JWTService) *NotesHandler {
 	return &NotesHandler{
 		db:           db,
@@ -22,6 +42,19 @@ func NewNotesHandler(db database.Database, tokenService *services.JWTService) *N
 	}
 }
 
+// CreateNote godoc
+// @Summary      Create a note
+// @Description  Creates a new note, optionally inside a folder
+// @Tags         notes
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      CreateNoteRequest  true  "Note to create"
+// @Success      201      {object}  model.Note
+// @Failure      400      {object}  map[string]string
+// @Failure      401      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/notes [post]
 func (h *NotesHandler) CreateNote(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -29,11 +62,7 @@ func (h *NotesHandler) CreateNote(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Title    string     `json:"title" binding:"required"`
-		Content  string     `json:"content" binding:"required"`
-		FolderID *uuid.UUID `json:"folder_id"` // nil to create the note outside any folder
-	}
+	var req CreateNoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -54,6 +83,18 @@ func (h *NotesHandler) CreateNote(c *gin.Context) {
 	c.JSON(http.StatusCreated, createdNote)
 }
 
+// GetNote godoc
+// @Summary      Get a note
+// @Description  Returns a single note owned by the authenticated user
+// @Tags         notes
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Note ID"
+// @Success      200  {object}  model.Note
+// @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/notes/{id} [get]
 func (h *NotesHandler) GetNote(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -97,6 +138,20 @@ func (h *NotesHandler) GetNotes(c *gin.Context) {
 	c.JSON(http.StatusOK, notes)
 }
 
+// UpdateNotes godoc
+// @Summary      Update multiple notes
+// @Description  Updates the title and/or content of one or more notes in a single batch
+// @Tags         notes
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      UpdateNotesRequest  true  "Notes to update"
+// @Success      200      {array}   model.Note
+// @Failure      400      {object}  map[string]string
+// @Failure      403      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/notes [put]
 func (h *NotesHandler) UpdateNotes(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -104,13 +159,7 @@ func (h *NotesHandler) UpdateNotes(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Notes []struct {
-			ID      uuid.UUID `json:"id" binding:"required"`
-			Title   string    `json:"title"`
-			Content string    `json:"content"`
-		} `json:"notes" binding:"required,min=1"`
-	}
+	var req UpdateNotesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -142,6 +191,20 @@ func (h *NotesHandler) UpdateNotes(c *gin.Context) {
 	c.JSON(http.StatusOK, notes)
 }
 
+// DeleteNotes godoc
+// @Summary      Delete multiple notes
+// @Description  Deletes one or more notes owned by the authenticated user in a single batch
+// @Tags         notes
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      DeleteNotesRequest  true  "Note IDs to delete"
+// @Success      200      {object}  map[string]string
+// @Failure      400      {object}  map[string]string
+// @Failure      403      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/notes [delete]
 func (h *NotesHandler) DeleteNotes(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -149,9 +212,7 @@ func (h *NotesHandler) DeleteNotes(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
-	}
+	var req DeleteNotesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
