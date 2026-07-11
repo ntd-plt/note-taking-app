@@ -180,6 +180,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -761,6 +770,15 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -811,6 +829,9 @@ const docTemplate = `{
                 "type": {
                     "description": "\"note\" or \"folder\"",
                     "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         },
@@ -847,7 +868,7 @@ const docTemplate = `{
                 "access_token": {
                     "type": "string"
                 },
-                "token": {
+                "refresh_token": {
                     "type": "string"
                 }
             }
@@ -902,17 +923,13 @@ const docTemplate = `{
         "internal_handlers.CreateFolderRequest": {
             "type": "object",
             "required": [
-                "name",
-                "user_id"
+                "name"
             ],
             "properties": {
                 "name": {
                     "type": "string"
                 },
                 "parent_folder_id": {
-                    "type": "string"
-                },
-                "user_id": {
                     "type": "string"
                 }
             }

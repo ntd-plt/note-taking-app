@@ -28,7 +28,6 @@ type FolderResponse struct {
 type CreateFolderRequest struct {
 	Name           string     `json:"name" binding:"required"`
 	ParentFolderID *uuid.UUID `json:"parent_folder_id"`
-	UserID         uuid.UUID  `json:"user_id" binding:"required"`
 }
 
 type UpdateFolderItem struct {
@@ -61,9 +60,15 @@ func NewFoldersHandler(db database.Database) *FoldersHandler {
 // @Param        request  body      CreateFolderRequest  true  "Folder to create"
 // @Success      201      {object}  model.Folder
 // @Failure      400      {object}  map[string]string
+// @Failure      401      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /api/folders [post]
 func (h *FoldersHandler) CreateFolder(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
 	var req CreateFolderRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -73,7 +78,7 @@ func (h *FoldersHandler) CreateFolder(c *gin.Context) {
 	folder := model.Folder{
 		Name:           req.Name,
 		ParentFolderID: req.ParentFolderID,
-		UserID:         req.UserID,
+		UserID:         userID.(uuid.UUID),
 	}
 
 	createdFolder, err := h.db.CreateFolder(folder)

@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	stderrors "errors"
+	"net/http"
+
+	"backend/internal/errors"
 	"backend/internal/pkg"
 	"backend/internal/services"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -57,6 +60,7 @@ func (h *AuthHandler) Logout() {
 // @Param        request  body      pkg.SignupResponse  true  "Signup details"
 // @Success      200      {object}  pkg.AuthResponse
 // @Failure      400      {object}  map[string]string
+// @Failure      409      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /auth/signup [post]
 func (h *AuthHandler) Signup(c *gin.Context) {
@@ -68,6 +72,10 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 
 	err := h.authService.Signup(req.Name, req.Email, req.Password)
 	if err != nil {
+		if stderrors.Is(err, errors.ErrEmailAlreadyExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

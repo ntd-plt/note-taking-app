@@ -153,8 +153,8 @@ func TestSignupEndpointDuplicateEmail(t *testing.T) {
 		Password: "other-password",
 	})
 
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusConflict, w.Body.String())
 	}
 }
 

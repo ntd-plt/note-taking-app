@@ -29,6 +29,7 @@ func NewRouter(authHandler *handlers.AuthHandler, notesHandler *handlers.NotesHa
 	protected := router.Group("/api")
 	protected.Use(middleware.Auth(tokenService))
 	{
+		protected.GET("/notes", notesHandler.GetNotes)
 		protected.POST("/notes", notesHandler.CreateNote)
 		protected.GET("/notes/:id", notesHandler.GetNote)
 		protected.PUT("/notes", notesHandler.UpdateNotes)

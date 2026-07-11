@@ -172,9 +172,9 @@ func (db *PostgreDatabase) GetFoldersByIDs(ids []uuid.UUID) ([]user.Folder, erro
 
 func (db *PostgreDatabase) GetFolderChildrenByID(id uuid.UUID) ([]user.Item, error) {
 	queryString := `
-		SELECT id::text, name, 'folder' AS type FROM folders WHERE parent_folder_id = $1
+		SELECT id::text, name, 'folder' AS type, updated_at FROM folders WHERE parent_folder_id = $1
 		UNION ALL
-		SELECT id::text, title AS name, 'note' AS type FROM notes WHERE folder_id = $1`
+		SELECT id::text, title AS name, 'note' AS type, updated_at FROM notes WHERE folder_id = $1`
 	rows, err := db.conn.Query(context.Background(), queryString, id)
 	if err != nil {
 		return nil, err
@@ -184,7 +184,7 @@ func (db *PostgreDatabase) GetFolderChildrenByID(id uuid.UUID) ([]user.Item, err
 	var items []user.Item
 	for rows.Next() {
 		var item user.Item
-		if err := rows.Scan(&item.ID, &item.Name, &item.Type); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Type, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)

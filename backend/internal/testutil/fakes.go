@@ -168,12 +168,12 @@ func (f *FakeDatabase) GetFolderChildrenByID(id uuid.UUID) ([]model.Item, error)
 	items := []model.Item{}
 	for _, folder := range f.Folders {
 		if folder.ParentFolderID != nil && *folder.ParentFolderID == id {
-			items = append(items, model.Item{ID: folder.ID.String(), Name: folder.Name, Type: "folder"})
+			items = append(items, model.Item{ID: folder.ID.String(), Name: folder.Name, Type: "folder", UpdatedAt: folder.UpdatedAt})
 		}
 	}
 	for _, note := range f.Notes {
 		if note.FolderID != nil && *note.FolderID == id {
-			items = append(items, model.Item{ID: note.ID.String(), Name: note.Title, Type: "note"})
+			items = append(items, model.Item{ID: note.ID.String(), Name: note.Title, Type: "note", UpdatedAt: note.UpdatedAt})
 		}
 	}
 	return items, nil

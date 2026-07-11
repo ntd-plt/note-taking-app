@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"backend/internal/handlers"
 	"backend/internal/model"
@@ -40,6 +41,8 @@ func addFolder(db *testutil.FakeDatabase, userID uuid.UUID, name string, parentI
 		Name:           name,
 		ParentFolderID: parentID,
 		UserID:         userID,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
 	db.Folders[folder.ID] = folder
 	return folder
@@ -51,8 +54,7 @@ func TestCreateFolderSuccess(t *testing.T) {
 	r := newFoldersRouter(db, &userID)
 
 	w := doJSON(t, r, http.MethodPost, "/api/folders", handlers.CreateFolderRequest{
-		Name:   "Documents",
-		UserID: userID,
+		Name: "Documents",
 	})
 
 	if w.Code != http.StatusCreated {
@@ -80,7 +82,6 @@ func TestCreateFolderNested(t *testing.T) {
 	w := doJSON(t, r, http.MethodPost, "/api/folders", handlers.CreateFolderRequest{
 		Name:           "Child",
 		ParentFolderID: &parent.ID,
-		UserID:         userID,
 	})
 
 	if w.Code != http.StatusCreated {
@@ -101,10 +102,26 @@ func TestCreateFolderMissingName(t *testing.T) {
 	userID := uuid.New()
 	r := newFoldersRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPost, "/api/folders", map[string]any{"user_id": userID})
+	w := doJSON(t, r, http.MethodPost, "/api/folders", map[string]any{"parent_folder_id": nil})
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestCreateFolderUnauthenticated(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	r := newFoldersRouter(db, nil)
+
+	w := doJSON(t, r, http.MethodPost, "/api/folders", handlers.CreateFolderRequest{
+		Name: "Documents",
+	})
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusUnauthorized, w.Body.String())
+	}
+	if len(db.Folders) != 0 {
+		t.Error("folder was created despite unauthorized response")
 	}
 }
 
@@ -113,7 +130,7 @@ func TestGetFolderWithChildren(t *testing.T) {
 	userID := uuid.New()
 	folder := addFolder(db, userID, "Parent", nil)
 	child := addFolder(db, userID, "Child", &folder.ID)
-	note := model.Note{ID: uuid.New(), Title: "Note in folder", FolderID: &folder.ID, UserID: userID}
+	note := model.Note{ID: uuid.New(), Title: "Note in folder", FolderID: &folder.ID, UserID: userID, UpdatedAt: time.Now()}
 	db.Notes[note.ID] = note
 	r := newFoldersRouter(db, &userID)
 
@@ -136,6 +153,9 @@ func TestGetFolderWithChildren(t *testing.T) {
 	types := map[string]string{}
 	for _, item := range resp.Children {
 		types[item.ID] = item.Type
+		if item.UpdatedAt.IsZero() {
+			t.Errorf("child %v has zero updated_at", item.ID)
+		}
 	}
 	if types[child.ID.String()] != "folder" {
 		t.Errorf("child folder %v has type %q, want %q", child.ID, types[child.ID.String()], "folder")
