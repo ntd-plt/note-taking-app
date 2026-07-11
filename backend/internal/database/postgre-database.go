@@ -108,15 +108,26 @@ func (db *PostgreDatabase) GetNotesByUserID(userID uuid.UUID) ([]user.Note, erro
 	return notes, rows.Err()
 }
 
-func (db *PostgreDatabase) UpdateNote(note user.Note) error {
-	queryString := "UPDATE notes SET title = $1, content = $2, updated_at = NOW() WHERE id = $3"
-	_, err := db.conn.Exec(context.Background(), queryString, note.Title, note.Content, note.ID)
+func (db *PostgreDatabase) UpdateNotes(notes []user.Note) error {
+	ids := make([]uuid.UUID, len(notes))
+	titles := make([]string, len(notes))
+	contents := make([]string, len(notes))
+	for i, note := range notes {
+		ids[i], titles[i], contents[i] = note.ID, note.Title, note.Content
+	}
+
+	queryString := `
+		UPDATE notes AS n
+		SET title = u.title, content = u.content, updated_at = NOW()
+		FROM (SELECT * FROM UNNEST($1::uuid[], $2::text[], $3::text[]) AS t(id, title, content)) AS u
+		WHERE n.id = u.id`
+	_, err := db.conn.Exec(context.Background(), queryString, ids, titles, contents)
 	return err
 }
 
-func (db *PostgreDatabase) DeleteNote(id uuid.UUID) error {
-	queryString := "DELETE FROM notes WHERE id = $1"
-	_, err := db.conn.Exec(context.Background(), queryString, id)
+func (db *PostgreDatabase) DeleteNotes(ids []uuid.UUID) error {
+	queryString := "DELETE FROM notes WHERE id = ANY($1)"
+	_, err := db.conn.Exec(context.Background(), queryString, ids)
 	return err
 }
 
@@ -140,6 +151,47 @@ func (db *PostgreDatabase) GetFolderByID(id uuid.UUID) (user.Folder, error) {
 	return folder, nil
 }
 
+func (db *PostgreDatabase) GetFoldersByIDs(ids []uuid.UUID) ([]user.Folder, error) {
+	queryString := "SELECT id, parent_folder_id, name, user_id, created_at, updated_at FROM folders WHERE id = ANY($1)"
+	rows, err := db.conn.Query(context.Background(), queryString, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var folders []user.Folder
+	for rows.Next() {
+		var folder user.Folder
+		if err := rows.Scan(&folder.ID, &folder.ParentFolderID, &folder.Name, &folder.UserID, &folder.CreatedAt, &folder.UpdatedAt); err != nil {
+			return nil, err
+		}
+		folders = append(folders, folder)
+	}
+	return folders, rows.Err()
+}
+
+func (db *PostgreDatabase) GetFolderChildrenByID(id uuid.UUID) ([]user.Item, error) {
+	queryString := `
+		SELECT id::text, name, 'folder' AS type FROM folders WHERE parent_folder_id = $1
+		UNION ALL
+		SELECT id::text, title AS name, 'note' AS type FROM notes WHERE folder_id = $1`
+	rows, err := db.conn.Query(context.Background(), queryString, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []user.Item
+	for rows.Next() {
+		var item user.Item
+		if err := rows.Scan(&item.ID, &item.Name, &item.Type); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
 func (db *PostgreDatabase) GetFoldersByUserID(userID uuid.UUID) ([]user.Folder, error) {
 	queryString := "SELECT id, parent_folder_id, name, user_id, created_at, updated_at FROM folders WHERE user_id = $1"
 	rows, err := db.conn.Query(context.Background(), queryString, userID)
@@ -159,15 +211,25 @@ func (db *PostgreDatabase) GetFoldersByUserID(userID uuid.UUID) ([]user.Folder, 
 	return folders, rows.Err()
 }
 
-func (db *PostgreDatabase) UpdateFolder(folder user.Folder) error {
-	queryString := "UPDATE folders SET name = $1, parent_folder_id = $2, updated_at = NOW() WHERE id = $3"
-	_, err := db.conn.Exec(context.Background(), queryString, folder.Name, folder.ParentFolderID, folder.ID)
+func (db *PostgreDatabase) UpdateFolders(folders []user.Folder) error {
+	ids := make([]uuid.UUID, len(folders))
+	names := make([]string, len(folders))
+	parentIDs := make([]*uuid.UUID, len(folders))
+	for i, folder := range folders {
+		ids[i], names[i], parentIDs[i] = folder.ID, folder.Name, folder.ParentFolderID
+	}
 
+	queryString := `
+		UPDATE folders AS f
+		SET name = u.name, parent_folder_id = u.parent_folder_id, updated_at = NOW()
+		FROM (SELECT * FROM UNNEST($1::uuid[], $2::text[], $3::uuid[]) AS t(id, name, parent_folder_id)) AS u
+		WHERE f.id = u.id`
+	_, err := db.conn.Exec(context.Background(), queryString, ids, names, parentIDs)
 	return err
 }
 
-func (db *PostgreDatabase) DeleteFolder(id uuid.UUID) error {
-	queryString := "DELETE FROM folders WHERE id = $1"
-	_, err := db.conn.Exec(context.Background(), queryString, id)
+func (db *PostgreDatabase) DeleteFolders(ids []uuid.UUID) error {
+	queryString := "DELETE FROM folders WHERE id = ANY($1)"
+	_, err := db.conn.Exec(context.Background(), queryString, ids)
 	return err
 }

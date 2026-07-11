@@ -16,12 +16,14 @@ type Database interface {
 	CreateNote(note user.Note, parentID *uuid.UUID) (user.Note, error)
 	GetNoteByID(id uuid.UUID) (user.Note, error)
 	GetNotesByUserID(userID uuid.UUID) ([]user.Note, error)
-	UpdateNote(note user.Note) error
-	DeleteNote(id uuid.UUID) error
+	UpdateNotes(notes []user.Note) error
+	DeleteNotes(ids []uuid.UUID) error
 
 	CreateFolder(folder user.Folder) (user.Folder, error)
 	GetFolderByID(id uuid.UUID) (user.Folder, error)
+	GetFolderChildrenByID(id uuid.UUID) ([]user.Item, error)
 	GetFoldersByUserID(userID uuid.UUID) ([]user.Folder, error)
-	UpdateFolder(folder user.Folder) error
-	DeleteFolder(id uuid.UUID) error
+	GetFoldersByIDs(ids []uuid.UUID) ([]user.Folder, error)
+	UpdateFolders(folders []user.Folder) error
+	DeleteFolders(ids []uuid.UUID) error
 }

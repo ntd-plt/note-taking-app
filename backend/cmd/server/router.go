@@ -20,17 +20,16 @@ func NewRouter(authHandler *handlers.AuthHandler, notesHandler *handlers.NotesHa
 	protected := router.Group("/api")
 	protected.Use(middleware.Auth(tokenService))
 	{
-		protected.GET("/notes", notesHandler.GetNotes)
 		protected.POST("/notes", notesHandler.CreateNote)
 		protected.GET("/notes/:id", notesHandler.GetNote)
-		protected.PUT("/notes/:id", notesHandler.UpdateNote)
-		protected.DELETE("/notes/:id", notesHandler.DeleteNote)
+		protected.PUT("/notes", notesHandler.UpdateNotes)
+		protected.DELETE("/notes", notesHandler.DeleteNotes)
 
 		protected.GET("/folders", foldersHandler.GetFolders)
 		protected.POST("/folders", foldersHandler.CreateFolder)
 		protected.GET("/folders/:id", foldersHandler.GetFolder)
-		protected.PUT("/folders/:id", foldersHandler.UpdateFolder)
-		protected.DELETE("/folders/:id", foldersHandler.DeleteFolder)
+		protected.PUT("/folders", foldersHandler.UpdateFolders)
+		protected.DELETE("/folders", foldersHandler.DeleteFolders)
 
 	}
 	return router

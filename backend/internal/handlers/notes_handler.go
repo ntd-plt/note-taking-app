@@ -97,78 +97,83 @@ func (h *NotesHandler) GetNotes(c *gin.Context) {
 	c.JSON(http.StatusOK, notes)
 }
 
-func (h *NotesHandler) UpdateNote(c *gin.Context) {
+func (h *NotesHandler) UpdateNotes(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
 
-	noteID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid note id"})
-		return
-	}
-
-	note, err := h.db.GetNoteByID(noteID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "note not found"})
-		return
-	}
-
-	if note.UserID != userID.(uuid.UUID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this note"})
-		return
-	}
-
 	var req struct {
-		Title   string `json:"title"`
-		Content string `json:"content"`
+		Notes []struct {
+			ID      uuid.UUID `json:"id" binding:"required"`
+			Title   string    `json:"title"`
+			Content string    `json:"content"`
+		} `json:"notes" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	note.Title = req.Title
-	note.Content = req.Content
+	notes := make([]model.Note, 0, len(req.Notes))
+	for _, noteReq := range req.Notes {
+		note, err := h.db.GetNoteByID(noteReq.ID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "note not found", "id": noteReq.ID})
+			return
+		}
 
-	if err := h.db.UpdateNote(note); err != nil {
+		if note.UserID != userID.(uuid.UUID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this note", "id": noteReq.ID})
+			return
+		}
+
+		note.Title = noteReq.Title
+		note.Content = noteReq.Content
+		notes = append(notes, note)
+	}
+
+	if err := h.db.UpdateNotes(notes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, note)
+	c.JSON(http.StatusOK, notes)
 }
 
-func (h *NotesHandler) DeleteNote(c *gin.Context) {
+func (h *NotesHandler) DeleteNotes(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
 
-	noteID, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid note id"})
+	var req struct {
+		IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	note, err := h.db.GetNoteByID(noteID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "note not found"})
-		return
+	for _, id := range req.IDs {
+		note, err := h.db.GetNoteByID(id)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "note not found", "id": id})
+			return
+		}
+
+		if note.UserID != userID.(uuid.UUID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to delete this note", "id": id})
+			return
+		}
 	}
 
-	if note.UserID != userID.(uuid.UUID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to delete this note"})
-		return
-	}
-
-	if err := h.db.DeleteNote(noteID); err != nil {
+	if err := h.db.DeleteNotes(req.IDs); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "note deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "notes deleted successfully"})
 }
