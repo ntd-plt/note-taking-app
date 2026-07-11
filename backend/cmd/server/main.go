@@ -32,10 +32,9 @@ func main() {
 	defer db.Disconnect()
 
 	hasher := hash.NewBcryptHasher()
-	authService := services.NewAuthService(db, hasher)
-
 	tokenService := services.NewJWTService()
-	authHandler := handlers.New(authService)
+	authService := services.NewAuthService(db, hasher, tokenService)
+	authHandler := handlers.NewAuthHandler(authService)
 	notesHandler := handlers.NewNotesHandler(db)
 	foldersHandler := handlers.NewFoldersHandler(db)
 
