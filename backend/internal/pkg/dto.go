@@ -12,22 +12,12 @@ type SignupResponse struct {
 }
 
 type AuthResponse struct {
-	RefreshToken string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
 	AccessToken  string `json:"access_token"`
 }
 
 type RefreshTokenRequest struct {
 	Token string `json:"token" validate:"required"`
-}
-
-type NoteResponse struct {
-	ID        string  `json:"id"`
-	FolderID  *string `json:"folder_id,omitempty"`
-	Title     string  `json:"title"`
-	Content   string  `json:"content"`
-	UserID    string  `json:"user_id"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
 }
 
 func NewLoginRequest(email, password string) *LoginRequest {

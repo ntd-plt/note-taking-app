@@ -29,10 +29,10 @@ backend/
 
 ```bash
 cd backend
-go run ./cmd/server
+make run
 ```
 
-Then open **http://localhost:8080/swagger/index.html**. Requires a running Postgres instance (see `backend/README.md` for env vars).
+Then open **http://localhost:8080/swagger/index.html**. Requires a running Postgres instance — see `backend/README.md` (`make setup` gets you there).
 
 ---
 
@@ -63,10 +63,10 @@ Any time a `@Router`/`@Param`/`@Success` annotation changes, or a new endpoint i
 
 ```bash
 cd backend
-$(go env GOPATH)/bin/swag init -g cmd/server/main.go --output docs --parseDependency --parseInternal
+make swagger
 ```
 
-Consider putting `$(go env GOPATH)/bin` on your `PATH` so `swag` can be invoked directly, or wrap the command above in a Makefile target.
+That target runs `swag init -g cmd/server/main.go --output docs --parseDependency --parseInternal` using the `swag` binary installed by `make tools` (part of `make setup`).
 
 The generated `docs/` package must be rebuilt (not hand-edited) and committed alongside the annotation changes, since `router.go` imports it directly:
 
@@ -98,12 +98,12 @@ _ "backend/docs"
    ```
 
 3. Omit `@Security BearerAuth` for routes outside the `protected` group (`/auth/*`).
-4. Re-run `swag init` (see above) and confirm the new path shows up in `docs/swagger.json`.
+4. Run `make swagger` and confirm the new path shows up in `docs/swagger.json`.
 
 ---
 
 ## Notes / gotchas
 
-- **`swag` CLI vs. `swaggo/swag` library version must match.** The generated `docs.go` uses fields (`LeftDelim`/`RightDelim` on `swag.Spec`) that only exist in newer `swaggo/swag` releases. If `go build` fails on `docs/docs.go` with "unknown field" errors, run `go get github.com/swaggo/swag@latest github.com/swaggo/gin-swagger@latest` to bring the library dependency in line with the CLI version.
+- **`swag` CLI vs. `swaggo/swag` library version must match.** The generated `docs.go` uses fields (`LeftDelim`/`RightDelim` on `swag.Spec`) that only exist in newer `swaggo/swag` releases. `make tools` keeps the CLI binary current, but not the library dependency recorded in `go.mod` — if `go build`/`make build` fails on `docs/docs.go` with "unknown field" errors, run `go get github.com/swaggo/swag@latest github.com/swaggo/gin-swagger@latest` once to bring the library dependency in line with the CLI version, then `make tidy`.
 - **Only routed endpoints are annotated.** `NotesHandler.GetNotes` exists but isn't wired into `router.go`, so it intentionally has no `@Router` annotation — annotating it would document a route that doesn't exist.
 - **Auth scheme**: JWT is passed as `Authorization: Bearer <token>`, declared once in `main.go` via `@securityDefinitions.apikey BearerAuth`, and referenced per-route with `@Security BearerAuth`.

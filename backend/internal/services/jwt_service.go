@@ -1,9 +1,10 @@
 package services
 
 import (
+	"time"
+
 	"backend/internal/configs"
 	"backend/internal/errors"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
