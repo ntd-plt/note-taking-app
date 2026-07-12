@@ -14,11 +14,11 @@ type AuthService struct {
 	tokenService TokenService
 }
 
-func NewAuthService(db database.Database, hasher hash.Hasher) *AuthService {
+func NewAuthService(db database.Database, hasher hash.Hasher, tokenService TokenService) *AuthService {
 	return &AuthService{
 		db:           db,
 		hasher:       hasher,
-		tokenService: NewJWTService(),
+		tokenService: tokenService,
 	}
 }
 

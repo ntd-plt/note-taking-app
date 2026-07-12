@@ -12,7 +12,7 @@ type SignupResponse struct {
 }
 
 type AuthResponse struct {
-	RefreshToken string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
 	AccessToken  string `json:"access_token"`
 }
 
