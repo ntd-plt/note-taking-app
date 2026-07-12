@@ -1,10 +1,8 @@
 import type { EditorView } from '@tiptap/pm/view'
 import type React from 'react'
 import { createContext, useContext, useMemo, useReducer, useState } from 'react'
-import {
-  blockEditMenuReducer,
-  type BlockEditMenuState,
-} from '../state/useBlockEditMenuStore'
+import { blockEditMenuReducer } from '../state/useBlockEditMenuStore'
+import type { BlockEditMenuState } from '../state/useBlockEditMenuStore'
 import { BlockHandle } from './BlockHandle'
 import type { BlockEditMenuAction } from '../model'
 
@@ -40,7 +38,6 @@ export function useBlockEdit() {
   return ctx
 }
 
-
 export function makeHandleDOMEvents() {
   return {
     mousemove: (view: EditorView, event: MouseEvent) => {
@@ -58,7 +55,6 @@ export function makeHandleDOMEvents() {
     },
   }
 }
-
 
 export function BlockEditProvider({ children }: { children: React.ReactNode }) {
   const [hoverPos, setHoverPos] = useState<HoveredNodeData | null>(null)

@@ -7,6 +7,14 @@ import { Star, Calendar } from 'lucide-react'
 import type { Note } from '../model'
 import { cn } from '#/lib/utils'
 
+import {
+  useNotesStore,
+  useResolveFullPath,
+  useFoldersQuery,
+} from '@/widgets/note-editor'
+import type { Folder } from '@/widgets/note-editor'
+import * as React from 'react'
+
 const EMOJI_LIST = [
   '📄',
   '🚀',
@@ -44,9 +52,6 @@ export type EditorHeaderProps = {
   onFavoriteStateChange: (isFav: boolean) => void | undefined
 }
 
-import { useNotesStore, type Folder, useResolveFullPath, useFoldersQuery } from '@/widgets/note-editor'
-import * as React from 'react'
-
 export function EditorHeader({
   note: currentNote,
   onFavoriteStateChange,
@@ -69,14 +74,22 @@ export function EditorHeader({
     return () => {
       active = false
     }
-  }, [currentNote.id, currentNote.parentId, folders, resolveFullPath, currentNote])
+  }, [
+    currentNote.id,
+    currentNote.parentId,
+    folders,
+    resolveFullPath,
+    currentNote,
+  ])
 
   return (
     <div className="w-full max-w-4xl mx-auto pt-10 px-8 flex flex-col gap-4">
       {/* Dynamic Breadcrumbs */}
       {breadcrumbs.length > 0 && (
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/80 font-medium select-none animate-in fade-in slide-in-from-top-1 duration-200">
-          <span className="hover:text-foreground cursor-pointer transition-colors">Workspace</span>
+          <span className="hover:text-foreground cursor-pointer transition-colors">
+            Workspace
+          </span>
           {breadcrumbs.map((folder) => (
             <React.Fragment key={folder.id}>
               <span className="text-muted-foreground/40 font-normal">/</span>
@@ -89,7 +102,9 @@ export function EditorHeader({
           <span className="text-muted-foreground/40 font-normal">/</span>
           <span className="text-foreground/90 font-semibold flex items-center gap-1.5">
             <span className="text-xs">{currentNote.icon || '📄'}</span>
-            <span className="truncate max-w-[120px]">{currentNote.title || 'Untitled Note'}</span>
+            <span className="truncate max-w-[120px]">
+              {currentNote.title || 'Untitled Note'}
+            </span>
           </span>
         </div>
       )}

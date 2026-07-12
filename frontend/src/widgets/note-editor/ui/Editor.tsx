@@ -11,7 +11,12 @@ import { FileText, PlusCircle } from 'lucide-react'
 import { BlockEditMenu } from './BlockEditMenu'
 import { BlockHandle } from './BlockHandle'
 import { Card, CardContent } from '#/components/ui/card'
-import { useNotesStore, useNotesQuery, useUpdateNote, useCreateNote } from '../index'
+import {
+  useNotesStore,
+  useNotesQuery,
+  useUpdateNote,
+  useCreateNote,
+} from '../index'
 import { EditorHeader } from './EditorHeader'
 import {
   NodeHoverExtension,
@@ -103,7 +108,7 @@ function EditorWithSlash() {
   const cardRef = React.useRef<HTMLDivElement>(null)
   const { hoveredNode } = useNodeHoverState(editor)
   const isList = hoveredNode?.type === 'listItem'
-  let rect = hoveredNode?.rect ?? null
+  const rect = hoveredNode?.rect ?? null
   const offset = 20
 
   const [adjustedRect, setAdjustedRect] =
@@ -142,7 +147,10 @@ function EditorWithSlash() {
 
   // Handle adding a default note when all are deleted
   const handleCreateFirstPage = () => {
-    createNoteMutation.mutate({ parentId: null, title: 'Welcome to my new page' })
+    createNoteMutation.mutate({
+      parentId: null,
+      title: 'Welcome to my new page',
+    })
   }
 
   if (!currentNote) {

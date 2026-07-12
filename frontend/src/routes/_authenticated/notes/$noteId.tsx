@@ -8,4 +8,3 @@ export const Route = createFileRoute('/_authenticated/notes/$noteId')({
 function RouteComponent() {
   return <AllNotesPage />
 }
-

@@ -264,7 +264,7 @@ body {
 /* } */
 /**/
 
-[data-type="layout-cell"] {
+[data-type='layout-cell'] {
   padding-left: 1em;
 }
 
@@ -296,7 +296,9 @@ li.block-handle-hovered {
 }
 
 /* Add this in your global CSS file */
-[data-node-view-wrapper].custom-layout-grid>[data-node-view-content],
-[data-node-view-wrapper].custom-layout-grid>[data-node-view-content]>[data-node-view-content-react] {
+[data-node-view-wrapper].custom-layout-grid > [data-node-view-content],
+[data-node-view-wrapper].custom-layout-grid
+  > [data-node-view-content]
+  > [data-node-view-content-react] {
   display: contents;
 }

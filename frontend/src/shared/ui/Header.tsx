@@ -58,7 +58,10 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
           <NavigationMenuList>
             <NavigationMenuItem>
               <NavigationMenuLink asChild>
-                <Link to="/" className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all">
+                <Link
+                  to="/"
+                  className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all"
+                >
                   Home
                 </Link>
               </NavigationMenuLink>
@@ -71,7 +74,10 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
                 <ul className="grid w-64 p-2">
                   <li>
                     <NavigationMenuLink asChild>
-                      <Link to="/notes" className="block select-none rounded-md p-3 hover:bg-muted">
+                      <Link
+                        to="/notes"
+                        className="block select-none rounded-md p-3 hover:bg-muted"
+                      >
                         <div className="text-sm font-medium">All Notes</div>
                         <p className="text-sm text-muted-foreground">
                           View and manage all your notes
@@ -81,7 +87,10 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
                   </li>
                   <li>
                     <NavigationMenuLink asChild>
-                      <Link to="/notes" className="block select-none rounded-md p-3 hover:bg-muted">
+                      <Link
+                        to="/notes"
+                        className="block select-none rounded-md p-3 hover:bg-muted"
+                      >
                         <div className="text-sm font-medium">Create Note</div>
                         <p className="text-sm text-muted-foreground">
                           Create a new note
@@ -94,14 +103,20 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuLink asChild>
-                <Link to="/profile" className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all">
+                <Link
+                  to="/profile"
+                  className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all"
+                >
                   Profile
                 </Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <NavigationMenuLink asChild>
-                <Link to="/settings" className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all">
+                <Link
+                  to="/settings"
+                  className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all"
+                >
                   Settings
                 </Link>
               </NavigationMenuLink>

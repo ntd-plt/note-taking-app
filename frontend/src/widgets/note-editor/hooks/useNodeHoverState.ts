@@ -1,9 +1,7 @@
 import type { Editor } from '@tiptap/react'
 import { useEffect, useState } from 'react'
-import {
-  NODE_HOVER_PLUGIN_KEY,
-  type NodeHoverPluginState,
-} from '../plugins/NodeHoverExtension'
+import { NODE_HOVER_PLUGIN_KEY } from '../plugins/NodeHoverExtension'
+import type { NodeHoverPluginState } from '../plugins/NodeHoverExtension'
 
 const DEFAULT_PLUGIN_STATE: NodeHoverPluginState = {
   isMouseInside: false,

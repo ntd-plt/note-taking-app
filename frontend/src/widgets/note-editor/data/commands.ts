@@ -5,6 +5,7 @@ import type {
 } from '../model'
 
 import { ArrowBigLeftIcon, ArrowBigRightIcon, DeleteIcon } from 'lucide-react'
+
 export const SLASH_COMMANDS: SlashCommandItem[] = [
   {
     title: 'Heading 1',

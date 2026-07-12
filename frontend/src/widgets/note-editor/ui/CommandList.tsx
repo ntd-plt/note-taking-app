@@ -29,8 +29,7 @@ import {
 } from '@/components/ui/command'
 import { Popover, PopoverContent } from '@/components/ui/popover'
 
-import type { SlashCommandItem } from '../model'
-import type { MenuAction, MenuState } from '../model'
+import type { SlashCommandItem, MenuAction, MenuState } from '../model'
 import { reducer } from '../state/slashCommandMenuReducer'
 
 export type SlashMenuContextValue = {

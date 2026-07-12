@@ -6,17 +6,64 @@ import type {
   AuthResponse,
 } from '../models'
 
+function decodeJwt(token: string): any {
+  try {
+    const base64Url = token.split('.')[1]
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const jsonPayload = decodeURIComponent(
+      window
+        .atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(''),
+    )
+    return JSON.parse(jsonPayload)
+  } catch (e) {
+    return null
+  }
+}
+
 export async function validateSession(): Promise<AuthState> {
   try {
-    const data = await apiClient.get<{ authenticated: boolean; user: any }>(
-      '/api/auth/validate',
-    )
-
-    if (data.authenticated && data.user) {
+    const token = localStorage.getItem('auth_token')
+    if (!token) {
       return {
-        user: data.user,
-        isAuthenticated: data.authenticated,
+        user: null,
+        isAuthenticated: false,
       }
+    }
+
+    const decoded = decodeJwt(token)
+    if (!decoded || (decoded.exp && decoded.exp * 1000 < Date.now())) {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('user_profile')
+      return {
+        user: null,
+        isAuthenticated: false,
+      }
+    }
+
+    let user = null
+    const profileStr = localStorage.getItem('user_profile')
+    if (profileStr) {
+      try {
+        user = JSON.parse(profileStr)
+      } catch {}
+    }
+
+    if (!user) {
+      user = {
+        id: decoded.user_id || 'abc-123',
+        username: 'user',
+        email: 'user@example.com',
+      }
+      localStorage.setItem('user_profile', JSON.stringify(user))
+    }
+
+    return {
+      user,
+      isAuthenticated: true,
     }
   } catch (error) {
     console.error('Session validation failed:', error)
@@ -30,29 +77,68 @@ export async function validateSession(): Promise<AuthState> {
 export async function login(
   credentials: LoginCredentials,
 ): Promise<AuthResponse> {
-  const data = await apiClient.post<AuthResponse>(
-    '/api/auth/login',
-    credentials,
-  )
-  if (data.token) {
-    localStorage.setItem('auth_token', data.token)
+  const data = await apiClient.post<{
+    access_token: string
+    refresh_token: string
+  }>('/auth/login', credentials)
+  if (data.access_token) {
+    localStorage.setItem('auth_token', data.access_token)
+    if (data.refresh_token) {
+      localStorage.setItem('refresh_token', data.refresh_token)
+    }
+
+    const decoded = decodeJwt(data.access_token)
+    const user = {
+      id: decoded?.user_id || 'abc-123',
+      username: credentials.email.split('@')[0],
+      email: credentials.email,
+    }
+    localStorage.setItem('user_profile', JSON.stringify(user))
+
+    return {
+      token: data.access_token,
+      user,
+    }
   }
-  return data
+  throw new Error('Login failed')
 }
 
 export async function register(
   credentials: RegisterCredentials,
 ): Promise<AuthResponse> {
-  const data = await apiClient.post<AuthResponse>(
-    '/api/auth/register',
-    credentials,
-  )
-  if (data.token) {
-    localStorage.setItem('auth_token', data.token)
+  const payload = {
+    name: credentials.username,
+    email: credentials.email,
+    password: credentials.password,
   }
-  return data
+  const data = await apiClient.post<{
+    access_token: string
+    refresh_token: string
+  }>('/auth/signup', payload)
+  if (data.access_token) {
+    localStorage.setItem('auth_token', data.access_token)
+    if (data.refresh_token) {
+      localStorage.setItem('refresh_token', data.refresh_token)
+    }
+
+    const decoded = decodeJwt(data.access_token)
+    const user = {
+      id: decoded?.user_id || 'abc-123',
+      username: credentials.username,
+      email: credentials.email,
+    }
+    localStorage.setItem('user_profile', JSON.stringify(user))
+
+    return {
+      token: data.access_token,
+      user,
+    }
+  }
+  throw new Error('Registration failed')
 }
 
 export async function logout(): Promise<void> {
   localStorage.removeItem('auth_token')
+  localStorage.removeItem('refresh_token')
+  localStorage.removeItem('user_profile')
 }

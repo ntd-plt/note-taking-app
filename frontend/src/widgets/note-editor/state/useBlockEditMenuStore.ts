@@ -6,7 +6,7 @@ import { BLOCK_EDIT_COMMANDS, BLOCK_EDIT_SUBCOMMANDS } from '../data/commands'
 export const useBlockEditMenuStore = create(
   redux(blockEditMenuReducer, {
     status: 'closed',
-  } as BlockEditMenuState),
+  }),
 )
 
 export type BlockEditMenuState =

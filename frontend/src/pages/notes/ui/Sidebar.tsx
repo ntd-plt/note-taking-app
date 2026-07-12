@@ -11,8 +11,8 @@ import {
   useDeleteFolder,
   useUpdateFolder,
   useUpdateNote,
-  type SidebarItem,
 } from '@/widgets/note-editor'
+import type { SidebarItem } from '@/widgets/note-editor'
 import {
   Sidebar,
   SidebarContent,
@@ -93,15 +93,11 @@ export function AppSidebar() {
   const { updateNote } = useUpdateNote()
 
   // Zustand store bindings
-  const {
-    activeNoteId,
-    searchQuery,
-    setActiveNoteId,
-    setSearchQuery,
-  } = useNotesStore()
+  const { activeNoteId, searchQuery, setActiveNoteId, setSearchQuery } =
+    useNotesStore()
 
   // Find active note from URL params if available
-  const params = useParams({ strict: false }) as { noteId?: string }
+  const params = useParams({ strict: false })
   const currentNoteId = params.noteId || activeNoteId
 
   React.useEffect(() => {
@@ -443,11 +439,16 @@ export function AppSidebar() {
                       onDuplicateNote={handleDuplicatePage}
                       onToggleFavorite={(id) => {
                         const note = notes.find((n) => n.id === id)
-                        if (note) updateNote(id, { isFavorite: !note.isFavorite })
+                        if (note)
+                          updateNote(id, { isFavorite: !note.isFavorite })
                       }}
                       onToggleFolderExpand={(id) => {
                         const f = folders.find((fol) => fol.id === id)
-                        if (f) updateFolderMutation.mutate({ id, updates: { isExpanded: !f.isExpanded } })
+                        if (f)
+                          updateFolderMutation.mutate({
+                            id,
+                            updates: { isExpanded: !f.isExpanded },
+                          })
                       }}
                       onUpdateFolderIcon={(id, icon) => {
                         updateFolderMutation.mutate({ id, updates: { icon } })

@@ -28,7 +28,8 @@ function resolveHoverNode(resolved: ResolvedPos): {
     const node = resolved.node(depth)
     const isListWrapper =
       node.type.name === 'bulletList' || node.type.name === 'orderedList'
-    const isCustomLayoutNode = node.type.name === 'customLayout' || node.type.name === 'layoutCell'
+    const isCustomLayoutNode =
+      node.type.name === 'customLayout' || node.type.name === 'layoutCell'
     if (!isListWrapper && !isCustomLayoutNode) {
       return {
         row: resolved.before(depth),

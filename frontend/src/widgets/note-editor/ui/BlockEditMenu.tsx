@@ -6,7 +6,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
-import { Editor } from '@tiptap/react'
+import type { Editor } from '@tiptap/react'
 
 import React from 'react'
 import { useBlockEditMenuStore } from '../state/useBlockEditMenuStore'

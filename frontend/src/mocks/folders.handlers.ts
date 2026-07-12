@@ -30,7 +30,7 @@ let mockFolders: Folder[] = [
     isExpanded: false,
     createdAt: new Date('2026-05-31T09:10:00.000Z').toISOString(),
     updatedAt: new Date('2026-05-31T09:10:00.000Z').toISOString(),
-  }
+  },
 ]
 
 export const foldersHandlers = [
@@ -46,7 +46,10 @@ export const foldersHandlers = [
     await delay(800) // Simulate individual resolution delay (800ms)
     const folder = mockFolders.find((f) => f.id === id)
     if (!folder) {
-      return new HttpResponse(null, { status: 404, statusText: 'Folder Not Found' })
+      return new HttpResponse(null, {
+        status: 404,
+        statusText: 'Folder Not Found',
+      })
     }
     return HttpResponse.json(folder)
   }),
@@ -74,7 +77,10 @@ export const foldersHandlers = [
     const body = (await request.json()) as Partial<Folder>
     const index = mockFolders.findIndex((f) => f.id === id)
     if (index === -1) {
-      return new HttpResponse(null, { status: 404, statusText: 'Folder Not Found' })
+      return new HttpResponse(null, {
+        status: 404,
+        statusText: 'Folder Not Found',
+      })
     }
 
     mockFolders[index] = {
@@ -91,7 +97,10 @@ export const foldersHandlers = [
     const { id } = params
     const index = mockFolders.findIndex((f) => f.id === id)
     if (index === -1) {
-      return new HttpResponse(null, { status: 404, statusText: 'Folder Not Found' })
+      return new HttpResponse(null, {
+        status: 404,
+        statusText: 'Folder Not Found',
+      })
     }
     const deleted = mockFolders[index]
     mockFolders = mockFolders.filter((f) => f.id !== id)

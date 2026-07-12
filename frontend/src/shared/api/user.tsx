@@ -1,11 +1,10 @@
 import type { User } from '../models'
-import { apiClient } from './client'
+import { validateSession } from './auth'
 
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const data = await apiClient.get<User>('/api/me')
-
-    return data
+    const auth = await validateSession()
+    return auth.user
   } catch (error) {
     console.error('Fail to get user data: ', error)
   }

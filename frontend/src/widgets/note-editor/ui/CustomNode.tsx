@@ -3,8 +3,8 @@ import {
   NodeViewContent,
   NodeViewWrapper,
   ReactNodeViewRenderer,
-  type ReactNodeViewProps,
 } from '@tiptap/react'
+import type { ReactNodeViewProps } from '@tiptap/react'
 import { useLayoutEffect, useRef, useState } from 'react'
 
 export function ColumnContainer({ node }: ReactNodeViewProps) {
@@ -42,7 +42,7 @@ export function ColumnContainer({ node }: ReactNodeViewProps) {
   // Calculate handle positions centered in the gaps
   const gap = 16 // 1rem in pixels
   const handlePositions = []
-  
+
   if (childWidths.length === numColumns) {
     let accumulatedWidth = 0
     for (let i = 0; i < childWidths.length - 1; i++) {

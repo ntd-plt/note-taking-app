@@ -1,6 +1,16 @@
-import { cn } from "@/lib/utils"
-import type { SidebarItem } from "#/widgets/note-editor/model"
-import { ChevronRight, Copy, MoreHorizontal, Plus, Star, Trash2, FolderPlus, FilePlus, Edit3 } from "lucide-react"
+import { cn } from '@/lib/utils'
+import type { SidebarItem } from '#/widgets/note-editor/model'
+import {
+  ChevronRight,
+  Copy,
+  MoreHorizontal,
+  Plus,
+  Star,
+  Trash2,
+  FolderPlus,
+  FilePlus,
+  Edit3,
+} from 'lucide-react'
 import * as React from 'react'
 
 import {
@@ -63,7 +73,6 @@ export default function NodeTreeItem({
   onUpdateNoteIcon,
   onUpdateFolderName,
 }: NoteTreeItemProps) {
-  
   if (item.type === 'note') {
     const note = item.data
     const isActive = currentNoteId === note.id
@@ -151,7 +160,8 @@ export default function NodeTreeItem({
                   <Star
                     className={cn(
                       'mr-2 h-3.5 w-3.5 opacity-60',
-                      note.isFavorite && 'fill-primary text-primary opacity-100',
+                      note.isFavorite &&
+                        'fill-primary text-primary opacity-100',
                     )}
                   />
                   <span>
@@ -261,7 +271,9 @@ export default function NodeTreeItem({
             </DropdownMenu>
 
             {/* Folder Name */}
-            <span className="font-semibold truncate">{folder.name || 'Untitled Folder'}</span>
+            <span className="font-semibold truncate">
+              {folder.name || 'Untitled Folder'}
+            </span>
           </div>
 
           {/* Floating Quick Action Buttons on Hover */}

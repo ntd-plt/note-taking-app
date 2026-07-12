@@ -17,7 +17,10 @@ export const notesHandlers = [
     const { id } = params
     const note = mockNotes.find((n) => n.id === id)
     if (!note) {
-      return new HttpResponse(null, { status: 404, statusText: 'Note Not Found' })
+      return new HttpResponse(null, {
+        status: 404,
+        statusText: 'Note Not Found',
+      })
     }
     return HttpResponse.json(note)
   }),
@@ -31,7 +34,9 @@ export const notesHandlers = [
       title: body.title || 'Untitled Note',
       parentId: body.parentId || null,
       icon: body.icon || '📄',
-      content: body.content || `<h1>${body.title || 'Untitled Note'}</h1><p>Start writing here...</p>`,
+      content:
+        body.content ||
+        `<h1>${body.title || 'Untitled Note'}</h1><p>Start writing here...</p>`,
       isFavorite: body.isFavorite || false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -47,7 +52,10 @@ export const notesHandlers = [
     const body = (await request.json()) as Partial<Note>
     const index = mockNotes.findIndex((n) => n.id === id)
     if (index === -1) {
-      return new HttpResponse(null, { status: 404, statusText: 'Note Not Found' })
+      return new HttpResponse(null, {
+        status: 404,
+        statusText: 'Note Not Found',
+      })
     }
 
     mockNotes[index] = {
@@ -64,7 +72,10 @@ export const notesHandlers = [
     const { id } = params
     const index = mockNotes.findIndex((n) => n.id === id)
     if (index === -1) {
-      return new HttpResponse(null, { status: 404, statusText: 'Note Not Found' })
+      return new HttpResponse(null, {
+        status: 404,
+        statusText: 'Note Not Found',
+      })
     }
     const deleted = mockNotes[index]
     mockNotes = mockNotes.filter((n) => n.id !== id)
