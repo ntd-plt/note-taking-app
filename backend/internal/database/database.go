@@ -13,7 +13,7 @@ type Database interface {
 	GetUserByID(id uuid.UUID) (user.User, error)
 	AddUser(user user.User) error
 
-	CreateNote(note user.Note, parentID *uuid.UUID) (user.Note, error)
+	CreateNote(note user.Note) (user.Note, error)
 	GetNoteByID(id uuid.UUID) (user.Note, error)
 	GetNotesByUserID(userID uuid.UUID) ([]user.Note, error)
 	UpdateNotes(notes []user.Note) error
