@@ -1,16 +1,29 @@
-package server
+package main
 
 import (
+	"backend/internal/configs"
 	"backend/internal/database"
 	"backend/internal/handlers"
-	"backend/internal/middleware"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
-
-	"github.com/gin-gonic/gin"
 )
 
+// @title           Note Taking App API
+// @version         1.0
+// @description     API for managing users, notes, and folders.
+// @BasePath        /
+
+// @securityDefinitions.apikey  BearerAuth
+// @in                          header
+// @name                        Authorization
+// @description                 Type "Bearer" followed by a space and the JWT access token.
+
 func main() {
+	cfg, err := configs.Load()
+	if err != nil {
+		panic(err)
+	}
+
 	db := database.NewPostgreDatabase()
 	if err := db.Connect(); err != nil {
 		panic(err)
@@ -20,25 +33,11 @@ func main() {
 
 	hasher := hash.NewBcryptHasher()
 	tokenService := services.NewJWTService()
-	authService := services.NewAuthService(db, hasher)
-	authHandler := handlers.New(authService, tokenService)
-	notesHandler := handlers.NewNotesHandler(db, tokenService)
+	authService := services.NewAuthService(db, hasher, tokenService)
+	authHandler := handlers.NewAuthHandler(authService)
+	notesHandler := handlers.NewNotesHandler(db)
+	foldersHandler := handlers.NewFoldersHandler(db)
 
-	router := gin.Default()
-	authGroup := router.Group("/auth")
-	{
-		authGroup.POST("/login", authHandler.Login)
-		authGroup.POST("/signup", authHandler.Signup)
-		authGroup.POST("/refresh-token", authHandler.RefreshToken)
-	}
-
-	protected := router.Group("/api")
-	protected.Use(middleware.Auth(tokenService))
-	{
-		protected.GET("/notes", notesHandler.GetNotes)
-		protected.POST("/notes", notesHandler.CreateNote)
-		protected.GET("/notes/:id", notesHandler.GetNote)
-		protected.PUT("/notes/:id", notesHandler.UpdateNote)
-		protected.DELETE("/notes/:id", notesHandler.DeleteNote)
-	}
+	router := NewRouter(authHandler, notesHandler, foldersHandler, tokenService, !cfg.IsProduction())
+	router.Run(":8080")
 }

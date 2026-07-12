@@ -15,6 +15,10 @@ type Config struct {
 	ServerPort string
 
 	JWTSecret string
+
+	// AppEnv is "development" or "production". Defaults to "development"
+	// (dev-safe) unless explicitly set otherwise via the APP_ENV env var.
+	AppEnv string
 }
 
 func Default() *Config {
@@ -26,6 +30,7 @@ func Default() *Config {
 		DBName:     "db",
 		ServerPort: "8080",
 		JWTSecret:  "default_secret",
+		AppEnv:     "development",
 	}
 }
 
@@ -33,6 +38,11 @@ func Load() (*Config, error) {
 	err := godotenv.Load()
 	if err != nil {
 		return nil, err
+	}
+
+	appEnv := os.Getenv("APP_ENV")
+	if appEnv == "" {
+		appEnv = "development"
 	}
 
 	return &Config{
@@ -43,5 +53,11 @@ func Load() (*Config, error) {
 		DBName:     os.Getenv("DB_NAME"),
 		ServerPort: os.Getenv("SERVER_PORT"),
 		JWTSecret:  os.Getenv("JWT_SECRET"),
+		AppEnv:     appEnv,
 	}, nil
+}
+
+// IsProduction reports whether the app is running in production, based on APP_ENV.
+func (c *Config) IsProduction() bool {
+	return c.AppEnv == "production"
 }

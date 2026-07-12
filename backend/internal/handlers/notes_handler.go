@@ -1,29 +1,58 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	"backend/internal/database"
 	"backend/internal/model"
-	"backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type NotesHandler struct {
-	db           database.Database
-	tokenService *services.JWTService
+	db database.Database
 }
 
-func NewNotesHandler(db database.Database, tokenService *services.JWTService) *NotesHandler {
+type CreateNoteRequest struct {
+	Title    string     `json:"title" binding:"required"`
+	Content  string     `json:"content" binding:"required"`
+	FolderID *uuid.UUID `json:"folder_id"` // nil to create the note outside any folder
+}
+
+type UpdateNoteItem struct {
+	ID      uuid.UUID `json:"id" binding:"required"`
+	Title   string    `json:"title"`
+	Content string    `json:"content"`
+}
+
+type UpdateNotesRequest struct {
+	Notes []UpdateNoteItem `json:"notes" binding:"required,min=1"`
+}
+
+type DeleteNotesRequest struct {
+	IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
+}
+
+func NewNotesHandler(db database.Database) *NotesHandler {
 	return &NotesHandler{
-		db:           db,
-		tokenService: tokenService,
+		db: db,
 	}
 }
 
+// CreateNote godoc
+// @Summary      Create a note
+// @Description  Creates a new note, optionally inside a folder
+// @Tags         notes
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      CreateNoteRequest  true  "Note to create"
+// @Success      201      {object}  model.Note
+// @Failure      400      {object}  map[string]string
+// @Failure      401      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/notes [post]
 func (h *NotesHandler) CreateNote(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -31,10 +60,7 @@ func (h *NotesHandler) CreateNote(c *gin.Context) {
 		return
 	}
 
-	var req struct {
-		Title   string `json:"title" binding:"required"`
-		Content string `json:"content" binding:"required"`
-	}
+	var req CreateNoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -46,7 +72,7 @@ func (h *NotesHandler) CreateNote(c *gin.Context) {
 		UserID:  userID.(uuid.UUID),
 	}
 
-	createdNote, err := h.db.CreateNote(note)
+	createdNote, err := h.db.CreateNote(note, req.FolderID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -55,6 +81,18 @@ func (h *NotesHandler) CreateNote(c *gin.Context) {
 	c.JSON(http.StatusCreated, createdNote)
 }
 
+// GetNote godoc
+// @Summary      Get a note
+// @Description  Returns a single note owned by the authenticated user
+// @Tags         notes
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Note ID"
+// @Success      200  {object}  model.Note
+// @Failure      400  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Router       /api/notes/{id} [get]
 func (h *NotesHandler) GetNote(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -62,15 +100,13 @@ func (h *NotesHandler) GetNote(c *gin.Context) {
 		return
 	}
 
-	noteID := c.Param("id")
-	var noteIDInt int
-	_, err := fmt.Sscanf(noteID, "%d", &noteIDInt)
+	noteID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid note id"})
 		return
 	}
 
-	note, err := h.db.GetNoteByID(noteIDInt)
+	note, err := h.db.GetNoteByID(noteID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "note not found"})
 		return
@@ -100,82 +136,103 @@ func (h *NotesHandler) GetNotes(c *gin.Context) {
 	c.JSON(http.StatusOK, notes)
 }
 
-func (h *NotesHandler) UpdateNote(c *gin.Context) {
+// UpdateNotes godoc
+// @Summary      Update multiple notes
+// @Description  Updates the title and/or content of one or more notes in a single batch
+// @Tags         notes
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      UpdateNotesRequest  true  "Notes to update"
+// @Success      200      {array}   model.Note
+// @Failure      400      {object}  map[string]string
+// @Failure      403      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/notes [put]
+func (h *NotesHandler) UpdateNotes(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
 
-	noteID := c.Param("id")
-	var noteIDInt int
-	_, err := fmt.Sscanf(noteID, "%d", &noteIDInt)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid note id"})
-		return
-	}
-
-	note, err := h.db.GetNoteByID(noteIDInt)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "note not found"})
-		return
-	}
-
-	if note.UserID != userID.(uuid.UUID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this note"})
-		return
-	}
-
-	var req struct {
-		Title   string `json:"title"`
-		Content string `json:"content"`
-	}
+	var req UpdateNotesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	note.Title = req.Title
-	note.Content = req.Content
+	notes := make([]model.Note, 0, len(req.Notes))
+	for _, noteReq := range req.Notes {
+		note, err := h.db.GetNoteByID(noteReq.ID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "note not found", "id": noteReq.ID})
+			return
+		}
 
-	if err := h.db.UpdateNote(note); err != nil {
+		if note.UserID != userID.(uuid.UUID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this note", "id": noteReq.ID})
+			return
+		}
+
+		note.Title = noteReq.Title
+		note.Content = noteReq.Content
+		notes = append(notes, note)
+	}
+
+	if err := h.db.UpdateNotes(notes); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, note)
+	c.JSON(http.StatusOK, notes)
 }
 
-func (h *NotesHandler) DeleteNote(c *gin.Context) {
+// DeleteNotes godoc
+// @Summary      Delete multiple notes
+// @Description  Deletes one or more notes owned by the authenticated user in a single batch
+// @Tags         notes
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      DeleteNotesRequest  true  "Note IDs to delete"
+// @Success      200      {object}  map[string]string
+// @Failure      400      {object}  map[string]string
+// @Failure      403      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/notes [delete]
+func (h *NotesHandler) DeleteNotes(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
 		return
 	}
 
-	noteID := c.Param("id")
-	var noteIDInt int
-	_, err := fmt.Sscanf(noteID, "%d", &noteIDInt)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid note id"})
+	var req DeleteNotesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	note, err := h.db.GetNoteByID(noteIDInt)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "note not found"})
-		return
+	for _, id := range req.IDs {
+		note, err := h.db.GetNoteByID(id)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "note not found", "id": id})
+			return
+		}
+
+		if note.UserID != userID.(uuid.UUID) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to delete this note", "id": id})
+			return
+		}
 	}
 
-	if note.UserID != userID.(uuid.UUID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to delete this note"})
-		return
-	}
-
-	if err := h.db.DeleteNote(noteIDInt); err != nil {
+	if err := h.db.DeleteNotes(req.IDs); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "note deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "notes deleted successfully"})
 }
