@@ -68,11 +68,9 @@ func (db *PostgreDatabase) AddUser(u user.User) error {
 	return err
 }
 
-func (db *PostgreDatabase) CreateNote(note user.Note, parentID *uuid.UUID) (user.Note, error) {
-	note.ID = uuid.New()
-	note.FolderID = parentID
+func (db *PostgreDatabase) CreateNote(note user.Note) (user.Note, error) {
 	queryString := "INSERT INTO notes (id, folder_id, user_id, title, content) VALUES ($1, $2, $3, $4, $5) RETURNING created_at, updated_at"
-	err := db.conn.QueryRow(context.Background(), queryString, note.ID, parentID, note.UserID, note.Title, note.Content).Scan(&note.CreatedAt, &note.UpdatedAt)
+	err := db.conn.QueryRow(context.Background(), queryString, note.ID, note.FolderID, note.UserID, note.Title, note.Content).Scan(&note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
 		return user.Note{}, err
 	}

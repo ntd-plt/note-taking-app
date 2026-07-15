@@ -4,13 +4,12 @@
 package testutil
 
 import (
-	"errors"
-	"time"
-
 	"backend/internal/database"
 	"backend/internal/model"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
+	"errors"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -75,14 +74,13 @@ func (f *FakeDatabase) AddUser(user model.User) error {
 	return nil
 }
 
-func (f *FakeDatabase) CreateNote(note model.Note, parentID *uuid.UUID) (model.Note, error) {
+func (f *FakeDatabase) CreateNote(note model.Note) (model.Note, error) {
 	if err := f.Errs["CreateNote"]; err != nil {
 		return model.Note{}, err
 	}
 	if note.ID == uuid.Nil {
 		note.ID = uuid.New()
 	}
-	note.FolderID = parentID
 	note.CreatedAt = time.Now()
 	note.UpdatedAt = time.Now()
 	f.Notes[note.ID] = note

@@ -1,0 +1,10 @@
+# Build output (make build)
+bin/
+
+# Environment file with secrets (created by `make env` from .env-template)
+.env
+
+# Test & coverage artifacts
+*.test
+*.out
+coverage.*

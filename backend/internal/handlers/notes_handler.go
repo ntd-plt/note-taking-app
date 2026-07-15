@@ -1,10 +1,9 @@
 package handlers
 
 import (
-	"net/http"
-
 	"backend/internal/database"
 	"backend/internal/model"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -15,6 +14,7 @@ type NotesHandler struct {
 }
 
 type CreateNoteRequest struct {
+	ID       uuid.UUID  `json:"id"` // optional, if not provided, a new UUID will be generated
 	Title    string     `json:"title" binding:"required"`
 	Content  string     `json:"content" binding:"required"`
 	FolderID *uuid.UUID `json:"folder_id"` // nil to create the note outside any folder
@@ -67,12 +67,14 @@ func (h *NotesHandler) CreateNote(c *gin.Context) {
 	}
 
 	note := model.Note{
-		Title:   req.Title,
-		Content: req.Content,
-		UserID:  userID.(uuid.UUID),
+		ID:       req.ID,
+		Title:    req.Title,
+		Content:  req.Content,
+		FolderID: req.FolderID,
+		UserID:   userID.(uuid.UUID),
 	}
 
-	createdNote, err := h.db.CreateNote(note, req.FolderID)
+	createdNote, err := h.db.CreateNote(note)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
