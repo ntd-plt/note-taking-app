@@ -78,16 +78,16 @@ export async function login(
   credentials: LoginCredentials,
 ): Promise<AuthResponse> {
   const data = await apiClient.post<{
-    access_token: string
-    refresh_token: string
+    accessToken: string
+    refreshToken: string
   }>('/auth/login', credentials)
-  if (data.access_token) {
-    localStorage.setItem('auth_token', data.access_token)
-    if (data.refresh_token) {
-      localStorage.setItem('refresh_token', data.refresh_token)
+  if (data.accessToken) {
+    localStorage.setItem('auth_token', data.accessToken)
+    if (data.refreshToken) {
+      localStorage.setItem('refresh_token', data.refreshToken)
     }
 
-    const decoded = decodeJwt(data.access_token)
+    const decoded = decodeJwt(data.accessToken)
     const user = {
       id: decoded?.user_id || 'abc-123',
       username: credentials.email.split('@')[0],
@@ -96,7 +96,7 @@ export async function login(
     localStorage.setItem('user_profile', JSON.stringify(user))
 
     return {
-      token: data.access_token,
+      token: data.accessToken,
       user,
     }
   }
@@ -112,16 +112,16 @@ export async function register(
     password: credentials.password,
   }
   const data = await apiClient.post<{
-    access_token: string
-    refresh_token: string
+    accessToken: string
+    refreshToken: string
   }>('/auth/signup', payload)
-  if (data.access_token) {
-    localStorage.setItem('auth_token', data.access_token)
-    if (data.refresh_token) {
-      localStorage.setItem('refresh_token', data.refresh_token)
+  if (data.accessToken) {
+    localStorage.setItem('auth_token', data.accessToken)
+    if (data.refreshToken) {
+      localStorage.setItem('refresh_token', data.refreshToken)
     }
 
-    const decoded = decodeJwt(data.access_token)
+    const decoded = decodeJwt(data.accessToken)
     const user = {
       id: decoded?.user_id || 'abc-123',
       username: credentials.username,
@@ -130,7 +130,7 @@ export async function register(
     localStorage.setItem('user_profile', JSON.stringify(user))
 
     return {
-      token: data.access_token,
+      token: data.accessToken,
       user,
     }
   }

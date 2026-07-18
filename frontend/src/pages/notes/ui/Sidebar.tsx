@@ -79,18 +79,10 @@ export interface NodeSidebarProps {
 export function AppSidebar() {
   const navigate = useNavigate()
 
-  // Queries
   const { data: notes = [] } = useNotesQuery()
   const { data: folders = [] } = useFoldersQuery()
-
-  // Mutations
-  const createNoteMutation = useCreateNote()
-  const deleteNoteMutation = useDeleteNote()
-  const duplicateNoteMutation = useDuplicateNote()
-  const createFolderMutation = useCreateFolder()
-  const deleteFolderMutation = useDeleteFolder()
-  const updateFolderMutation = useUpdateFolder()
-  const { updateNote } = useUpdateNote()
+  console.log("Folder", JSON.stringify(folders))
+  console.log("Notes", JSON.stringify(notes))
 
   // Zustand store bindings
   const { activeNoteId, searchQuery, setActiveNoteId, setSearchQuery } =
@@ -99,6 +91,16 @@ export function AppSidebar() {
   // Find active note from URL params if available
   const params = useParams({ strict: false })
   const currentNoteId = params.noteId || activeNoteId
+
+  // Mutation hooks
+  const createNoteMutation = useCreateNote()
+  const deleteNoteMutation = useDeleteNote()
+  const duplicateNoteMutation = useDuplicateNote()
+  const { updateNote } = useUpdateNote()
+
+  const createFolderMutation = useCreateFolder()
+  const deleteFolderMutation = useDeleteFolder()
+  const updateFolderMutation = useUpdateFolder()
 
   React.useEffect(() => {
     if (params.noteId && params.noteId !== activeNoteId) {
@@ -126,8 +128,9 @@ export function AppSidebar() {
     const rootItems: SidebarItem[] = []
     const itemsByParent: Record<string, SidebarItem[]> = {}
 
+
     // Group folders
-    folders.forEach((folder) => {
+    folders?.forEach((folder) => {
       const item: SidebarItem = {
         type: 'folder',
         id: folder.id,
@@ -144,7 +147,7 @@ export function AppSidebar() {
     })
 
     // Group notes
-    notes.forEach((note) => {
+    notes?.forEach((note) => {
       const item: SidebarItem = {
         type: 'note',
         id: note.id,
@@ -190,7 +193,17 @@ export function AppSidebar() {
 
   // Handlers
   const handleCreateNewPage = (parentId: string | null = null) => {
-    createNoteMutation.mutate({ parentId, title: 'Untitled Note' })
+    createNoteMutation.mutate(
+      { parentId, title: 'Untitled Note' },
+      {
+        onSuccess: (newNote) => {
+          navigate({
+            to: '/notes/$noteId',
+            params: { noteId: newNote.id },
+          })
+        },
+      }
+    )
   }
 
   const handleCreateNewFolder = async (parentId: string | null = null) => {
@@ -204,18 +217,19 @@ export function AppSidebar() {
     e.stopPropagation()
     e.preventDefault()
     if (confirm('Delete this note permanently?')) {
-      deleteNoteMutation.mutate(id)
-      if (currentNoteId === id) {
-        const remaining = notes.filter((n) => n.id !== id)
-        if (remaining.length > 0) {
-          navigate({
-            to: '/notes/$noteId',
-            params: { noteId: remaining[0].id },
-          })
-        } else {
-          navigate({ to: '/notes' })
-        }
-      }
+      deleteNoteMutation.mutate(id, {
+        onSuccess: () => {
+          const nextActiveId = useNotesStore.getState().activeNoteId
+          if (nextActiveId) {
+            navigate({
+              to: '/notes/$noteId',
+              params: { noteId: nextActiveId },
+            })
+          } else {
+            navigate({ to: '/notes' })
+          }
+        },
+      })
     }
   }
 
@@ -223,20 +237,19 @@ export function AppSidebar() {
     e.stopPropagation()
     e.preventDefault()
     if (confirm('Delete this folder and all its contents?')) {
-      deleteFolderMutation.mutate(id)
-      // Check if current note was inside deleted folder structure
-      const stillExists = notes.some((n) => n.id === currentNoteId)
-      if (!stillExists) {
-        const remaining = notes.filter((n) => n.id !== currentNoteId)
-        if (remaining.length > 0) {
-          navigate({
-            to: '/notes/$noteId',
-            params: { noteId: remaining[0].id },
-          })
-        } else {
-          navigate({ to: '/notes' })
-        }
-      }
+      deleteFolderMutation.mutate(id, {
+        onSuccess: () => {
+          const nextActiveId = useNotesStore.getState().activeNoteId
+          if (nextActiveId) {
+            navigate({
+              to: '/notes/$noteId',
+              params: { noteId: nextActiveId },
+            })
+          } else {
+            navigate({ to: '/notes' })
+          }
+        },
+      })
     }
   }
 
@@ -245,7 +258,14 @@ export function AppSidebar() {
     e.preventDefault()
     const note = notes.find((n) => n.id === id)
     if (note) {
-      duplicateNoteMutation.mutate(note)
+      duplicateNoteMutation.mutate(note, {
+        onSuccess: (newNote) => {
+          navigate({
+            to: '/notes/$noteId',
+            params: { noteId: newNote.id },
+          })
+        },
+      })
     }
   }
 

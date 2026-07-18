@@ -8,11 +8,11 @@ import (
 	user "backend/internal/model"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostgreDatabase struct {
-	conn *pgx.Conn
+	conn *pgxpool.Pool
 }
 
 func NewPostgreDatabase() *PostgreDatabase {
@@ -47,7 +47,7 @@ func (db *PostgreDatabase) Connect() error {
 	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		config.DBUser, config.DBPass, config.DBHost, config.DBPort, config.DBName)
 
-	conn, err := pgx.Connect(context.Background(), url)
+	conn, err := pgxpool.New(context.Background(), url)
 	db.conn = conn
 
 	if err != nil {
@@ -58,7 +58,7 @@ func (db *PostgreDatabase) Connect() error {
 
 func (db *PostgreDatabase) Disconnect() error {
 	if db.conn != nil {
-		return db.conn.Close(context.Background())
+		db.conn.Close()
 	}
 	return nil
 }

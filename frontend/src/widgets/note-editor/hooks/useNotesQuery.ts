@@ -1,28 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiClient, mapBackendNote, mapBackendFolder } from '@/shared/api'
 import type { Note, Folder } from '../model'
 import { useNotesStore } from './useNotesStore'
 import { debounce } from '@/shared/lib/debounce'
 import * as React from 'react'
+import * as api from '../api'
 
 // Queries
 export function useNotesQuery() {
   return useQuery({
     queryKey: ['notes'],
-    queryFn: async () => {
-      const response = await apiClient.get<any[]>('/api/notes')
-      return response.map(mapBackendNote)
-    },
+    queryFn: () => api.fetchNotes(),
   })
 }
 
 export function useFoldersQuery() {
   return useQuery({
     queryKey: ['folders'],
-    queryFn: async () => {
-      const response = await apiClient.get<any[]>('/api/folders')
-      return response.map(mapBackendFolder)
-    },
+    queryFn: () => api.fetchFolders(),
   })
 }
 
@@ -50,19 +44,7 @@ export function useUpdateNote() {
           ? updates.content
           : currentNote?.content || ''
 
-      const payload = {
-        notes: [
-          {
-            id,
-            title,
-            content,
-          },
-        ],
-      }
-
-      const response = await apiClient.put<any[]>('/api/notes', payload)
-      const updated = response[0]
-      const mapped = mapBackendNote(updated)
+      const mapped = await api.updateNote(id, { title, content })
       if (currentNote) {
         mapped.icon = currentNote.icon
         mapped.isFavorite = currentNote.isFavorite
@@ -126,13 +108,11 @@ export function useCreateNote() {
 
   return useMutation({
     mutationFn: async (newNote: Partial<Note>) => {
-      const payload = {
+      const mapped = await api.createNote({
         title: newNote.title || 'Untitled Note',
         content: newNote.content || '',
-        folder_id: newNote.parentId || null,
-      }
-      const response = await apiClient.post<any>('/api/notes', payload)
-      const mapped = mapBackendNote(response)
+        parentId: newNote.parentId || null,
+      })
       mapped.icon = newNote.icon || '📄'
       mapped.isFavorite = newNote.isFavorite || false
       return mapped
@@ -181,10 +161,7 @@ export function useDeleteNote() {
   const setActiveNoteId = useNotesStore((state) => state.setActiveNoteId)
 
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.delete<any>('/api/notes', {
-        body: JSON.stringify({ ids: [id] }),
-      }),
+    mutationFn: (id: string) => api.deleteNote(id),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['notes'] })
       const previousNotes = queryClient.getQueryData<Note[]>(['notes'])
@@ -217,13 +194,11 @@ export function useDuplicateNote() {
 
   return useMutation({
     mutationFn: async (noteToDup: Note) => {
-      const payload = {
+      const mapped = await api.createNote({
         title: `${noteToDup.title} (Copy)`,
         content: noteToDup.content,
-        folder_id: noteToDup.parentId || null,
-      }
-      const response = await apiClient.post<any>('/api/notes', payload)
-      const mapped = mapBackendNote(response)
+        parentId: noteToDup.parentId || null,
+      })
       mapped.icon = noteToDup.icon || '📄'
       mapped.isFavorite = false
       return mapped
@@ -246,12 +221,10 @@ export function useCreateFolder() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (newFolder: Partial<Folder>) => {
-      const payload = {
+      const mapped = await api.createFolder({
         name: newFolder.name || 'Untitled Folder',
-        parent_folder_id: newFolder.parentId || null,
-      }
-      const response = await apiClient.post<any>('/api/folders', payload)
-      const mapped = mapBackendFolder(response)
+        parentId: newFolder.parentId || null,
+      })
       mapped.icon = newFolder.icon || '📁'
       mapped.isExpanded = newFolder.isExpanded || false
       return mapped
@@ -284,19 +257,7 @@ export function useUpdateFolder() {
           ? updates.parentId
           : currentFolder?.parentId || null
 
-      const payload = {
-        folders: [
-          {
-            id,
-            name,
-            parent_folder_id: parentFolderId,
-          },
-        ],
-      }
-
-      const response = await apiClient.put<any[]>('/api/folders', payload)
-      const updated = response[0]
-      const mapped = mapBackendFolder(updated)
+      const mapped = await api.updateFolder(id, { name, parentId: parentFolderId })
       if (currentFolder) {
         mapped.icon = currentFolder.icon
         mapped.isExpanded = currentFolder.isExpanded
@@ -322,10 +283,7 @@ export function useDeleteFolder() {
   const setActiveNoteId = useNotesStore((state) => state.setActiveNoteId)
 
   return useMutation({
-    mutationFn: (id: string) =>
-      apiClient.delete<any>('/api/folders', {
-        body: JSON.stringify({ ids: [id] }),
-      }),
+    mutationFn: (id: string) => api.deleteFolder(id),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['folders'] })
       await queryClient.cancelQueries({ queryKey: ['notes'] })
@@ -400,12 +358,7 @@ export function useResolveFullPath() {
           try {
             folder = await queryClient.fetchQuery<Folder>({
               queryKey: ['folders', currentParentId],
-              queryFn: async () => {
-                const res = await apiClient.get<any>(
-                  `/api/folders/${currentParentId}`,
-                )
-                return mapBackendFolder(res)
-              },
+              queryFn: () => api.fetchFolder(currentParentId!),
             })
           } catch (err) {
             console.error(

@@ -1,5 +1,7 @@
 // src/shared/api/client.ts
 
+import humps from 'humps'
+
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
 export class ApiError extends Error {
@@ -28,7 +30,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const response = await fetch(url, { ...options, headers })
+  const response =
+    await fetch(url, { ...options, headers })
 
   if (!response.ok) {
     let errorData
@@ -48,7 +51,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     return null as T
   }
 
-  return response.json()
+  const json = await response.json()
+  return humps.camelizeKeys(json) as T
 }
 
 export const apiClient = {
@@ -58,19 +62,19 @@ export const apiClient = {
     request<T>(path, {
       ...options,
       method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? JSON.stringify(humps.decamelizeKeys(body)) : undefined,
     }),
   put: <T>(path: string, body?: any, options?: RequestInit) =>
     request<T>(path, {
       ...options,
       method: 'PUT',
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? JSON.stringify(humps.decamelizeKeys(body)) : undefined,
     }),
   patch: <T>(path: string, body?: any, options?: RequestInit) =>
     request<T>(path, {
       ...options,
       method: 'PATCH',
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? JSON.stringify(humps.decamelizeKeys(body)) : undefined,
     }),
   delete: <T>(path: string, options?: RequestInit) =>
     request<T>(path, { ...options, method: 'DELETE' }),

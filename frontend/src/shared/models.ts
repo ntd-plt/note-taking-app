@@ -31,8 +31,6 @@ export interface Folder {
   parentId: string | null // Points to another Folder's id, or null for root
   icon?: string // e.g., "📁", "🚀"
   isExpanded?: boolean // Local state for sidebar visibility
-  createdAt: string
-  updatedAt: string
 }
 
 export interface Note {
@@ -42,7 +40,5 @@ export interface Note {
   parentId: string | null // Points to a Folder's id, or null for root
   isFavorite?: boolean
   icon?: string // e.g., "📄"
-  createdAt: string
-  updatedAt: string
   path?: string[]
 }

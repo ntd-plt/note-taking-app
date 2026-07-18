@@ -1,7 +1,7 @@
 // src/mocks/notes.handlers.ts
 import { http, HttpResponse, delay } from 'msw'
 import type { Note } from '#/widgets/note-editor/model'
-import initialNotes from '#/widgets/note-editor/data/initialNotes'
+import initialNotes from './initialNotes'
 
 // In-memory mock database for notes, seeded with initialNotes
 let mockNotes: Note[] = [...initialNotes]
