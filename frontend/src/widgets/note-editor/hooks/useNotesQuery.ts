@@ -305,10 +305,16 @@ export function useDeleteFolder() {
       const getFolderIdsToDelete = (
         folderId: string,
         list: Folder[],
+        visited: Set<string> = new Set(),
       ): string[] => {
+        if (visited.has(folderId)) {
+          console.warn('Cycle detected during folder deletion path:', folderId)
+          return []
+        }
+        visited.add(folderId)
         const childrenIds = list
           .filter((f) => f.parentId === folderId)
-          .flatMap((f) => getFolderIdsToDelete(f.id, list))
+          .flatMap((f) => getFolderIdsToDelete(f.id, list, visited))
         return [folderId, ...childrenIds]
       }
 
@@ -357,12 +363,19 @@ export function useResolveFullPath() {
 
   return React.useCallback(
     async (note: Note | undefined, folders: Folder[]): Promise<Folder[]> => {
-      if (!note || !note.parentId) return []
+      if (!note || !note.parentId || note.parentId === 'null' || note.parentId === 'undefined') return []
 
       const path: Folder[] = []
       let currentParentId: string | null = note.parentId
+      const visited = new Set<string>()
 
-      while (currentParentId) {
+      while (currentParentId && currentParentId !== 'null' && currentParentId !== 'undefined') {
+        if (visited.has(currentParentId)) {
+          console.warn('Cycle detected in folder path resolution:', currentParentId)
+          break
+        }
+        visited.add(currentParentId)
+
         let folder = folders.find((f) => f.id === currentParentId)
         if (!folder) {
           try {
@@ -378,6 +391,11 @@ export function useResolveFullPath() {
             break
           }
         }
+
+        if (!folder) {
+          break
+        }
+
         path.unshift(folder)
         currentParentId = folder.parentId
       }

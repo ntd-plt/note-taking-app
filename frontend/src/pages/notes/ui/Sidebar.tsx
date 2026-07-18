@@ -89,8 +89,10 @@ export interface NodeSidebarProps {
 export function AppSidebar() {
   const navigate = useNavigate()
 
-  const { data: notes = [] } = useNotesQuery()
-  const { data: folders = [] } = useFoldersQuery()
+  const { data: notesData } = useNotesQuery()
+  const { data: foldersData } = useFoldersQuery()
+  const notes = notesData ?? []
+  const folders = foldersData ?? []
   console.log("Folder", JSON.stringify(folders))
   console.log("Notes", JSON.stringify(notes))
 
@@ -148,10 +150,13 @@ export function AppSidebar() {
   const openFolderDialog = (mode: 'create' | 'rename', parentIdOrFolderId: string | null, currentName = '') => {
     setFolderDialogMode(mode)
     setFolderNameInput(currentName)
+    console.log("ParentId", parentIdOrFolderId)
     if (mode === 'create') {
+      console.log("Create")
       setFolderDialogParentId(parentIdOrFolderId)
       setFolderDialogId(null)
     } else {
+      console.log("Rename")
       setFolderDialogParentId(null)
       setFolderDialogId(parentIdOrFolderId)
     }
@@ -231,10 +236,16 @@ export function AppSidebar() {
       }
     })
 
+    const visitedFolders = new Set<string>()
     // Recursively wire children (folders first, then notes)
     const assemble = (items: SidebarItem[]) => {
       items.forEach((item) => {
         if (item.type === 'folder') {
+          if (visitedFolders.has(item.id)) {
+            console.warn('Cycle detected in folder tree assembly:', item.id)
+            return
+          }
+          visitedFolders.add(item.id)
           const children = itemsByParent[item.id] || []
           item.children = children.sort((a, b) => {
             if (a.type !== b.type) return a.type === 'folder' ? -1 : 1
@@ -282,6 +293,7 @@ export function AppSidebar() {
   }
 
   const handleCreateNewFolder = (parentId: string | null = null) => {
+    console.log("Create Folder")
     openFolderDialog('create', parentId, 'New Folder')
   }
 

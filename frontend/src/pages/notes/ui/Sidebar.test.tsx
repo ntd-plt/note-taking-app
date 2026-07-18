@@ -74,4 +74,42 @@ describe('Sidebar Component', () => {
       expect(screen.queryByText('Nested Subfolder')).toBeNull()
     })
   })
+
+  it('should handle folder cycles gracefully without infinite loop or crash', async () => {
+    const { server } = await import('#/mocks/server')
+    const { http, HttpResponse } = await import('msw')
+
+    // Intercept GET /api/folders to return a cycle (A -> B -> A)
+    server.use(
+      http.get('/api/folders', () => {
+        return HttpResponse.json([
+          {
+            id: 'folder-a',
+            name: 'Folder A',
+            parent_folder_id: 'folder-b',
+            icon: '📁',
+            isExpanded: true,
+          },
+          {
+            id: 'folder-b',
+            name: 'Folder B',
+            parent_folder_id: 'folder-a',
+            icon: '📁',
+            isExpanded: true,
+          },
+        ])
+      }),
+      http.get('/api/notes', () => {
+        return HttpResponse.json([])
+      })
+    )
+
+    renderSidebar()
+
+    // It should not freeze/stack overflow.
+    // If it survives rendering without exceeding maximum call stack size, the test passes.
+    await waitFor(() => {
+      expect(screen.queryByText('Folder A')).toBeNull() // Since they form a cycle and can't reach root, they are not rendered.
+    })
+  })
 })

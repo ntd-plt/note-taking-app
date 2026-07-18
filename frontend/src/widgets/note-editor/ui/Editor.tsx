@@ -40,7 +40,8 @@ function EditorWithSlash() {
   const { renderSlashMenu } = useSlashMenu()
 
   // TanStack Query & Zustand Bindings
-  const { data: notes = [] } = useNotesQuery()
+  const { data: notesData } = useNotesQuery()
+  const notes = notesData ?? []
   const { activeNoteId } = useNotesStore()
   const { updateNote } = useUpdateNote()
   const createNoteMutation = useCreateNote()

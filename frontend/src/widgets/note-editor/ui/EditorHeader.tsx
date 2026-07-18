@@ -58,7 +58,7 @@ export function EditorHeader({
   onNoteTitleChange,
   onIconChange,
 }: EditorHeaderProps) {
-  const { data: folders = [] } = useFoldersQuery()
+  const { data: foldersData } = useFoldersQuery()
   const resolveFullPath = useResolveFullPath()
   const savingNoteId = useNotesStore((state) => state.savingNoteId)
   const [breadcrumbs, setBreadcrumbs] = React.useState<Folder[]>([])
@@ -66,7 +66,7 @@ export function EditorHeader({
   // Re-fetch breadcrumbs when current note, its parentId, or folders change
   React.useEffect(() => {
     let active = true
-    resolveFullPath(currentNote, folders).then((path) => {
+    resolveFullPath(currentNote, foldersData ?? []).then((path) => {
       if (active) {
         setBreadcrumbs(path)
       }
@@ -77,9 +77,8 @@ export function EditorHeader({
   }, [
     currentNote.id,
     currentNote.parentId,
-    folders,
+    foldersData,
     resolveFullPath,
-    currentNote,
   ])
 
   return (
