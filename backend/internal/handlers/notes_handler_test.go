@@ -221,9 +221,9 @@ func TestUpdateNotesSuccess(t *testing.T) {
 	note := addNote(db, userID, "Old title")
 	r := newNotesRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPut, "/api/notes", handlers.UpdateNotesRequest{
-		Notes: []handlers.UpdateNoteItem{
-			{ID: note.ID, Title: "New title", Content: "New content"},
+	w := doJSON(t, r, http.MethodPut, "/api/notes", map[string]any{
+		"notes": []map[string]any{
+			{"id": note.ID, "title": "New title", "content": "New content"},
 		},
 	})
 
@@ -241,9 +241,9 @@ func TestUpdateNotesNotFound(t *testing.T) {
 	userID := uuid.New()
 	r := newNotesRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPut, "/api/notes", handlers.UpdateNotesRequest{
-		Notes: []handlers.UpdateNoteItem{
-			{ID: uuid.New(), Title: "New title"},
+	w := doJSON(t, r, http.MethodPut, "/api/notes", map[string]any{
+		"notes": []map[string]any{
+			{"id": uuid.New(), "title": "New title"},
 		},
 	})
 
@@ -258,9 +258,9 @@ func TestUpdateNotesForbidden(t *testing.T) {
 	otherUser := uuid.New()
 	r := newNotesRouter(db, &otherUser)
 
-	w := doJSON(t, r, http.MethodPut, "/api/notes", handlers.UpdateNotesRequest{
-		Notes: []handlers.UpdateNoteItem{
-			{ID: note.ID, Title: "Hijacked"},
+	w := doJSON(t, r, http.MethodPut, "/api/notes", map[string]any{
+		"notes": []map[string]any{
+			{"id": note.ID, "title": "Hijacked"},
 		},
 	})
 
@@ -269,6 +269,44 @@ func TestUpdateNotesForbidden(t *testing.T) {
 	}
 	if db.Notes[note.ID].Title != "Owner's note" {
 		t.Error("note was modified despite forbidden response")
+	}
+}
+
+func TestUpdateNotesFolder(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	userID := uuid.New()
+	note := addNote(db, userID, "My note")
+	r := newNotesRouter(db, &userID)
+
+	folderID := uuid.New()
+
+	w := doJSON(t, r, http.MethodPut, "/api/notes", map[string]any{
+		"notes": []map[string]any{
+			{"id": note.ID, "folder_id": folderID},
+		},
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	updated := db.Notes[note.ID]
+	if updated.FolderID == nil || *updated.FolderID != folderID {
+		t.Errorf("stored note folder_id = %v, want %v", updated.FolderID, folderID)
+	}
+
+	// Move back to root (nil)
+	w2 := doJSON(t, r, http.MethodPut, "/api/notes", map[string]any{
+		"notes": []map[string]any{
+			{"id": note.ID, "folder_id": nil},
+		},
+	})
+
+	if w2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w2.Code, http.StatusOK, w2.Body.String())
+	}
+	updated2 := db.Notes[note.ID]
+	if updated2.FolderID != nil {
+		t.Errorf("stored note folder_id = %v, want nil", updated2.FolderID)
 	}
 }
 

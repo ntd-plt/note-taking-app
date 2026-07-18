@@ -35,6 +35,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
   CommandDialog,
   CommandEmpty,
   CommandGroup as CmdGroup,
@@ -110,6 +120,53 @@ export function AppSidebar() {
 
   // Search dialog state
   const [searchOpen, setSearchOpen] = React.useState(false)
+
+  // Dialog State
+  const [folderDialogOpen, setFolderDialogOpen] = React.useState(false)
+  const [folderDialogMode, setFolderDialogMode] = React.useState<'create' | 'rename'>('create')
+  const [folderDialogParentId, setFolderDialogParentId] = React.useState<string | null>(null)
+  const [folderDialogId, setFolderDialogId] = React.useState<string | null>(null)
+  const [folderNameInput, setFolderNameInput] = React.useState('')
+
+  const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
+  const [confirmDialogData, setConfirmDialogData] = React.useState<{
+    title: string
+    description: string
+    confirmLabel: string
+    isDestructive?: boolean
+    onConfirm: () => void
+  }>({
+    title: '',
+    description: '',
+    confirmLabel: '',
+    onConfirm: () => { },
+  })
+
+  const openFolderDialog = (mode: 'create' | 'rename', parentIdOrFolderId: string | null, currentName = '') => {
+    setFolderDialogMode(mode)
+    setFolderNameInput(currentName)
+    if (mode === 'create') {
+      setFolderDialogParentId(parentIdOrFolderId)
+      setFolderDialogId(null)
+    } else {
+      setFolderDialogParentId(null)
+      setFolderDialogId(parentIdOrFolderId)
+    }
+    setFolderDialogOpen(true)
+  }
+
+  const handleFolderDialogSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const name = folderNameInput.trim()
+    if (name === '') return
+
+    if (folderDialogMode === 'create') {
+      createFolderMutation.mutate({ parentId: folderDialogParentId, name })
+    } else if (folderDialogId) {
+      updateFolderMutation.mutate({ id: folderDialogId, updates: { name } })
+    }
+    setFolderDialogOpen(false)
+  }
 
   // Keyboard shortcut for quick find
   React.useEffect(() => {
@@ -206,51 +263,62 @@ export function AppSidebar() {
     )
   }
 
-  const handleCreateNewFolder = async (parentId: string | null = null) => {
-    const name = window.prompt('Enter folder name', 'New Folder')
-    if (name && name.trim() !== '') {
-      createFolderMutation.mutate({ parentId, name: name.trim() })
-    }
+  const handleCreateNewFolder = (parentId: string | null = null) => {
+    openFolderDialog('create', parentId, 'New Folder')
   }
 
   const handleDeletePage = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    if (confirm('Delete this note permanently?')) {
-      deleteNoteMutation.mutate(id, {
-        onSuccess: () => {
-          const nextActiveId = useNotesStore.getState().activeNoteId
-          if (nextActiveId) {
-            navigate({
-              to: '/notes/$noteId',
-              params: { noteId: nextActiveId },
-            })
-          } else {
-            navigate({ to: '/notes' })
-          }
-        },
-      })
-    }
+    setConfirmDialogData({
+      title: 'Delete Note',
+      description: 'Are you sure you want to delete this note permanently?',
+      confirmLabel: 'Delete',
+      isDestructive: true,
+      onConfirm: () => {
+        deleteNoteMutation.mutate(id, {
+          onSuccess: () => {
+            const nextActiveId = useNotesStore.getState().activeNoteId
+            if (nextActiveId) {
+              navigate({
+                to: '/notes/$noteId',
+                params: { noteId: nextActiveId },
+              })
+            } else {
+              navigate({ to: '/notes' })
+            }
+          },
+        })
+      },
+    })
+    setConfirmDialogOpen(true)
   }
 
   const handleDeleteFolder = (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    if (confirm('Delete this folder and all its contents?')) {
-      deleteFolderMutation.mutate(id, {
-        onSuccess: () => {
-          const nextActiveId = useNotesStore.getState().activeNoteId
-          if (nextActiveId) {
-            navigate({
-              to: '/notes/$noteId',
-              params: { noteId: nextActiveId },
-            })
-          } else {
-            navigate({ to: '/notes' })
-          }
-        },
-      })
-    }
+    setConfirmDialogData({
+      title: 'Delete Folder',
+      description: 'Are you sure you want to delete this folder and all its contents?',
+      confirmLabel: 'Delete',
+      isDestructive: true,
+      onConfirm: () => {
+        deleteFolderMutation.mutate(id, {
+          onSuccess: () => {
+            const nextActiveId = useNotesStore.getState().activeNoteId
+            if (nextActiveId) {
+              navigate({
+                to: '/notes/$noteId',
+                params: { noteId: nextActiveId },
+              })
+            } else {
+              navigate({ to: '/notes' })
+            }
+          },
+        })
+      },
+    })
+    setConfirmDialogOpen(true)
   }
 
   const handleDuplicatePage = (id: string, e: React.MouseEvent) => {
@@ -515,16 +583,17 @@ export function AppSidebar() {
                     <DropdownMenuSeparator />
                     <button
                       onClick={() => {
-                        if (
-                          confirm(
-                            'Reset all notes to initial state? This will clear custom notes.',
-                          )
-                        ) {
-                          localStorage.removeItem(
-                            'note-taking-workspace-storage',
-                          )
-                          window.location.reload()
-                        }
+                        setConfirmDialogData({
+                          title: 'Reset Workspace',
+                          description: 'Are you sure you want to reset all notes to the initial state? This will clear all your custom notes.',
+                          confirmLabel: 'Restore Default',
+                          isDestructive: true,
+                          onConfirm: () => {
+                            localStorage.removeItem('note-taking-workspace-storage')
+                            window.location.reload()
+                          },
+                        })
+                        setConfirmDialogOpen(true)
                       }}
                       className="flex w-full items-center gap-1.5 justify-center py-1.5 px-2 text-[10px] text-destructive bg-destructive/5 hover:bg-destructive/15 rounded border border-destructive/20 font-medium transition-all"
                     >
@@ -631,6 +700,78 @@ export function AppSidebar() {
           </div>
         </Command>
       </CommandDialog>
+
+      {/* Folder Name Dialog */}
+      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <form onSubmit={handleFolderDialogSubmit}>
+            <DialogHeader>
+              <DialogTitle>
+                {folderDialogMode === 'create' ? 'Create Folder' : 'Rename Folder'}
+              </DialogTitle>
+              <DialogDescription>
+                {folderDialogMode === 'create'
+                  ? 'Enter a name for the new folder.'
+                  : 'Enter a new name for the folder.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center space-x-2 py-4">
+              <Input
+                id="folder-name"
+                value={folderNameInput}
+                onChange={(e) => setFolderNameInput(e.target.value)}
+                placeholder="Folder Name"
+                className="flex-1"
+                autoFocus
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFolderDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">
+                {folderDialogMode === 'create' ? 'Create' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{confirmDialogData.title}</DialogTitle>
+            <DialogDescription>
+              {confirmDialogData.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant={confirmDialogData.isDestructive ? 'destructive' : 'default'}
+              onClick={() => {
+                confirmDialogData.onConfirm()
+                setConfirmDialogOpen(false)
+              }}
+            >
+              {confirmDialogData.confirmLabel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

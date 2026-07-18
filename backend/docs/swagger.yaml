@@ -101,6 +101,9 @@ definitions:
       folder_id:
         description: nil to create the note outside any folder
         type: string
+      id:
+        description: optional, if not provided, a new UUID will be generated
+        type: string
       title:
         type: string
     required:
@@ -171,12 +174,19 @@ definitions:
     properties:
       content:
         type: string
+      folderID:
+        type: string
       id:
         type: string
       title:
         type: string
-    required:
-    - id
+      updateContent:
+        type: boolean
+      updateFolderID:
+        type: boolean
+      updateTitle:
+        description: Flags to track presence in JSON
+        type: boolean
     type: object
   internal_handlers.UpdateNotesRequest:
     properties:

@@ -161,7 +161,7 @@ export default function NodeTreeItem({
                     className={cn(
                       'mr-2 h-3.5 w-3.5 opacity-60',
                       note.isFavorite &&
-                        'fill-primary text-primary opacity-100',
+                      'fill-primary text-primary opacity-100',
                     )}
                   />
                   <span>
@@ -203,10 +203,7 @@ export default function NodeTreeItem({
 
     const handleRenameFolder = (e: React.MouseEvent) => {
       e.stopPropagation()
-      const newName = window.prompt('Rename Folder', folder.name)
-      if (newName && newName.trim() !== '') {
-        onUpdateFolderName(folder.id, newName.trim())
-      }
+      onUpdateFolderName(folder.id, folder.name)
     }
 
     return (

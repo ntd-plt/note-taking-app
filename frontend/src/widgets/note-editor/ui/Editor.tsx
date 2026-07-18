@@ -25,6 +25,7 @@ import {
 import { useNodeHoverState } from '../hooks/useNodeHoverState'
 import { BubbleMenu } from './BubbleMenu'
 import { CustomLayout, LayoutCell } from './CustomNode'
+import { useNavigate } from '@tanstack/react-router'
 
 export default function Editor() {
   return (
@@ -147,9 +148,17 @@ function EditorWithSlash() {
 
   // Handle adding a default note when all are deleted
   const handleCreateFirstPage = () => {
+    const navigate = useNavigate()
     createNoteMutation.mutate({
       parentId: null,
       title: 'Welcome to my new page',
+    }, {
+      // onSuccess: (newNote) => {
+      //   navigate({
+      //     to: '/notes/$noteId',
+      //     params: { noteId: newNote.id },
+      //   })
+      // },
     })
   }
 

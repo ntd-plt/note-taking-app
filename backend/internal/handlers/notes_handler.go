@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
+	"net/http"
+
 	"backend/internal/database"
 	"backend/internal/model"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -21,9 +23,43 @@ type CreateNoteRequest struct {
 }
 
 type UpdateNoteItem struct {
-	ID      uuid.UUID `json:"id" binding:"required"`
-	Title   string    `json:"title"`
-	Content string    `json:"content"`
+	ID       uuid.UUID
+	Title    *string
+	Content  *string
+	FolderID *uuid.UUID
+
+	// Flags to track presence in JSON
+	UpdateTitle    bool
+	UpdateContent  bool
+	UpdateFolderID bool
+}
+
+func (item *UpdateNoteItem) UnmarshalJSON(data []byte) error {
+	type Alias UpdateNoteItem
+	var aux struct {
+		ID       uuid.UUID  `json:"id" binding:"required"`
+		Title    *string    `json:"title"`
+		Content  *string    `json:"content"`
+		FolderID *uuid.UUID `json:"folder_id"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	item.ID = aux.ID
+	item.Title = aux.Title
+	item.Content = aux.Content
+	item.FolderID = aux.FolderID
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	_, item.UpdateTitle = raw["title"]
+	_, item.UpdateContent = raw["content"]
+	_, item.UpdateFolderID = raw["folder_id"]
+
+	return nil
 }
 
 type UpdateNotesRequest struct {
@@ -178,8 +214,15 @@ func (h *NotesHandler) UpdateNotes(c *gin.Context) {
 			return
 		}
 
-		note.Title = noteReq.Title
-		note.Content = noteReq.Content
+		if noteReq.UpdateTitle {
+			note.Title = *noteReq.Title
+		}
+		if noteReq.UpdateContent {
+			note.Content = *noteReq.Content
+		}
+		if noteReq.UpdateFolderID {
+			note.FolderID = noteReq.FolderID
+		}
 		notes = append(notes, note)
 	}
 
