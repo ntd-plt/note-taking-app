@@ -153,21 +153,7 @@ export default function NodeTreeItem({
                 side="right"
                 sideOffset={5}
               >
-                <DropdownMenuItem
-                  onClick={() => onToggleFavorite(note.id)}
-                  className="cursor-pointer text-xs"
-                >
-                  <Star
-                    className={cn(
-                      'mr-2 h-3.5 w-3.5 opacity-60',
-                      note.isFavorite &&
-                      'fill-primary text-primary opacity-100',
-                    )}
-                  />
-                  <span>
-                    {note.isFavorite ? 'Unfavorite' : 'Add to Favorites'}
-                  </span>
-                </DropdownMenuItem>
+
                 <DropdownMenuItem
                   onClick={(e) => onDuplicateNote(note.id, e)}
                   className="cursor-pointer text-xs"

@@ -455,50 +455,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroup>
 
-          {/* Favorites COLLAPSIBLE Group */}
-          {favoriteNotes.length > 0 && (
-            <SidebarGroup className="mt-4 p-0">
-              <SidebarGroupLabel className="flex w-full items-center justify-between text-[10px] font-bold tracking-wider text-muted-foreground/80 px-2 py-1 uppercase">
-                Favorites
-              </SidebarGroupLabel>
-              <SidebarMenu>
-                {favoriteNotes.map((note) => (
-                  <SidebarMenuItem key={`fav-${note.id}`}>
-                    <div
-                      onClick={() => handleSelectNote(note.id)}
-                      className={cn(
-                        'group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs transition-all duration-150 cursor-pointer',
-                        currentNoteId === note.id
-                          ? 'bg-primary/10 text-primary font-medium shadow-2xs border-l-2 border-primary pl-[6px]'
-                          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
-                      )}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="text-sm shrink-0">
-                          {note.icon || '📄'}
-                        </span>
-                        <span className="truncate">
-                          {note.title || 'Untitled Note'}
-                        </span>
-                      </div>
-
-                      {/* Unfavorite Quick Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          updateNote(note.id, { isFavorite: false })
-                        }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded-sm hover:bg-sidebar-accent-foreground/10 text-muted-foreground hover:text-primary transition-all shrink-0"
-                        title="Remove from Favorites"
-                      >
-                        <Star className="h-3 w-3 fill-primary text-primary" />
-                      </button>
-                    </div>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroup>
-          )}
 
           {/* Private Notes COLLAPSIBLE Group */}
           <SidebarGroup className="mt-4 p-0">

@@ -134,19 +134,6 @@ export function EditorHeader({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Floating Favorite Star next to Emoji */}
-          <button
-            onClick={() => onFavoriteStateChange(!currentNote.isFavorite)}
-            className="p-1.5 rounded-lg hover:bg-muted/80 text-muted-foreground/60 hover:text-primary transition-all cursor-pointer"
-            title={currentNote.isFavorite ? 'Unfavorite Note' : 'Favorite Note'}
-          >
-            <Star
-              className={cn(
-                'h-5 w-5',
-                currentNote.isFavorite && 'fill-primary text-primary',
-              )}
-            />
-          </button>
         </div>
 
         {/* Quick Stats or Metadata */}
