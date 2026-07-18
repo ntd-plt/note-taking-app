@@ -8,11 +8,11 @@ import (
 	user "backend/internal/model"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type PostgreDatabase struct {
-	conn *pgx.Conn
+	conn *pgxpool.Pool
 }
 
 func NewPostgreDatabase() *PostgreDatabase {
@@ -47,7 +47,7 @@ func (db *PostgreDatabase) Connect() error {
 	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		config.DBUser, config.DBPass, config.DBHost, config.DBPort, config.DBName)
 
-	conn, err := pgx.Connect(context.Background(), url)
+	conn, err := pgxpool.New(context.Background(), url)
 	db.conn = conn
 
 	if err != nil {
@@ -58,7 +58,7 @@ func (db *PostgreDatabase) Connect() error {
 
 func (db *PostgreDatabase) Disconnect() error {
 	if db.conn != nil {
-		return db.conn.Close(context.Background())
+		db.conn.Close()
 	}
 	return nil
 }
@@ -69,6 +69,9 @@ func (db *PostgreDatabase) AddUser(u user.User) error {
 }
 
 func (db *PostgreDatabase) CreateNote(note user.Note) (user.Note, error) {
+	if note.ID == uuid.Nil {
+		note.ID = uuid.New()
+	}
 	queryString := "INSERT INTO notes (id, folder_id, user_id, title, content) VALUES ($1, $2, $3, $4, $5) RETURNING created_at, updated_at"
 	err := db.conn.QueryRow(context.Background(), queryString, note.ID, note.FolderID, note.UserID, note.Title, note.Content).Scan(&note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
@@ -79,8 +82,8 @@ func (db *PostgreDatabase) CreateNote(note user.Note) (user.Note, error) {
 
 func (db *PostgreDatabase) GetNoteByID(id uuid.UUID) (user.Note, error) {
 	var note user.Note
-	queryString := "SELECT id, title, content, user_id, created_at, updated_at FROM notes WHERE id = $1"
-	err := db.conn.QueryRow(context.Background(), queryString, id).Scan(&note.ID, &note.Title, &note.Content, &note.UserID, &note.CreatedAt, &note.UpdatedAt)
+	queryString := "SELECT id, folder_id, title, content, user_id, created_at, updated_at FROM notes WHERE id = $1"
+	err := db.conn.QueryRow(context.Background(), queryString, id).Scan(&note.ID, &note.FolderID, &note.Title, &note.Content, &note.UserID, &note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
 		return user.Note{}, err
 	}
@@ -88,7 +91,7 @@ func (db *PostgreDatabase) GetNoteByID(id uuid.UUID) (user.Note, error) {
 }
 
 func (db *PostgreDatabase) GetNotesByUserID(userID uuid.UUID) ([]user.Note, error) {
-	queryString := "SELECT id, title, content, user_id, created_at, updated_at FROM notes WHERE user_id = $1"
+	queryString := "SELECT id, folder_id, title, content, user_id, created_at, updated_at FROM notes WHERE user_id = $1"
 	rows, err := db.conn.Query(context.Background(), queryString, userID)
 	if err != nil {
 		return nil, err
@@ -98,7 +101,7 @@ func (db *PostgreDatabase) GetNotesByUserID(userID uuid.UUID) ([]user.Note, erro
 	var notes []user.Note
 	for rows.Next() {
 		var note user.Note
-		if err := rows.Scan(&note.ID, &note.Title, &note.Content, &note.UserID, &note.CreatedAt, &note.UpdatedAt); err != nil {
+		if err := rows.Scan(&note.ID, &note.FolderID, &note.Title, &note.Content, &note.UserID, &note.CreatedAt, &note.UpdatedAt); err != nil {
 			return nil, err
 		}
 		notes = append(notes, note)
@@ -110,16 +113,17 @@ func (db *PostgreDatabase) UpdateNotes(notes []user.Note) error {
 	ids := make([]uuid.UUID, len(notes))
 	titles := make([]string, len(notes))
 	contents := make([]string, len(notes))
+	folderIDs := make([]*uuid.UUID, len(notes))
 	for i, note := range notes {
-		ids[i], titles[i], contents[i] = note.ID, note.Title, note.Content
+		ids[i], titles[i], contents[i], folderIDs[i] = note.ID, note.Title, note.Content, note.FolderID
 	}
 
 	queryString := `
 		UPDATE notes AS n
-		SET title = u.title, content = u.content, updated_at = NOW()
-		FROM (SELECT * FROM UNNEST($1::uuid[], $2::text[], $3::text[]) AS t(id, title, content)) AS u
+		SET title = u.title, content = u.content, folder_id = u.folder_id, updated_at = NOW()
+		FROM (SELECT * FROM UNNEST($1::uuid[], $2::text[], $3::text[], $4::uuid[]) AS t(id, title, content, folder_id)) AS u
 		WHERE n.id = u.id`
-	_, err := db.conn.Exec(context.Background(), queryString, ids, titles, contents)
+	_, err := db.conn.Exec(context.Background(), queryString, ids, titles, contents, folderIDs)
 	return err
 }
 

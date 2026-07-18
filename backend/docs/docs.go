@@ -937,7 +937,6 @@ const docTemplate = `{
         "internal_handlers.CreateNoteRequest": {
             "type": "object",
             "required": [
-                "content",
                 "title"
             ],
             "properties": {
@@ -946,6 +945,10 @@ const docTemplate = `{
                 },
                 "folder_id": {
                     "description": "nil to create the note outside any folder",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "optional, if not provided, a new UUID will be generated",
                     "type": "string"
                 },
                 "title": {
@@ -1046,11 +1049,11 @@ const docTemplate = `{
         },
         "internal_handlers.UpdateNoteItem": {
             "type": "object",
-            "required": [
-                "id"
-            ],
             "properties": {
                 "content": {
+                    "type": "string"
+                },
+                "folderID": {
                     "type": "string"
                 },
                 "id": {
@@ -1058,6 +1061,16 @@ const docTemplate = `{
                 },
                 "title": {
                     "type": "string"
+                },
+                "updateContent": {
+                    "type": "boolean"
+                },
+                "updateFolderID": {
+                    "type": "boolean"
+                },
+                "updateTitle": {
+                    "description": "Flags to track presence in JSON",
+                    "type": "boolean"
                 }
             }
         },
