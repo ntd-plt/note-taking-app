@@ -36,6 +36,7 @@ export default function Editor() {
 }
 
 function EditorWithSlash() {
+  const navigate = useNavigate()
   const { renderSlashMenu } = useSlashMenu()
 
   // TanStack Query & Zustand Bindings
@@ -148,17 +149,16 @@ function EditorWithSlash() {
 
   // Handle adding a default note when all are deleted
   const handleCreateFirstPage = () => {
-    const navigate = useNavigate()
     createNoteMutation.mutate({
       parentId: null,
       title: 'Welcome to my new page',
     }, {
-      // onSuccess: (newNote) => {
-      //   navigate({
-      //     to: '/notes/$noteId',
-      //     params: { noteId: newNote.id },
-      //   })
-      // },
+      onSuccess: (newNote) => {
+        navigate({
+          to: '/notes/$noteId',
+          params: { noteId: newNote.id },
+        })
+      },
     })
   }
 
