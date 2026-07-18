@@ -121,6 +121,9 @@ export function AppSidebar() {
   // Search dialog state
   const [searchOpen, setSearchOpen] = React.useState(false)
 
+  // Expanded folders state
+  const [expandedFolders, setExpandedFolders] = React.useState<Record<string, boolean>>({})
+
   // Dialog State
   const [folderDialogOpen, setFolderDialogOpen] = React.useState(false)
   const [folderDialogMode, setFolderDialogMode] = React.useState<'create' | 'rename'>('create')
@@ -162,6 +165,12 @@ export function AppSidebar() {
 
     if (folderDialogMode === 'create') {
       createFolderMutation.mutate({ parentId: folderDialogParentId, name })
+      if (folderDialogParentId) {
+        setExpandedFolders((prev) => ({
+          ...prev,
+          [folderDialogParentId]: true,
+        }))
+      }
     } else if (folderDialogId) {
       updateFolderMutation.mutate({ id: folderDialogId, updates: { name } })
     }
@@ -191,7 +200,10 @@ export function AppSidebar() {
       const item: SidebarItem = {
         type: 'folder',
         id: folder.id,
-        data: folder,
+        data: {
+          ...folder,
+          isExpanded: !!expandedFolders[folder.id],
+        },
         children: [],
       }
 
@@ -244,7 +256,7 @@ export function AppSidebar() {
       const nameB = b.type === 'folder' ? b.data.name : b.data.title
       return nameA.localeCompare(nameB)
     })
-  }, [folders, notes])
+  }, [folders, notes, expandedFolders])
 
   const favoriteNotes = notes.filter((n) => n.isFavorite)
 
@@ -258,6 +270,12 @@ export function AppSidebar() {
             to: '/notes/$noteId',
             params: { noteId: newNote.id },
           })
+          if (parentId) {
+            setExpandedFolders((prev) => ({
+              ...prev,
+              [parentId]: true,
+            }))
+          }
         },
       }
     )
@@ -531,12 +549,10 @@ export function AppSidebar() {
                           updateNote(id, { isFavorite: !note.isFavorite })
                       }}
                       onToggleFolderExpand={(id) => {
-                        const f = folders.find((fol) => fol.id === id)
-                        if (f)
-                          updateFolderMutation.mutate({
-                            id,
-                            updates: { isExpanded: !f.isExpanded },
-                          })
+                        setExpandedFolders((prev) => ({
+                          ...prev,
+                          [id]: !prev[id],
+                        }))
                       }}
                       onUpdateFolderIcon={(id, icon) => {
                         updateFolderMutation.mutate({ id, updates: { icon } })
