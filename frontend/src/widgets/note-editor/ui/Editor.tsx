@@ -154,6 +154,7 @@ function EditorWithSlash() {
       title: 'Welcome to my new page',
     }, {
       onSuccess: (newNote) => {
+        console.log("New note created", newNote)
         navigate({
           to: '/notes/$noteId',
           params: { noteId: newNote.id },

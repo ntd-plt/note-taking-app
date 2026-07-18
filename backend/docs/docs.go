@@ -937,7 +937,6 @@ const docTemplate = `{
         "internal_handlers.CreateNoteRequest": {
             "type": "object",
             "required": [
-                "content",
                 "title"
             ],
             "properties": {

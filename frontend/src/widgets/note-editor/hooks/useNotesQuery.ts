@@ -118,7 +118,17 @@ export function useCreateNote() {
       return mapped
     },
     onMutate: async (newNote) => {
-      const id = newNote.id || Math.random().toString(36).substring(2, 9)
+      const generateUUID = () => {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          return crypto.randomUUID()
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0
+          const v = c === 'x' ? r : (r & 0x3) | 0x8
+          return v.toString(16)
+        })
+      }
+      const id = newNote.id || generateUUID()
       const optimisticNote: Note = {
         id,
         title: newNote.title || 'Untitled Note',

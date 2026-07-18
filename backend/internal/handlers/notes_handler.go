@@ -18,7 +18,7 @@ type NotesHandler struct {
 type CreateNoteRequest struct {
 	ID       uuid.UUID  `json:"id"` // optional, if not provided, a new UUID will be generated
 	Title    string     `json:"title" binding:"required"`
-	Content  string     `json:"content" binding:"required"`
+	Content  string     `json:"content"`
 	FolderID *uuid.UUID `json:"folder_id"` // nil to create the note outside any folder
 }
 

@@ -107,7 +107,6 @@ definitions:
       title:
         type: string
     required:
-    - content
     - title
     type: object
   internal_handlers.DeleteFoldersRequest:

@@ -107,7 +107,7 @@ func TestCreateNoteMissingFields(t *testing.T) {
 	userID := uuid.New()
 	r := newNotesRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPost, "/api/notes", map[string]string{"title": "no content"})
+	w := doJSON(t, r, http.MethodPost, "/api/notes", map[string]string{"content": "no title"})
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
