@@ -88,47 +88,23 @@ export const NodeHoverExtension = Extension.create({
                 type: null,
               }
 
-              const currentState = NODE_HOVER_PLUGIN_KEY.getState(view.state)
-              const currentHoveredRow = currentState?.hoveredNode?.rowNumber ?? null
-
-              if (row !== currentHoveredRow) {
-                if (row !== null) {
-                  const dom = view.nodeDOM(row)
-                  if (dom instanceof Element) {
-                    const rect = dom.getBoundingClientRect()
-                    view.dispatch(
-                      view.state.tr.setMeta(NODE_HOVER_PLUGIN_KEY, {
-                        isMouseInside: true,
-                        hoveredNode: {
-                          rowNumber: row,
-                          rect,
-                          type,
-                        },
-                      }),
-                    )
-                  }
-                } else if (currentState?.isMouseInside) {
+              if (row !== null) {
+                const dom = view.nodeDOM(row)
+                if (dom instanceof Element) {
+                  const rect = dom.getBoundingClientRect()
                   view.dispatch(
                     view.state.tr.setMeta(NODE_HOVER_PLUGIN_KEY, {
-                      isMouseInside: false,
-                      hoveredNode: null,
+                      isMouseInside: true,
+                      hoveredNode: {
+                        rowNumber: row,
+                        rect,
+                        type,
+                      },
                     }),
                   )
                 }
               }
 
-              return false
-            },
-            mouseleave: (view) => {
-              const currentState = NODE_HOVER_PLUGIN_KEY.getState(view.state)
-              if (currentState?.isMouseInside) {
-                view.dispatch(
-                  view.state.tr.setMeta(NODE_HOVER_PLUGIN_KEY, {
-                    isMouseInside: false,
-                    hoveredNode: null,
-                  }),
-                )
-              }
               return false
             },
           },
