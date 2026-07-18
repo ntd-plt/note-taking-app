@@ -33,17 +33,25 @@ let mockFolders: Folder[] = [
   },
 ]
 
+const toBackendFolderShape = (f: Folder) => ({
+  id: f.id,
+  name: f.name,
+  parent_folder_id: f.parentId,
+  icon: f.icon,
+  isExpanded: f.isExpanded,
+  created_at: f.createdAt,
+  updated_at: f.updatedAt,
+})
+
 export const foldersHandlers = [
   // GET all folders
   http.get('/api/folders', async () => {
-    await delay(1500) // Simulate a slow network call (1.5s)
-    return HttpResponse.json(mockFolders)
+    return HttpResponse.json(mockFolders.map(toBackendFolderShape))
   }),
 
   // GET folder by ID
   http.get('/api/folders/:id', async ({ params }) => {
     const { id } = params
-    await delay(800) // Simulate individual resolution delay (800ms)
     const folder = mockFolders.find((f) => f.id === id)
     if (!folder) {
       return new HttpResponse(null, {
@@ -51,59 +59,49 @@ export const foldersHandlers = [
         statusText: 'Folder Not Found',
       })
     }
-    return HttpResponse.json(folder)
+    return HttpResponse.json(toBackendFolderShape(folder))
   }),
 
   // POST create a new folder
   http.post('/api/folders', async ({ request }) => {
-    const body = (await request.json()) as Partial<Folder>
+    const body = (await request.json()) as any
     const id = Math.random().toString(36).substring(2, 9)
     const newFolder: Folder = {
       id,
       name: body.name || 'Untitled Folder',
-      parentId: body.parentId || null,
+      parentId: body.parent_folder_id || null,
       icon: body.icon || '📁',
       isExpanded: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
     mockFolders.push(newFolder)
-    return HttpResponse.json(newFolder)
+    return HttpResponse.json(toBackendFolderShape(newFolder))
   }),
 
-  // PATCH update folder
-  http.patch('/api/folders/:id', async ({ params, request }) => {
-    const { id } = params
-    const body = (await request.json()) as Partial<Folder>
-    const index = mockFolders.findIndex((f) => f.id === id)
-    if (index === -1) {
-      return new HttpResponse(null, {
-        status: 404,
-        statusText: 'Folder Not Found',
-      })
+  // PUT update folders (batch update)
+  http.put('/api/folders', async ({ request }) => {
+    const body = (await request.json()) as { folders: Array<any> }
+    const updatedFolders: Folder[] = []
+    for (const folderReq of body.folders) {
+      const index = mockFolders.findIndex((f) => f.id === folderReq.id)
+      if (index !== -1) {
+        mockFolders[index] = {
+          ...mockFolders[index],
+          name: folderReq.name !== undefined ? folderReq.name : mockFolders[index].name,
+          parentId: folderReq.parent_folder_id !== undefined ? folderReq.parent_folder_id : mockFolders[index].parentId,
+          updatedAt: new Date().toISOString(),
+        }
+        updatedFolders.push(mockFolders[index])
+      }
     }
-
-    mockFolders[index] = {
-      ...mockFolders[index],
-      ...body,
-      updatedAt: new Date().toISOString(),
-    }
-
-    return HttpResponse.json(mockFolders[index])
+    return HttpResponse.json(updatedFolders.map(toBackendFolderShape))
   }),
 
-  // DELETE a folder
-  http.delete('/api/folders/:id', ({ params }) => {
-    const { id } = params
-    const index = mockFolders.findIndex((f) => f.id === id)
-    if (index === -1) {
-      return new HttpResponse(null, {
-        status: 404,
-        statusText: 'Folder Not Found',
-      })
-    }
-    const deleted = mockFolders[index]
-    mockFolders = mockFolders.filter((f) => f.id !== id)
-    return HttpResponse.json(deleted)
+  // DELETE folders (batch delete)
+  http.delete('/api/folders', async ({ request }) => {
+    const body = (await request.json()) as { ids: string[] }
+    mockFolders = mockFolders.filter((f) => !body.ids.includes(f.id))
+    return HttpResponse.json({ message: 'folders deleted successfully' })
   }),
 ]

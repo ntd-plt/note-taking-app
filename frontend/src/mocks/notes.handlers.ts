@@ -6,10 +6,21 @@ import initialNotes from './initialNotes'
 // In-memory mock database for notes, seeded with initialNotes
 let mockNotes: Note[] = [...initialNotes]
 
+const toBackendNoteShape = (n: Note) => ({
+  id: n.id,
+  title: n.title,
+  content: n.content,
+  folder_id: n.parentId,
+  isFavorite: n.isFavorite,
+  icon: n.icon,
+  created_at: n.createdAt,
+  updated_at: n.updatedAt,
+})
+
 export const notesHandlers = [
   // GET all notes
   http.get('/api/notes', () => {
-    return HttpResponse.json(mockNotes)
+    return HttpResponse.json(mockNotes.map(toBackendNoteShape))
   }),
 
   // GET note by ID
@@ -22,17 +33,17 @@ export const notesHandlers = [
         statusText: 'Note Not Found',
       })
     }
-    return HttpResponse.json(note)
+    return HttpResponse.json(toBackendNoteShape(note))
   }),
 
   // POST create a new note
   http.post('/api/notes', async ({ request }) => {
-    const body = (await request.json()) as Partial<Note>
+    const body = (await request.json()) as any
     const id = body.id || Math.random().toString(36).substring(2, 9)
     const newNote: Note = {
       id,
       title: body.title || 'Untitled Note',
-      parentId: body.parentId || null,
+      parentId: body.folder_id || null,
       icon: body.icon || '📄',
       content:
         body.content ||
@@ -42,43 +53,33 @@ export const notesHandlers = [
       updatedAt: new Date().toISOString(),
     }
     mockNotes.push(newNote)
-    return HttpResponse.json(newNote)
+    return HttpResponse.json(toBackendNoteShape(newNote))
   }),
 
-  // PATCH update note
-  http.patch('/api/notes/:id', async ({ params, request }) => {
-    const { id } = params
-    await delay(1200) // Simulate a slight network delay (1.2s)
-    const body = (await request.json()) as Partial<Note>
-    const index = mockNotes.findIndex((n) => n.id === id)
-    if (index === -1) {
-      return new HttpResponse(null, {
-        status: 404,
-        statusText: 'Note Not Found',
-      })
+  // PUT update notes (batch update)
+  http.put('/api/notes', async ({ request }) => {
+    const body = (await request.json()) as { notes: Array<any> }
+    const updatedNotes: Note[] = []
+    for (const noteReq of body.notes) {
+      const index = mockNotes.findIndex((n) => n.id === noteReq.id)
+      if (index !== -1) {
+        mockNotes[index] = {
+          ...mockNotes[index],
+          title: noteReq.title !== undefined ? noteReq.title : mockNotes[index].title,
+          content: noteReq.content !== undefined ? noteReq.content : mockNotes[index].content,
+          parentId: noteReq.folder_id !== undefined ? noteReq.folder_id : mockNotes[index].parentId,
+          updatedAt: new Date().toISOString(),
+        }
+        updatedNotes.push(mockNotes[index])
+      }
     }
-
-    mockNotes[index] = {
-      ...mockNotes[index],
-      ...body,
-      updatedAt: new Date().toISOString(),
-    }
-
-    return HttpResponse.json(mockNotes[index])
+    return HttpResponse.json(updatedNotes.map(toBackendNoteShape))
   }),
 
-  // DELETE a note
-  http.delete('/api/notes/:id', ({ params }) => {
-    const { id } = params
-    const index = mockNotes.findIndex((n) => n.id === id)
-    if (index === -1) {
-      return new HttpResponse(null, {
-        status: 404,
-        statusText: 'Note Not Found',
-      })
-    }
-    const deleted = mockNotes[index]
-    mockNotes = mockNotes.filter((n) => n.id !== id)
-    return HttpResponse.json(deleted)
+  // DELETE notes (batch delete)
+  http.delete('/api/notes', async ({ request }) => {
+    const body = (await request.json()) as { ids: string[] }
+    mockNotes = mockNotes.filter((n) => !body.ids.includes(n.id))
+    return HttpResponse.json({ message: 'notes deleted successfully' })
   }),
 ]
