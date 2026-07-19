@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          go mod download
+
+      - name: Run Vet
+        run: |
+          cd backend
+          go vet ./...
+
+      - name: Run Tests
+        run: |
+          cd backend
+          go test -v ./...
+
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run Lint
+        run: |
+          cd frontend
+          npm run lint
+
+      - name: Run Format Check
+        run: |
+          cd frontend
+          npm run format
+
+      - name: Run Tests
+        run: |
+          cd frontend
+          npm run test
