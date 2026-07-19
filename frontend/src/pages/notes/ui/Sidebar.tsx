@@ -93,8 +93,8 @@ export function AppSidebar() {
   const { data: foldersData } = useFoldersQuery()
   const notes = notesData ?? []
   const folders = foldersData ?? []
-  console.log("Folder", JSON.stringify(folders))
-  console.log("Notes", JSON.stringify(notes))
+  console.log('Folder', JSON.stringify(folders))
+  console.log('Notes', JSON.stringify(notes))
 
   // Zustand store bindings
   const { activeNoteId, searchQuery, setActiveNoteId, setSearchQuery } =
@@ -124,13 +124,21 @@ export function AppSidebar() {
   const [searchOpen, setSearchOpen] = React.useState(false)
 
   // Expanded folders state
-  const [expandedFolders, setExpandedFolders] = React.useState<Record<string, boolean>>({})
+  const [expandedFolders, setExpandedFolders] = React.useState<
+    Record<string, boolean>
+  >({})
 
   // Dialog State
   const [folderDialogOpen, setFolderDialogOpen] = React.useState(false)
-  const [folderDialogMode, setFolderDialogMode] = React.useState<'create' | 'rename'>('create')
-  const [folderDialogParentId, setFolderDialogParentId] = React.useState<string | null>(null)
-  const [folderDialogId, setFolderDialogId] = React.useState<string | null>(null)
+  const [folderDialogMode, setFolderDialogMode] = React.useState<
+    'create' | 'rename'
+  >('create')
+  const [folderDialogParentId, setFolderDialogParentId] = React.useState<
+    string | null
+  >(null)
+  const [folderDialogId, setFolderDialogId] = React.useState<string | null>(
+    null,
+  )
   const [folderNameInput, setFolderNameInput] = React.useState('')
 
   const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
@@ -144,19 +152,23 @@ export function AppSidebar() {
     title: '',
     description: '',
     confirmLabel: '',
-    onConfirm: () => { },
+    onConfirm: () => {},
   })
 
-  const openFolderDialog = (mode: 'create' | 'rename', parentIdOrFolderId: string | null, currentName = '') => {
+  const openFolderDialog = (
+    mode: 'create' | 'rename',
+    parentIdOrFolderId: string | null,
+    currentName = '',
+  ) => {
     setFolderDialogMode(mode)
     setFolderNameInput(currentName)
-    console.log("ParentId", parentIdOrFolderId)
+    console.log('ParentId', parentIdOrFolderId)
     if (mode === 'create') {
-      console.log("Create")
+      console.log('Create')
       setFolderDialogParentId(parentIdOrFolderId)
       setFolderDialogId(null)
     } else {
-      console.log("Rename")
+      console.log('Rename')
       setFolderDialogParentId(null)
       setFolderDialogId(parentIdOrFolderId)
     }
@@ -287,12 +299,12 @@ export function AppSidebar() {
             }))
           }
         },
-      }
+      },
     )
   }
 
   const handleCreateNewFolder = (parentId: string | null = null) => {
-    console.log("Create Folder")
+    console.log('Create Folder')
     openFolderDialog('create', parentId, 'New Folder')
   }
 
@@ -328,7 +340,8 @@ export function AppSidebar() {
     e.preventDefault()
     setConfirmDialogData({
       title: 'Delete Folder',
-      description: 'Are you sure you want to delete this folder and all its contents?',
+      description:
+        'Are you sure you want to delete this folder and all its contents?',
       confirmLabel: 'Delete',
       isDestructive: true,
       onConfirm: () => {
@@ -466,7 +479,6 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroup>
 
-
           {/* Private Notes COLLAPSIBLE Group */}
           <SidebarGroup className="mt-4 p-0">
             <div className="flex items-center justify-between px-2 py-1">
@@ -568,11 +580,14 @@ export function AppSidebar() {
                       onClick={() => {
                         setConfirmDialogData({
                           title: 'Reset Workspace',
-                          description: 'Are you sure you want to reset all notes to the initial state? This will clear all your custom notes.',
+                          description:
+                            'Are you sure you want to reset all notes to the initial state? This will clear all your custom notes.',
                           confirmLabel: 'Restore Default',
                           isDestructive: true,
                           onConfirm: () => {
-                            localStorage.removeItem('note-taking-workspace-storage')
+                            localStorage.removeItem(
+                              'note-taking-workspace-storage',
+                            )
                             window.location.reload()
                           },
                         })
@@ -690,7 +705,9 @@ export function AppSidebar() {
           <form onSubmit={handleFolderDialogSubmit}>
             <DialogHeader>
               <DialogTitle>
-                {folderDialogMode === 'create' ? 'Create Folder' : 'Rename Folder'}
+                {folderDialogMode === 'create'
+                  ? 'Create Folder'
+                  : 'Rename Folder'}
               </DialogTitle>
               <DialogDescription>
                 {folderDialogMode === 'create'
@@ -744,7 +761,9 @@ export function AppSidebar() {
             </Button>
             <Button
               type="button"
-              variant={confirmDialogData.isDestructive ? 'destructive' : 'default'}
+              variant={
+                confirmDialogData.isDestructive ? 'destructive' : 'default'
+              }
               onClick={() => {
                 confirmDialogData.onConfirm()
                 setConfirmDialogOpen(false)

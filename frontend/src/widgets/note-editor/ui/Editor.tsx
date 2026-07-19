@@ -66,7 +66,9 @@ function EditorWithSlash() {
           const { selection } = innerEditor.state
           const type = selection.$head.parent.type
           const grandParentType = selection.$head.node(-2).type
-          const isList = ['bulletList', 'orderedList'].includes(grandParentType.name)
+          const isList = ['bulletList', 'orderedList'].includes(
+            grandParentType.name,
+          )
 
           if (isList) {
             return 'List'
@@ -148,18 +150,21 @@ function EditorWithSlash() {
 
   // Handle adding a default note when all are deleted
   const handleCreateFirstPage = () => {
-    createNoteMutation.mutate({
-      parentId: null,
-      title: 'Welcome to my new page',
-    }, {
-      onSuccess: (newNote) => {
-        console.log("New note created", newNote)
-        navigate({
-          to: '/notes/$noteId',
-          params: { noteId: newNote.id },
-        })
+    createNoteMutation.mutate(
+      {
+        parentId: null,
+        title: 'Welcome to my new page',
       },
-    })
+      {
+        onSuccess: (newNote) => {
+          console.log('New note created', newNote)
+          navigate({
+            to: '/notes/$noteId',
+            params: { noteId: newNote.id },
+          })
+        },
+      },
+    )
   }
 
   if (!currentNote) {

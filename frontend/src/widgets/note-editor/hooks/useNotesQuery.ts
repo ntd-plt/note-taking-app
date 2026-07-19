@@ -260,7 +260,10 @@ export function useUpdateFolder() {
           ? updates.parentId
           : currentFolder?.parentId || null
 
-      const mapped = await api.updateFolder(id, { name, parentId: parentFolderId })
+      const mapped = await api.updateFolder(id, {
+        name,
+        parentId: parentFolderId,
+      })
       if (currentFolder) {
         mapped.icon = currentFolder.icon
         mapped.isExpanded = currentFolder.isExpanded
@@ -356,15 +359,28 @@ export function useResolveFullPath() {
 
   return React.useCallback(
     async (note: Note | undefined, folders: Folder[]): Promise<Folder[]> => {
-      if (!note || !note.parentId || note.parentId === 'null' || note.parentId === 'undefined') return []
+      if (
+        !note ||
+        !note.parentId ||
+        note.parentId === 'null' ||
+        note.parentId === 'undefined'
+      )
+        return []
 
       const path: Folder[] = []
       let currentParentId: string | null = note.parentId
       const visited = new Set<string>()
 
-      while (currentParentId && currentParentId !== 'null' && currentParentId !== 'undefined') {
+      while (
+        currentParentId &&
+        currentParentId !== 'null' &&
+        currentParentId !== 'undefined'
+      ) {
         if (visited.has(currentParentId)) {
-          console.warn('Cycle detected in folder path resolution:', currentParentId)
+          console.warn(
+            'Cycle detected in folder path resolution:',
+            currentParentId,
+          )
           break
         }
         visited.add(currentParentId)
@@ -384,7 +400,6 @@ export function useResolveFullPath() {
             break
           }
         }
-
 
         path.unshift(folder)
         currentParentId = folder.parentId

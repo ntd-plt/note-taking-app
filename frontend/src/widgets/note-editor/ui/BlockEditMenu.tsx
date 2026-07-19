@@ -97,7 +97,11 @@ export function BlockEditMenu({ editor }: { editor: Editor | null }) {
                     const idx = items.findIndex((i) => i.title === value)
                     const targetItem = state.items[idx]
                     if (targetItem && frozenNodePos !== null) {
-                      targetItem.command({ dispatch, nodePos: frozenNodePos, editor })
+                      targetItem.command({
+                        dispatch,
+                        nodePos: frozenNodePos,
+                        editor,
+                      })
                     }
                   }}
                   className="flex items-center gap-2 cursor-pointer"

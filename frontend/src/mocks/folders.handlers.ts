@@ -88,8 +88,14 @@ export const foldersHandlers = [
       if (index !== -1) {
         mockFolders[index] = {
           ...mockFolders[index],
-          name: folderReq.name !== undefined ? folderReq.name : mockFolders[index].name,
-          parentId: folderReq.parent_folder_id !== undefined ? folderReq.parent_folder_id : mockFolders[index].parentId,
+          name:
+            folderReq.name !== undefined
+              ? folderReq.name
+              : mockFolders[index].name,
+          parentId:
+            folderReq.parent_folder_id !== undefined
+              ? folderReq.parent_folder_id
+              : mockFolders[index].parentId,
           updatedAt: new Date().toISOString(),
         }
         updatedFolders.push(mockFolders[index])
