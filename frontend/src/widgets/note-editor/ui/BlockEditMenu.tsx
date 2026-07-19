@@ -25,8 +25,8 @@ export function BlockEditMenu({ editor }: { editor: Editor | null }) {
 
   if (state.status === 'open') {
     if (rect && anchorRect.current === null) anchorRect.current = rect
-    if (rowNumber !== null && anchorNodePos.current === null)
-      anchorNodePos.current = rowNumber ?? null
+    if (rowNumber !== undefined && anchorNodePos.current === null)
+      anchorNodePos.current = rowNumber
   } else {
     anchorRect.current = null
     anchorNodePos.current = null
@@ -41,7 +41,7 @@ export function BlockEditMenu({ editor }: { editor: Editor | null }) {
 
   return (
     <Popover
-      open={state.status === 'open'}
+      open
       onOpenChange={(open) => {
         if (!open) {
           dispatch({ type: 'CLOSE' })
@@ -95,9 +95,13 @@ export function BlockEditMenu({ editor }: { editor: Editor | null }) {
                   data-selected={index === selectedIndex}
                   onSelect={(value) => {
                     const idx = items.findIndex((i) => i.title === value)
-                    const item = state.items[idx]
-                    if (frozenNodePos !== null) {
-                      item.command({ dispatch, nodePos: frozenNodePos, editor })
+                    const targetItem = state.items[idx]
+                    if (targetItem && frozenNodePos !== null) {
+                      targetItem.command({
+                        dispatch,
+                        nodePos: frozenNodePos,
+                        editor,
+                      })
                     }
                   }}
                   className="flex items-center gap-2 cursor-pointer"

@@ -62,13 +62,13 @@ function EditorWithSlash() {
       LayoutCell,
       Placeholder.configure({
         includeChildren: true,
-        placeholder: ({ node, editor }) => {
-          const { selection } = editor.state
+        placeholder: ({ node, editor: innerEditor }) => {
+          const { selection } = innerEditor.state
           const type = selection.$head.parent.type
-          const grandParentType = selection.$head.node(-2)?.type
-          const isList =
-            grandParentType &&
-            ['bulletList', 'orderedList'].includes(grandParentType.name)
+          const grandParentType = selection.$head.node(-2).type
+          const isList = ['bulletList', 'orderedList'].includes(
+            grandParentType.name,
+          )
 
           if (isList) {
             return 'List'
@@ -98,7 +98,7 @@ function EditorWithSlash() {
       },
     },
     // Triggers when content changes inside the editor
-    onUpdate: ({ editor }) => {
+    onUpdate: ({ editor: innerEditor }) => {
       const activeId = currentNoteRef.current?.id
       if (activeId) {
         const html = editor.getHTML()
@@ -139,7 +139,7 @@ function EditorWithSlash() {
   }, [rect, isList])
   // Sync editor content when the active note changes
   React.useEffect(() => {
-    if (editor && currentNote) {
+    if (currentNote) {
       const editorHTML = editor.getHTML()
       if (editorHTML !== currentNote.content) {
         // Set content and preserve historical cursor state if needed
@@ -150,18 +150,21 @@ function EditorWithSlash() {
 
   // Handle adding a default note when all are deleted
   const handleCreateFirstPage = () => {
-    createNoteMutation.mutate({
-      parentId: null,
-      title: 'Welcome to my new page',
-    }, {
-      onSuccess: (newNote) => {
-        console.log("New note created", newNote)
-        navigate({
-          to: '/notes/$noteId',
-          params: { noteId: newNote.id },
-        })
+    createNoteMutation.mutate(
+      {
+        parentId: null,
+        title: 'Welcome to my new page',
       },
-    })
+      {
+        onSuccess: (newNote) => {
+          console.log('New note created', newNote)
+          navigate({
+            to: '/notes/$noteId',
+            params: { noteId: newNote.id },
+          })
+        },
+      },
+    )
   }
 
   if (!currentNote) {
@@ -193,14 +196,12 @@ function EditorWithSlash() {
   }
 
   const handleMouseLeave = () => {
-    if (editor?.view) {
-      editor.view.dispatch(
-        editor.view.state.tr.setMeta(NODE_HOVER_PLUGIN_KEY, {
-          isMouseInside: false,
-          hoveredNode: null,
-        }),
-      )
-    }
+    editor.view.dispatch(
+      editor.view.state.tr.setMeta(NODE_HOVER_PLUGIN_KEY, {
+        isMouseInside: false,
+        hoveredNode: null,
+      }),
+    )
   }
 
   return (

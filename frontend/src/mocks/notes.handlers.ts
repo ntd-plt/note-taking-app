@@ -65,9 +65,18 @@ export const notesHandlers = [
       if (index !== -1) {
         mockNotes[index] = {
           ...mockNotes[index],
-          title: noteReq.title !== undefined ? noteReq.title : mockNotes[index].title,
-          content: noteReq.content !== undefined ? noteReq.content : mockNotes[index].content,
-          parentId: noteReq.folder_id !== undefined ? noteReq.folder_id : mockNotes[index].parentId,
+          title:
+            noteReq.title !== undefined
+              ? noteReq.title
+              : mockNotes[index].title,
+          content:
+            noteReq.content !== undefined
+              ? noteReq.content
+              : mockNotes[index].content,
+          parentId:
+            noteReq.folder_id !== undefined
+              ? noteReq.folder_id
+              : mockNotes[index].parentId,
           updatedAt: new Date().toISOString(),
         }
         updatedNotes.push(mockNotes[index])

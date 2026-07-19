@@ -30,8 +30,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const response =
-    await fetch(url, { ...options, headers })
+  const response = await fetch(url, { ...options, headers })
 
   if (!response.ok) {
     let errorData
