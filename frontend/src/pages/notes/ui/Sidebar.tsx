@@ -197,11 +197,10 @@ export function AppSidebar() {
   // Construct combined folders & notes hierarchical tree
   const sidebarTree = React.useMemo(() => {
     const rootItems: SidebarItem[] = []
-    const itemsByParent: Record<string, SidebarItem[]> = {}
-
+    const itemsByParent: Record<string, SidebarItem[] | undefined> = {}
 
     // Group folders
-    folders?.forEach((folder) => {
+    folders.forEach((folder) => {
       const item: SidebarItem = {
         type: 'folder',
         id: folder.id,
@@ -221,7 +220,7 @@ export function AppSidebar() {
     })
 
     // Group notes
-    notes?.forEach((note) => {
+    notes.forEach((note) => {
       const item: SidebarItem = {
         type: 'note',
         id: note.id,

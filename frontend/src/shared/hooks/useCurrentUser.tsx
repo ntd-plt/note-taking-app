@@ -6,5 +6,5 @@ export default function useCurrentUser() {
     queryKey: ['current-user'],
     queryFn: getCurrentUser,
   })
-  return query?.data
+  return query.data
 }

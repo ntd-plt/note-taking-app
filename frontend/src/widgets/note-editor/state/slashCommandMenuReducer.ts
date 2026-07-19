@@ -3,7 +3,7 @@ import type { MenuAction, MenuState } from '../model'
 export function reducer(state: MenuState, action: MenuAction): MenuState {
   switch (action.type) {
     case 'OPEN':
-    case 'UPDATE':
+    case 'UPDATE': {
       const rect = action.props.clientRect?.()
       if (!rect) return state
       return {
@@ -13,6 +13,7 @@ export function reducer(state: MenuState, action: MenuAction): MenuState {
         position: rectToPosition(rect),
         command: (item) => action.props.command(item),
       }
+    }
 
     case 'MOVE': {
       if (state.status !== 'open') return state
