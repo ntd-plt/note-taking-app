@@ -74,12 +74,7 @@ export function EditorHeader({
     return () => {
       active = false
     }
-  }, [
-    currentNote.id,
-    currentNote.parentId,
-    foldersData,
-    resolveFullPath,
-  ])
+  }, [currentNote.id, currentNote.parentId, foldersData, resolveFullPath])
 
   return (
     <div className="w-full max-w-4xl mx-auto pt-10 px-8 flex flex-col gap-4">
@@ -132,7 +127,6 @@ export function EditorHeader({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-
         </div>
 
         {/* Quick Stats or Metadata */}

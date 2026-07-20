@@ -35,10 +35,8 @@ func Default() *Config {
 }
 
 func Load() (*Config, error) {
-	err := godotenv.Load()
-	if err != nil {
-		return nil, err
-	}
+	// Attempt to load .env file, but do not fail if it is missing (as in production)
+	_ = godotenv.Load()
 
 	appEnv := os.Getenv("APP_ENV")
 	if appEnv == "" {

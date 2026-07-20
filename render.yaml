@@ -1,0 +1,51 @@
+services:
+  # Go API Backend
+  - type: web
+    name: note-taking-api-staging
+    env: go
+    plan: free # Zero cost for staging
+    buildCommand: |
+      cd backend
+      go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+      go build -o bin/server ./cmd/server
+    startCommand: |
+      cd backend
+      # Apply pending migrations before starting the server
+      $(go env GOPATH)/bin/migrate -path ./migrations -database "$DATABASE_URL" up
+      ./bin/server
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: note-taking-db-staging
+          property: connectionString
+      - key: DB_HOST
+        fromDatabase:
+          name: note-taking-db-staging
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: note-taking-db-staging
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: note-taking-db-staging
+          property: user
+      - key: DB_PASS
+        fromDatabase:
+          name: note-taking-db-staging
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: note-taking-db-staging
+          property: database
+      - key: JWT_SECRET
+        generateValue: true # Generates a random JWT Secret on deploy
+      - key: ALLOWED_ORIGINS
+        value: "*" # Set to your Vercel/Netlify frontend URL in the Render dashboard once deployed
+
+databases:
+  # Managed PostgreSQL Staging Database
+  - name: note-taking-db-staging
+    plan: free

@@ -153,7 +153,6 @@ export default function NodeTreeItem({
                 side="right"
                 sideOffset={5}
               >
-
                 <DropdownMenuItem
                   onClick={(e) => onDuplicateNote(note.id, e)}
                   className="cursor-pointer text-xs"

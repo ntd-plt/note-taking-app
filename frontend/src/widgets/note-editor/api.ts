@@ -30,7 +30,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     } catch {
       errorData = null
     }
-    throw new Error(errorData?.message || `HTTP error! Status: ${response.status}`)
+    throw new Error(
+      errorData?.message || `HTTP error! Status: ${response.status}`,
+    )
   }
 
   if (response.status === 204) {
@@ -51,7 +53,9 @@ export const fetchFolder = async (id: string): Promise<Folder> => {
   return mapBackendFolder(data)
 }
 
-export const createFolder = async (folder: Partial<Folder>): Promise<Folder> => {
+export const createFolder = async (
+  folder: Partial<Folder>,
+): Promise<Folder> => {
   const body = toBackendFolder(folder)
   const data = await request<any>('/api/folders', {
     method: 'POST',
@@ -60,7 +64,10 @@ export const createFolder = async (folder: Partial<Folder>): Promise<Folder> => 
   return mapBackendFolder(data)
 }
 
-export const updateFolder = async (id: string, updates: Partial<Folder>): Promise<Folder> => {
+export const updateFolder = async (
+  id: string,
+  updates: Partial<Folder>,
+): Promise<Folder> => {
   const body = {
     folders: [
       {
@@ -104,7 +111,10 @@ export const createNote = async (note: Partial<Note>): Promise<Note> => {
   return mapBackendNote(data)
 }
 
-export const updateNote = async (id: string, updates: Partial<Note>): Promise<Note> => {
+export const updateNote = async (
+  id: string,
+  updates: Partial<Note>,
+): Promise<Note> => {
   const body = {
     notes: [
       {

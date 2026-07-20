@@ -26,7 +26,7 @@ function renderSidebar() {
       <SidebarProvider>
         <AppSidebar />
       </SidebarProvider>
-    </QueryClientProvider>
+    </QueryClientProvider>,
   )
 }
 
@@ -37,7 +37,9 @@ describe('Sidebar Component', () => {
     // Wait for the mock folders/notes to be fetched and rendered
     await waitFor(() => {
       // "Getting Started" note is part of the seeded mock data (from initialNotes)
-      expect(screen.queryAllByText(/Getting Started/i).length).toBeGreaterThan(0)
+      expect(screen.queryAllByText(/Getting Started/i).length).toBeGreaterThan(
+        0,
+      )
     })
   })
 
@@ -101,7 +103,7 @@ describe('Sidebar Component', () => {
       }),
       http.get('/api/notes', () => {
         return HttpResponse.json([])
-      })
+      }),
     )
 
     renderSidebar()
