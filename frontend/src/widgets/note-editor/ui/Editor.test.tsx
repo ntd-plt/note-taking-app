@@ -23,7 +23,7 @@ function renderEditor() {
   return render(
     <QueryClientProvider client={queryClient}>
       <Editor />
-    </QueryClientProvider>
+    </QueryClientProvider>,
   )
 }
 

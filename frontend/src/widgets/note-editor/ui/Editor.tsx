@@ -67,7 +67,8 @@ function EditorWithSlash() {
           const { $head } = selection
           const type = $head.parent.type
           const depth = $head.depth
-          const grandParentType = depth >= 2 ? $head.node(depth - 2).type : undefined
+          const grandParentType =
+            depth >= 2 ? $head.node(depth - 2).type : undefined
           const isList =
             grandParentType &&
             ['bulletList', 'orderedList'].includes(grandParentType.name)
