@@ -17,18 +17,26 @@ declare module '@tanstack/react-router' {
 }
 
 async function enableMocking() {
-  return false
-  if (!import.meta.env.DEV || import.meta.env.VITE_ENABLE_MOCK === 'false') {
-    return
+  const shouldMock = import.meta.env.DEV && import.meta.env.VITE_ENABLE_MOCK === 'true'
+
+  if (shouldMock) {
+    const { worker } = await import('./mocks/browser')
+    return worker.start({
+      onUnhandledRequest: 'bypass',
+    })
+  } else {
+    // Unregister any active service worker (e.g. old MSW registrations) to prevent persistent request interception
+    if ('serviceWorker' in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations()
+        for (const registration of registrations) {
+          await registration.unregister()
+        }
+      } catch (err) {
+        console.error('Failed to unregister service worker:', err)
+      }
+    }
   }
-
-  const { worker } = await import('./mocks/browser')
-
-  // `worker.start()` returns a Promise that resolves
-  // once the Service Worker is up and ready to intercept requests.
-  return worker.start({
-    onUnhandledRequest: 'bypass',
-  })
 }
 
 const rootElement = document.getElementById('app')!
