@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
+import { validateSession, logout } from '@/shared/api'
 import {
   useNotesStore,
   useNotesQuery,
@@ -88,13 +89,33 @@ export interface NodeSidebarProps {
 
 export function AppSidebar() {
   const navigate = useNavigate()
+  const [user, setUser] = React.useState<{
+    name: string
+    email: string
+  } | null>(null)
+
+  React.useEffect(() => {
+    validateSession().then((auth) => {
+      if (auth.isAuthenticated && auth.user) {
+        setUser({
+          name: auth.user.username || auth.user.email.split('@')[0],
+          email: auth.user.email,
+        })
+      }
+    })
+  }, [])
+
+  const handleLogout = async () => {
+    await logout()
+    navigate({ to: '/login' })
+  }
 
   const { data: notesData } = useNotesQuery()
   const { data: foldersData } = useFoldersQuery()
   const notes = notesData ?? []
   const folders = foldersData ?? []
-  console.log("Folder", JSON.stringify(folders))
-  console.log("Notes", JSON.stringify(notes))
+  console.log('Folder', JSON.stringify(folders))
+  console.log('Notes', JSON.stringify(notes))
 
   // Zustand store bindings
   const { activeNoteId, searchQuery, setActiveNoteId, setSearchQuery } =
@@ -124,13 +145,21 @@ export function AppSidebar() {
   const [searchOpen, setSearchOpen] = React.useState(false)
 
   // Expanded folders state
-  const [expandedFolders, setExpandedFolders] = React.useState<Record<string, boolean>>({})
+  const [expandedFolders, setExpandedFolders] = React.useState<
+    Record<string, boolean>
+  >({})
 
   // Dialog State
   const [folderDialogOpen, setFolderDialogOpen] = React.useState(false)
-  const [folderDialogMode, setFolderDialogMode] = React.useState<'create' | 'rename'>('create')
-  const [folderDialogParentId, setFolderDialogParentId] = React.useState<string | null>(null)
-  const [folderDialogId, setFolderDialogId] = React.useState<string | null>(null)
+  const [folderDialogMode, setFolderDialogMode] = React.useState<
+    'create' | 'rename'
+  >('create')
+  const [folderDialogParentId, setFolderDialogParentId] = React.useState<
+    string | null
+  >(null)
+  const [folderDialogId, setFolderDialogId] = React.useState<string | null>(
+    null,
+  )
   const [folderNameInput, setFolderNameInput] = React.useState('')
 
   const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
@@ -144,19 +173,23 @@ export function AppSidebar() {
     title: '',
     description: '',
     confirmLabel: '',
-    onConfirm: () => { },
+    onConfirm: () => {},
   })
 
-  const openFolderDialog = (mode: 'create' | 'rename', parentIdOrFolderId: string | null, currentName = '') => {
+  const openFolderDialog = (
+    mode: 'create' | 'rename',
+    parentIdOrFolderId: string | null,
+    currentName = '',
+  ) => {
     setFolderDialogMode(mode)
     setFolderNameInput(currentName)
-    console.log("ParentId", parentIdOrFolderId)
+    console.log('ParentId', parentIdOrFolderId)
     if (mode === 'create') {
-      console.log("Create")
+      console.log('Create')
       setFolderDialogParentId(parentIdOrFolderId)
       setFolderDialogId(null)
     } else {
-      console.log("Rename")
+      console.log('Rename')
       setFolderDialogParentId(null)
       setFolderDialogId(parentIdOrFolderId)
     }
@@ -198,7 +231,6 @@ export function AppSidebar() {
   const sidebarTree = React.useMemo(() => {
     const rootItems: SidebarItem[] = []
     const itemsByParent: Record<string, SidebarItem[]> = {}
-
 
     // Group folders
     folders?.forEach((folder) => {
@@ -288,12 +320,12 @@ export function AppSidebar() {
             }))
           }
         },
-      }
+      },
     )
   }
 
   const handleCreateNewFolder = (parentId: string | null = null) => {
-    console.log("Create Folder")
+    console.log('Create Folder')
     openFolderDialog('create', parentId, 'New Folder')
   }
 
@@ -329,7 +361,8 @@ export function AppSidebar() {
     e.preventDefault()
     setConfirmDialogData({
       title: 'Delete Folder',
-      description: 'Are you sure you want to delete this folder and all its contents?',
+      description:
+        'Are you sure you want to delete this folder and all its contents?',
       confirmLabel: 'Delete',
       isDestructive: true,
       onConfirm: () => {
@@ -375,6 +408,9 @@ export function AppSidebar() {
     })
   }
 
+  const initials = user ? user.name.substring(0, 2).toUpperCase() : 'U'
+  const displayName = user ? user.name : 'User'
+
   return (
     <>
       <Sidebar className="border-r border-sidebar-border/30 bg-sidebar/95 backdrop-blur-md">
@@ -385,11 +421,11 @@ export function AppSidebar() {
               <button className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-all hover:bg-sidebar-accent/50 focus:outline-none">
                 <div className="flex items-center gap-2.5">
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary font-heading font-semibold shadow-sm ring-1 ring-primary/20">
-                    TP
+                    {initials}
                   </div>
                   <div className="flex flex-col text-left">
                     <span className="text-[10px] font-semibold tracking-wide text-sidebar-foreground">
-                      Lam Tung (Free Plan)
+                      {displayName} (Free Plan)
                     </span>
                   </div>
                 </div>
@@ -409,7 +445,10 @@ export function AppSidebar() {
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-xs text-destructive hover:text-destructive px-2 py-1.5 cursor-pointer">
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-xs text-destructive hover:text-destructive px-2 py-1.5 cursor-pointer"
+              >
                 <LogOut className="mr-2 h-3.5 w-3.5 opacity-60" />
                 <span>Log Out</span>
               </DropdownMenuItem>
@@ -466,7 +505,6 @@ export function AppSidebar() {
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
-
 
           {/* Private Notes COLLAPSIBLE Group */}
           <SidebarGroup className="mt-4 p-0">
@@ -569,11 +607,14 @@ export function AppSidebar() {
                       onClick={() => {
                         setConfirmDialogData({
                           title: 'Reset Workspace',
-                          description: 'Are you sure you want to reset all notes to the initial state? This will clear all your custom notes.',
+                          description:
+                            'Are you sure you want to reset all notes to the initial state? This will clear all your custom notes.',
                           confirmLabel: 'Restore Default',
                           isDestructive: true,
                           onConfirm: () => {
-                            localStorage.removeItem('note-taking-workspace-storage')
+                            localStorage.removeItem(
+                              'note-taking-workspace-storage',
+                            )
                             window.location.reload()
                           },
                         })
@@ -691,7 +732,9 @@ export function AppSidebar() {
           <form onSubmit={handleFolderDialogSubmit}>
             <DialogHeader>
               <DialogTitle>
-                {folderDialogMode === 'create' ? 'Create Folder' : 'Rename Folder'}
+                {folderDialogMode === 'create'
+                  ? 'Create Folder'
+                  : 'Rename Folder'}
               </DialogTitle>
               <DialogDescription>
                 {folderDialogMode === 'create'
@@ -745,7 +788,9 @@ export function AppSidebar() {
             </Button>
             <Button
               type="button"
-              variant={confirmDialogData.isDestructive ? 'destructive' : 'default'}
+              variant={
+                confirmDialogData.isDestructive ? 'destructive' : 'default'
+              }
               onClick={() => {
                 confirmDialogData.onConfirm()
                 setConfirmDialogOpen(false)
