@@ -64,11 +64,14 @@ function EditorWithSlash() {
         includeChildren: true,
         placeholder: ({ node, editor: innerEditor }) => {
           const { selection } = innerEditor.state
-          const type = selection.$head.parent.type
-          const grandParentType = selection.$head.node(-2).type
-          const isList = ['bulletList', 'orderedList'].includes(
-            grandParentType.name,
-          )
+          const { $head } = selection
+          const type = $head.parent.type
+          const depth = $head.depth
+          const grandParentType =
+            depth >= 2 ? $head.node(depth - 2).type : undefined
+          const isList =
+            grandParentType &&
+            ['bulletList', 'orderedList'].includes(grandParentType.name)
 
           if (isList) {
             return 'List'
@@ -77,7 +80,7 @@ function EditorWithSlash() {
               case 'paragraph':
                 return 'Type / to open command menu…'
               case 'heading':
-                return 'Heading ' + selection.$head.parent.attrs.level
+                return 'Heading ' + $head.parent.attrs.level
             }
           }
           return 'Type / to open command menu…'
