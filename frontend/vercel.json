@@ -1,7 +1,7 @@
 {
   "rewrites": [
     {
-      "source": "/:path*",
+      "source": "/((?!api|auth).*)",
       "destination": "/index.html"
     }
   ]
