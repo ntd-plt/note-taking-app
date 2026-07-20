@@ -15,6 +15,8 @@ import (
 func NewRouter(authHandler *handlers.AuthHandler, notesHandler *handlers.NotesHandler, foldersHandler *handlers.FoldersHandler, tokenService *services.JWTService, enableSwagger bool) *gin.Engine {
 	router := gin.Default()
 
+	router.Use(middleware.CORS())
+
 	if enableSwagger {
 		router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	}

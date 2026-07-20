@@ -49,7 +49,7 @@ export function BubbleMenuButton({
   )
 }
 
-export function BubbleMenu({ editor }: { editor: Editor }) {
+export function BubbleMenu({ editor }: { editor: Editor | null }) {
   if (!editor) return null
 
   return (

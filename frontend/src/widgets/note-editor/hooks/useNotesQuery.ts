@@ -119,14 +119,7 @@ export function useCreateNote() {
     },
     onMutate: async (newNote) => {
       const generateUUID = () => {
-        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-          return crypto.randomUUID()
-        }
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-          const r = (Math.random() * 16) | 0
-          const v = c === 'x' ? r : (r & 0x3) | 0x8
-          return v.toString(16)
-        })
+        return crypto.randomUUID()
       }
       const id = newNote.id || generateUUID()
       const optimisticNote: Note = {
@@ -267,7 +260,10 @@ export function useUpdateFolder() {
           ? updates.parentId
           : currentFolder?.parentId || null
 
-      const mapped = await api.updateFolder(id, { name, parentId: parentFolderId })
+      const mapped = await api.updateFolder(id, {
+        name,
+        parentId: parentFolderId,
+      })
       if (currentFolder) {
         mapped.icon = currentFolder.icon
         mapped.isExpanded = currentFolder.isExpanded
@@ -363,15 +359,28 @@ export function useResolveFullPath() {
 
   return React.useCallback(
     async (note: Note | undefined, folders: Folder[]): Promise<Folder[]> => {
-      if (!note || !note.parentId || note.parentId === 'null' || note.parentId === 'undefined') return []
+      if (
+        !note ||
+        !note.parentId ||
+        note.parentId === 'null' ||
+        note.parentId === 'undefined'
+      )
+        return []
 
       const path: Folder[] = []
       let currentParentId: string | null = note.parentId
       const visited = new Set<string>()
 
-      while (currentParentId && currentParentId !== 'null' && currentParentId !== 'undefined') {
+      while (
+        currentParentId &&
+        currentParentId !== 'null' &&
+        currentParentId !== 'undefined'
+      ) {
         if (visited.has(currentParentId)) {
-          console.warn('Cycle detected in folder path resolution:', currentParentId)
+          console.warn(
+            'Cycle detected in folder path resolution:',
+            currentParentId,
+          )
           break
         }
         visited.add(currentParentId)
@@ -390,10 +399,6 @@ export function useResolveFullPath() {
             )
             break
           }
-        }
-
-        if (!folder) {
-          break
         }
 
         path.unshift(folder)

@@ -86,11 +86,12 @@ export function SlashCommandMenu() {
         case 'ArrowDown':
           dispatch({ type: 'MOVE', index: state.selectedIndex + 1 })
           return true
-        case 'Enter':
+        case 'Enter': {
           dispatch({ type: 'CLOSE' })
           const item = state.items[state.selectedIndex]
           state.command(item)
           return true
+        }
         default:
           return false
       }
@@ -104,7 +105,7 @@ export function SlashCommandMenu() {
 
   return (
     <Popover
-      open={state.status === 'open'}
+      open
       onOpenChange={(open) => {
         if (!open) {
           dispatch({ type: 'CLOSE' })
@@ -159,8 +160,8 @@ export function SlashCommandMenu() {
                   data-selected={index === selectedIndex}
                   onSelect={(value) => {
                     const idx = items.findIndex((i) => i.title === value)
-                    const item = state.items[idx]
-                    state.command(item)
+                    const targetItem = state.items[idx]
+                    state.command(targetItem)
                     dispatch({ type: 'CLOSE' })
                   }}
                   className="flex items-center gap-2 cursor-pointer"
@@ -200,7 +201,7 @@ export function makeRenderSlashMenu(
     },
 
     onKeyDown(props: SuggestionKeyDownProps): boolean {
-      const val = keyDownRef?.current?.(props) ?? false
+      const val = keyDownRef.current?.(props) ?? false
       return val
     },
 
