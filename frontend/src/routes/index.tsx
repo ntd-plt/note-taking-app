@@ -1,7 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Header } from '@/shared'
-import { validateSession } from '#/shared/api'
+import { validateSession, logout } from '#/shared/api'
 
 import {
   DropdownMenu,
@@ -19,19 +19,31 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 export const Route = createFileRoute('/')({
+  loader: async () => {
+    return await validateSession()
+  },
   component: App,
 })
 
 function App() {
-  const handleLogout = () => {
+  const router = useRouter()
+  const navigate = useNavigate()
+  const auth = Route.useLoaderData()
+
+  const handleLogout = async () => {
     console.log('Logging out...')
-    // In a real app, you would handle logout logic here
+    await logout()
+    router.invalidate()
+    navigate({ to: '/' })
   }
-  // const data = Route.useLoaderData()
-  const userData = {
-    name: 'Lam Tung',
-    email: 'ltp@example.com',
-  }
+
+  const userData =
+    auth.isAuthenticated && auth.user
+      ? {
+          name: auth.user.username,
+          email: auth.user.email,
+        }
+      : null
 
   return (
     <div className="min-h-screen">

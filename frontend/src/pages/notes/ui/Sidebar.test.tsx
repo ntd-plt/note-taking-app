@@ -5,9 +5,10 @@ import { AppSidebar } from './Sidebar'
 import { SidebarProvider } from '#/components/ui/sidebar'
 import { vi, describe, it, expect } from 'vitest'
 
+const mockNavigate = vi.fn()
 // Mock tanstack router navigation
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
+  useNavigate: () => mockNavigate,
   useParams: () => ({ noteId: null }),
 }))
 
@@ -112,6 +113,57 @@ describe('Sidebar Component', () => {
     // If it survives rendering without exceeding maximum call stack size, the test passes.
     await waitFor(() => {
       expect(screen.queryByText('Folder A')).toBeNull() // Since they form a cycle and can't reach root, they are not rendered.
+    })
+  })
+
+  it('should call logout and redirect to /login when clicking Log Out', async () => {
+    // Set mock user in localStorage so we simulate being logged in.
+    // The token is structured as a valid base64url payload with a far-future expiry.
+    localStorage.setItem(
+      'auth_token',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiMTIzIiwiZXhwIjoyNTE2MjM5MDAwfQ.sig',
+    )
+    localStorage.setItem(
+      'user_profile',
+      JSON.stringify({
+        id: '123',
+        username: 'Lam Tung',
+        email: 'ltp@example.com',
+      }),
+    )
+
+    renderSidebar()
+
+    // Find the profile trigger button (displays user's initials/name)
+    // Wait for the UI to update with "Lam Tung"
+    await waitFor(() => {
+      expect(screen.queryByText(/Lam Tung/i)).not.toBeNull()
+    })
+
+    const profileBtn = screen.getByText(/Lam Tung/i)
+    const triggerBtn = profileBtn.closest('button')
+    if (!triggerBtn) throw new Error('Trigger button not found')
+
+    // Click profile dropdown trigger using pointer and click events (Radix UI requirement)
+    fireEvent.pointerDown(triggerBtn, { ctrlKey: false, button: 0 })
+    fireEvent.pointerUp(triggerBtn, { ctrlKey: false, button: 0 })
+    fireEvent.click(triggerBtn)
+
+    // Wait for "Log Out" dropdown item to appear
+    await waitFor(() => {
+      expect(screen.queryByText('Log Out')).not.toBeNull()
+    })
+
+    const logoutBtn = screen.getByText('Log Out')
+
+    // Click Log Out
+    fireEvent.click(logoutBtn)
+
+    // Wait for localStorage to be cleared and navigate called
+    await waitFor(() => {
+      expect(localStorage.getItem('auth_token')).toBeNull()
+      expect(localStorage.getItem('user_profile')).toBeNull()
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/login' })
     })
   })
 })

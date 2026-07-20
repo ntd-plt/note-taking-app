@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
+import { validateSession, logout } from '@/shared/api'
 import {
   useNotesStore,
   useNotesQuery,
@@ -88,6 +89,26 @@ export interface NodeSidebarProps {
 
 export function AppSidebar() {
   const navigate = useNavigate()
+  const [user, setUser] = React.useState<{
+    name: string
+    email: string
+  } | null>(null)
+
+  React.useEffect(() => {
+    validateSession().then((auth) => {
+      if (auth.isAuthenticated && auth.user) {
+        setUser({
+          name: auth.user.username || auth.user.email.split('@')[0],
+          email: auth.user.email,
+        })
+      }
+    })
+  }, [])
+
+  const handleLogout = async () => {
+    await logout()
+    navigate({ to: '/login' })
+  }
 
   const { data: notesData } = useNotesQuery()
   const { data: foldersData } = useFoldersQuery()
@@ -387,6 +408,9 @@ export function AppSidebar() {
     })
   }
 
+  const initials = user ? user.name.substring(0, 2).toUpperCase() : 'U'
+  const displayName = user ? user.name : 'User'
+
   return (
     <>
       <Sidebar className="border-r border-sidebar-border/30 bg-sidebar/95 backdrop-blur-md">
@@ -397,11 +421,11 @@ export function AppSidebar() {
               <button className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-all hover:bg-sidebar-accent/50 focus:outline-none">
                 <div className="flex items-center gap-2.5">
                   <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary font-heading font-semibold shadow-sm ring-1 ring-primary/20">
-                    TP
+                    {initials}
                   </div>
                   <div className="flex flex-col text-left">
                     <span className="text-[10px] font-semibold tracking-wide text-sidebar-foreground">
-                      Lam Tung (Free Plan)
+                      {displayName} (Free Plan)
                     </span>
                   </div>
                 </div>
@@ -421,7 +445,10 @@ export function AppSidebar() {
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-xs text-destructive hover:text-destructive px-2 py-1.5 cursor-pointer">
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-xs text-destructive hover:text-destructive px-2 py-1.5 cursor-pointer"
+              >
                 <LogOut className="mr-2 h-3.5 w-3.5 opacity-60" />
                 <span>Log Out</span>
               </DropdownMenuItem>
