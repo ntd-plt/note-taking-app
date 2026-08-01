@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { getAuthErrorMessage } from '#/shared/lib/auth_errors'
 
 import useLogin from '../api/useLogin'
 
@@ -44,7 +45,9 @@ export function LoginPage() {
           </CardHeader>
           <CardContent>
             {error && (
-              <div className="text-sm text-destructive">{error.message}</div>
+              <div className="text-sm text-destructive">
+                {getAuthErrorMessage(error)}
+              </div>
             )}
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">

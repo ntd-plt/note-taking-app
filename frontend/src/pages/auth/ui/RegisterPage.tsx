@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 
 import useRegister from '../api/useRegister'
 import { AArrowDownIcon, PencilIcon } from 'lucide-react'
+import { getAuthErrorMessage } from '#/shared/lib/auth_errors'
 
 export function RegisterPage() {
   const navigate = useNavigate()
@@ -53,7 +54,7 @@ export function RegisterPage() {
           <CardContent>
             {error && (
               <div className="mb-4 text-sm text-destructive">
-                {error.message}
+                {getAuthErrorMessage(error)}
               </div>
             )}
             <div className="flex flex-col gap-6">
