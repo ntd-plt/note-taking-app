@@ -6,6 +6,7 @@ import (
 	"backend/internal/handlers"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
+	"log"
 )
 
 // @title           Note Taking App API
@@ -33,7 +34,16 @@ func main() {
 
 	hasher := hash.NewBcryptHasher()
 	tokenService := services.NewJWTService()
-	authService := services.NewAuthService(db, hasher, tokenService)
+
+	var emailValidator services.EmailValidator
+	if cfg.DisableEmailVerification {
+		log.Println("email verification disabled via DISABLE_EMAIL_VERIFICATION")
+		emailValidator = services.NoopEmailValidator{}
+	} else {
+		emailValidator = services.NewEmailValidator()
+	}
+
+	authService := services.NewAuthService(db, hasher, tokenService, emailValidator)
 	authHandler := handlers.NewAuthHandler(authService)
 	notesHandler := handlers.NewNotesHandler(db)
 	foldersHandler := handlers.NewFoldersHandler(db)

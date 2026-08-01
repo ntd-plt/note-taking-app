@@ -4,12 +4,14 @@
 package testutil
 
 import (
+	"context"
+	"errors"
+	"time"
+
 	"backend/internal/database"
 	"backend/internal/model"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
-	"errors"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -247,6 +249,28 @@ func (h *FakeHasher) Compare(hash, password []byte) error {
 		return errors.New("hash mismatch")
 	}
 	return nil
+}
+
+// FakeEmailValidator is a services.EmailValidator returning a fixed
+// Classification/IsDisposable pair, or Err if set (simulating a failed
+// verification call so callers can exercise the fail-open path). The zero
+// value classifies every email as allowed.
+type FakeEmailValidator struct {
+	Classification services.EmailVerificationClassification
+	IsDisposable   bool
+	Err            error
+}
+
+var _ services.EmailValidator = (*FakeEmailValidator)(nil)
+
+func (f *FakeEmailValidator) Verify(ctx context.Context, email string) (services.EmailVerificationResult, error) {
+	if f.Err != nil {
+		return services.EmailVerificationResult{}, f.Err
+	}
+	return services.EmailVerificationResult{
+		Classification: f.Classification,
+		IsDisposable:   f.IsDisposable,
+	}, nil
 }
 
 // FakeTokenService is a services.TokenService that issues predictable tokens

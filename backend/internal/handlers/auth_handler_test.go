@@ -3,6 +3,7 @@ package handlers_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,8 +19,12 @@ import (
 )
 
 func newAuthRouter(db *testutil.FakeDatabase, ts *testutil.FakeTokenService) *gin.Engine {
+	return newAuthRouterWithValidator(db, ts, &testutil.FakeEmailValidator{})
+}
+
+func newAuthRouterWithValidator(db *testutil.FakeDatabase, ts *testutil.FakeTokenService, ev *testutil.FakeEmailValidator) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	authService := services.NewAuthService(db, &testutil.FakeHasher{}, ts)
+	authService := services.NewAuthService(db, &testutil.FakeHasher{}, ts, ev)
 	h := handlers.NewAuthHandler(authService)
 
 	r := gin.New()
@@ -155,6 +160,64 @@ func TestSignupEndpointDuplicateEmail(t *testing.T) {
 
 	if w.Code != http.StatusConflict {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusConflict, w.Body.String())
+	}
+}
+
+func TestSignupEndpointUndeliverableEmail(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	r := newAuthRouterWithValidator(db, &testutil.FakeTokenService{}, &testutil.FakeEmailValidator{
+		Classification: services.EmailVerificationUndeliverable,
+	})
+
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupResponse{
+		Name:     "Bob",
+		Email:    "bob@example.com",
+		Password: "secret123",
+	})
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusUnprocessableEntity, w.Body.String())
+	}
+	if _, err := db.GetUserByEmail("bob@example.com"); err == nil {
+		t.Error("user should not have been stored")
+	}
+}
+
+func TestSignupEndpointDisposableEmail(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	r := newAuthRouterWithValidator(db, &testutil.FakeTokenService{}, &testutil.FakeEmailValidator{
+		IsDisposable: true,
+	})
+
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupResponse{
+		Name:     "Bob",
+		Email:    "bob@example.com",
+		Password: "secret123",
+	})
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusUnprocessableEntity, w.Body.String())
+	}
+}
+
+func TestSignupEndpointValidatorErrorFailsOpen(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	r := newAuthRouterWithValidator(db, &testutil.FakeTokenService{ValidUserID: uuid.New()}, &testutil.FakeEmailValidator{
+		Err: errors.New("email validator timeout"),
+	})
+
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupResponse{
+		Name:     "Bob",
+		Email:    "bob@example.com",
+		Password: "secret123",
+	})
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	resp := decodeAuthResponse(t, w)
+	if resp.AccessToken == "" || resp.RefreshToken == "" {
+		t.Errorf("expected both tokens, got %+v", resp)
 	}
 }
 

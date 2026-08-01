@@ -19,6 +19,10 @@ type Config struct {
 	// AppEnv is "development" or "production". Defaults to "development"
 	// (dev-safe) unless explicitly set otherwise via the APP_ENV env var.
 	AppEnv string
+
+	// DisableEmailVerification skips signup email verification (fails open)
+	// when set via the DISABLE_EMAIL_VERIFICATION env var.
+	DisableEmailVerification bool
 }
 
 func Default() *Config {
@@ -52,6 +56,8 @@ func Load() (*Config, error) {
 		ServerPort: os.Getenv("SERVER_PORT"),
 		JWTSecret:  os.Getenv("JWT_SECRET"),
 		AppEnv:     appEnv,
+
+		DisableEmailVerification: os.Getenv("DISABLE_EMAIL_VERIFICATION") == "true",
 	}, nil
 }
 

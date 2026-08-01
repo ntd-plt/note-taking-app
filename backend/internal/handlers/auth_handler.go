@@ -1,12 +1,12 @@
 package handlers
 
 import (
-	stderrors "errors"
-	"net/http"
-
 	"backend/internal/errors"
 	"backend/internal/pkg"
 	"backend/internal/services"
+	stderrors "errors"
+	"fmt"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
@@ -61,21 +61,30 @@ func (h *AuthHandler) Logout() {
 // @Success      200      {object}  pkg.AuthResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      409      {object}  map[string]string
+// @Failure      422      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /auth/signup [post]
 func (h *AuthHandler) Signup(c *gin.Context) {
 	var req pkg.SignupResponse
 	if err := c.ShouldBindJSON(&req); err != nil {
+		fmt.Println("Error binding JSON:", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err := h.authService.Signup(req.Name, req.Email, req.Password)
+	err := h.authService.Signup(c.Request.Context(), req.Name, req.Email, req.Password)
 	if err != nil {
 		if stderrors.Is(err, errors.ErrEmailAlreadyExists) {
+			fmt.Println("Error: Email already exists:", err)
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
+		if stderrors.Is(err, errors.ErrInvalidEmailAddress) {
+			fmt.Println("Error: Email address is not valid", err)
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
+		fmt.Println("Error: Status internal server error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
