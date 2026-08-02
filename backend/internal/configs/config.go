@@ -48,11 +48,11 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		DBHost:     os.Getenv("DB_HOST"),
-		DBPort:     os.Getenv("DB_PORT"),
-		DBUser:     os.Getenv("DB_USER"),
-		DBPass:     os.Getenv("DB_PASS"),
-		DBName:     os.Getenv("DB_NAME"),
+		DBHost:     os.Getenv("POSTGRES_HOST"),
+		DBPort:     os.Getenv("POSTGRES_PORT"),
+		DBUser:     os.Getenv("POSTGRES_USER"),
+		DBPass:     os.Getenv("POSTGRES_PASSWORD"),
+		DBName:     os.Getenv("POSTGRES_DB"),
 		ServerPort: os.Getenv("SERVER_PORT"),
 		JWTSecret:  os.Getenv("JWT_SECRET"),
 		AppEnv:     appEnv,

@@ -20,23 +20,23 @@ services:
         fromDatabase:
           name: note-taking-db-staging
           property: connectionString
-      - key: DB_HOST
+      - key: POSTGRES_HOST
         fromDatabase:
           name: note-taking-db-staging
           property: host
-      - key: DB_PORT
+      - key: POSTGRES_PORT
         fromDatabase:
           name: note-taking-db-staging
           property: port
-      - key: DB_USER
+      - key: POSTGRES_USER
         fromDatabase:
           name: note-taking-db-staging
           property: user
-      - key: DB_PASS
+      - key: POSTGRES_PASSWORD
         fromDatabase:
           name: note-taking-db-staging
           property: password
-      - key: DB_NAME
+      - key: POSTGRES_DB
         fromDatabase:
           name: note-taking-db-staging
           property: database

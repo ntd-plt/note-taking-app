@@ -1,0 +1,6 @@
+node_modules
+dist
+.git
+README.md
+MOCK_GUIDELINE.md
+.vscode
