@@ -188,6 +188,30 @@ func TestSignupAllowsOnValidatorError(t *testing.T) {
 	}
 }
 
+func TestSignupRejectsMalformedEmailSyntax(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	svc := newAuthService(db, &testutil.FakeTokenService{})
+
+	err := svc.Signup(context.Background(), "Bob", "not-an-email", "secret123")
+	if !stderrors.Is(err, errors.ErrInvalidEmailAddress) {
+		t.Fatalf("error = %v, want %v", err, errors.ErrInvalidEmailAddress)
+	}
+	if _, err := db.GetUserByEmail("not-an-email"); err == nil {
+		t.Error("user should not have been stored for a malformed email")
+	}
+}
+
+func TestSignupTreatsDuplicateEmailCaseInsensitively(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	addUser(db, "bob@example.com", "secret123")
+	svc := newAuthService(db, &testutil.FakeTokenService{})
+
+	err := svc.Signup(context.Background(), "Bob Again", "Bob@Example.com", "other-password")
+	if !stderrors.Is(err, errors.ErrEmailAlreadyExists) {
+		t.Fatalf("error = %v, want %v", err, errors.ErrEmailAlreadyExists)
+	}
+}
+
 func TestRefreshTokenSuccess(t *testing.T) {
 	db := testutil.NewFakeDatabase()
 	svc := newAuthService(db, &testutil.FakeTokenService{ValidUserID: uuid.New()})

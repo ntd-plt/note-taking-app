@@ -1,12 +1,13 @@
 package handlers
 
 import (
-	"backend/internal/errors"
-	"backend/internal/pkg"
-	"backend/internal/services"
 	stderrors "errors"
 	"fmt"
 	"net/http"
+
+	"backend/internal/errors"
+	"backend/internal/pkg"
+	"backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -85,13 +86,14 @@ func (h *AuthHandler) Signup(c *gin.Context) {
 			return
 		}
 		fmt.Println("Error: Status internal server error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 
 	token, err := h.authService.Login(req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		fmt.Println("Error: Status internal server error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 

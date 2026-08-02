@@ -6,9 +6,9 @@ type LoginRequest struct {
 }
 
 type SignupResponse struct {
-	Name     string `json:"name" validate:"required"`
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=6"`
+	Name     string `json:"name" binding:"required"`
+	Email    string `json:"email" binding:"required,email,max=254"`
+	Password string `json:"password" binding:"required,min=6"`
 }
 
 type AuthResponse struct {

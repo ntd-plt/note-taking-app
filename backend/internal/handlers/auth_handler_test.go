@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"backend/internal/handlers"
@@ -229,6 +230,119 @@ func TestSignupEndpointMalformedBody(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestSignupEndpointMalformedEmailFormat(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	r := newAuthRouter(db, &testutil.FakeTokenService{})
+
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupResponse{
+		Name:     "Bob",
+		Email:    "not-an-email",
+		Password: "secret123",
+	})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+	if _, err := db.GetUserByEmail("not-an-email"); err == nil {
+		t.Error("user should not have been stored for a malformed email")
+	}
+}
+
+func TestSignupEndpointEmptyEmail(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	r := newAuthRouter(db, &testutil.FakeTokenService{})
+
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupResponse{
+		Name:     "Bob",
+		Email:    "",
+		Password: "secret123",
+	})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestSignupEndpointMissingEmailField(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	r := newAuthRouter(db, &testutil.FakeTokenService{})
+
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", map[string]string{
+		"name":     "Bob",
+		"password": "secret123",
+	})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestSignupEndpointEmailMissingDomain(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	r := newAuthRouter(db, &testutil.FakeTokenService{})
+
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupResponse{
+		Name:     "Bob",
+		Email:    "bob@",
+		Password: "secret123",
+	})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestSignupEndpointOverlongEmailRejected(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	r := newAuthRouter(db, &testutil.FakeTokenService{})
+
+	overlongEmail := strings.Repeat("a", 260) + "@example.com"
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupResponse{
+		Name:     "Bob",
+		Email:    overlongEmail,
+		Password: "secret123",
+	})
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
+	}
+}
+
+func TestSignupEndpointCaseInsensitiveDuplicateEmail(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	addUser(db, "bob@example.com", "secret123")
+	r := newAuthRouter(db, &testutil.FakeTokenService{})
+
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupResponse{
+		Name:     "Bob Again",
+		Email:    "Bob@Example.com",
+		Password: "other-password",
+	})
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusConflict, w.Body.String())
+	}
+}
+
+func TestSignupEndpointInternalErrorDoesNotLeakDetails(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	db.Errs["AddUser"] = errors.New(`pq: duplicate key value violates unique constraint "users_email_key"`)
+	r := newAuthRouter(db, &testutil.FakeTokenService{})
+
+	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupResponse{
+		Name:     "Bob",
+		Email:    "bob@example.com",
+		Password: "secret123",
+	})
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusInternalServerError, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "pq:") {
+		t.Errorf("response body leaks raw internal error: %s", w.Body.String())
 	}
 }
 

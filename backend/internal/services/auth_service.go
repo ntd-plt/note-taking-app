@@ -7,9 +7,18 @@ import (
 	"backend/internal/pkg/hash"
 	"context"
 	"fmt"
+	"net/mail"
+	"strings"
 
 	user "backend/internal/model"
 )
+
+// normalizeEmail trims whitespace and lowercases an email address so that
+// lookups and storage treat e.g. "Bob@Example.com" and "bob@example.com" as
+// the same address.
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
 
 type AuthService struct {
 	db             database.Database
@@ -28,6 +37,8 @@ func NewAuthService(db database.Database, hasher hash.Hasher, tokenService Token
 }
 
 func (s *AuthService) Login(email, password string) (*pkg.AuthResponse, error) {
+	email = normalizeEmail(email)
+
 	user, err := s.db.GetUserByEmail(email)
 	if err != nil {
 		return nil, err
@@ -50,6 +61,11 @@ func (s *AuthService) Login(email, password string) (*pkg.AuthResponse, error) {
 }
 
 func (s *AuthService) Signup(ctx context.Context, name, email, password string) error {
+	email = normalizeEmail(email)
+	if _, err := mail.ParseAddress(email); err != nil {
+		return errors.ErrInvalidEmailAddress
+	}
+
 	_, err := s.db.GetUserByEmail(email)
 	if err == nil {
 		return errors.ErrEmailAlreadyExists
