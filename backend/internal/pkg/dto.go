@@ -1,14 +1,14 @@
 package pkg
 
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=6"`
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=6"`
 }
 
 type SignupResponse struct {
-	Name     string `json:"name" validate:"required"`
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required,min=6"`
+	Name     string `json:"name" binding:"required"`
+	Email    string `json:"email" binding:"required,email,max=254"`
+	Password string `json:"password" binding:"required,min=6"`
 }
 
 type AuthResponse struct {
@@ -17,7 +17,7 @@ type AuthResponse struct {
 }
 
 type RefreshTokenRequest struct {
-	Token string `json:"token" validate:"required"`
+	Token string `json:"token" binding:"required"`
 }
 
 func NewLoginRequest(email, password string) *LoginRequest {

@@ -1,7 +1,7 @@
 # Backend Makefile — setup, migrations, docs, run.
 # All commands assume they're run from the backend/ directory ($ cd backend && make ...).
 #
-# DB_* / JWT_SECRET are NOT loaded as Make variables (a plain `-include .env`
+# POSTGRES_* / JWT_SECRET are NOT loaded as Make variables (a plain `-include .env`
 # freezes them at parse time, before `env` has a chance to create the file on
 # a fresh clone). Instead, any recipe that needs them sources .env itself at
 # run time via `. ./.env`, after `env` (its prerequisite) has guaranteed the
@@ -23,8 +23,8 @@ help: ## Show this help
 setup: env tools tidy db-create migrate-up ## One-shot setup: env file (secret auto-generated), tools, deps, database, migrations — no manual steps required
 	@echo "Setup complete. Run 'make run' to start the server."
 
-env: ## Create .env from .env-template if missing, auto-generating a JWT secret
-	@test -f .env || cp .env-template .env
+env: ## Create .env from .env.example if missing, auto-generating a JWT secret
+	@test -f .env || cp .env.example .env
 	@if [ -z "$$(grep '^JWT_SECRET=' .env | cut -d'=' -f2-)" ]; then \
 		SECRET=$$(openssl rand -base64 48); \
 		perl -i -pe "s|^JWT_SECRET=.*|JWT_SECRET=$$SECRET|" .env; \
@@ -41,18 +41,18 @@ tidy: ## Download and tidy Go module dependencies
 
 ## --- Database ---------------------------------------------------------------
 
-db-create: env ## Create the Postgres database named in .env (DB_NAME), no-op if it exists
-	@. ./.env; PGPASSWORD=$$DB_PASS psql -h $$DB_HOST -p $$DB_PORT -U $$DB_USER -d postgres -c "CREATE DATABASE $$DB_NAME;" 2>/dev/null || echo "Database '$$DB_NAME' already exists or could not be created — continuing."
+db-create: env ## Create the Postgres database named in .env (POSTGRES_DB), no-op if it exists
+	@. ./.env; PGPASSWORD=$$POSTGRES_PASSWORD psql -h $$POSTGRES_HOST -p $$POSTGRES_PORT -U $$POSTGRES_USER -d postgres -c "CREATE DATABASE $$POSTGRES_DB;" 2>/dev/null || echo "Database '$$POSTGRES_DB' already exists or could not be created — continuing."
 
-db-drop: env ## Drop the Postgres database named in .env (DB_NAME), terminating other sessions first
-	@. ./.env; PGPASSWORD=$$DB_PASS psql -h $$DB_HOST -p $$DB_PORT -U $$DB_USER -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$$DB_NAME' AND pid <> pg_backend_pid();" >/dev/null
-	@. ./.env; PGPASSWORD=$$DB_PASS psql -h $$DB_HOST -p $$DB_PORT -U $$DB_USER -d postgres -c "DROP DATABASE IF EXISTS $$DB_NAME;"
+db-drop: env ## Drop the Postgres database named in .env (POSTGRES_DB), terminating other sessions first
+	@. ./.env; PGPASSWORD=$$POSTGRES_PASSWORD psql -h $$POSTGRES_HOST -p $$POSTGRES_PORT -U $$POSTGRES_USER -d postgres -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$$POSTGRES_DB' AND pid <> pg_backend_pid();" >/dev/null
+	@. ./.env; PGPASSWORD=$$POSTGRES_PASSWORD psql -h $$POSTGRES_HOST -p $$POSTGRES_PORT -U $$POSTGRES_USER -d postgres -c "DROP DATABASE IF EXISTS $$POSTGRES_DB;"
 
 migrate-up: env ## Apply all pending SQL migrations
-	@. ./.env; $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "postgres://$$DB_USER:$$DB_PASS@$$DB_HOST:$$DB_PORT/$$DB_NAME?sslmode=disable" up
+	@. ./.env; $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@$$POSTGRES_HOST:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable" up
 
 migrate-down: env ## Roll back the most recent migration
-	@. ./.env; $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "postgres://$$DB_USER:$$DB_PASS@$$DB_HOST:$$DB_PORT/$$DB_NAME?sslmode=disable" down 1
+	@. ./.env; $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@$$POSTGRES_HOST:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable" down 1
 
 migrate-create: ## Create a new migration pair: make migrate-create name=add_something
 	@test -n "$(name)" || (echo "usage: make migrate-create name=<migration_name>"; exit 1)

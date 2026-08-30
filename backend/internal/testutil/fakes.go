@@ -6,8 +6,10 @@ package testutil
 import (
 	"backend/internal/database"
 	"backend/internal/model"
+	"backend/internal/pkg"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
+	"context"
 	"errors"
 	"time"
 
@@ -15,12 +17,17 @@ import (
 )
 
 var (
-	ErrUserNotFound   = errors.New("user not found")
+	// ErrUserNotFound is a *pkg.NotFoundError so tests using errors.As
+	// against that type see the fake behave the same way the real Postgres
+	// datasource does.
+	ErrUserNotFound error = pkg.NewNotFoundError("user")
+
 	ErrNoteNotFound   = errors.New("note not found")
 	ErrFolderNotFound = errors.New("folder not found")
 )
 
-// FakeDatabase is an in-memory implementation of database.Database.
+// FakeDatabase is an in-memory implementation of database.UserDataSource,
+// database.NotesDataSource, and database.FoldersDataSource.
 // Set Errs["MethodName"] to force that method to fail.
 type FakeDatabase struct {
 	Users   map[uuid.UUID]model.User
@@ -29,7 +36,11 @@ type FakeDatabase struct {
 	Errs    map[string]error
 }
 
-var _ database.Database = (*FakeDatabase)(nil)
+var (
+	_ database.UserDataSource    = (*FakeDatabase)(nil)
+	_ database.NotesDataSource   = (*FakeDatabase)(nil)
+	_ database.FoldersDataSource = (*FakeDatabase)(nil)
+)
 
 func NewFakeDatabase() *FakeDatabase {
 	return &FakeDatabase{
@@ -247,6 +258,28 @@ func (h *FakeHasher) Compare(hash, password []byte) error {
 		return errors.New("hash mismatch")
 	}
 	return nil
+}
+
+// FakeEmailValidator is a services.EmailValidator returning a fixed
+// Classification/IsDisposable pair, or Err if set (simulating a failed
+// verification call so callers can exercise the fail-open path). The zero
+// value classifies every email as allowed.
+type FakeEmailValidator struct {
+	Classification services.EmailVerificationClassification
+	IsDisposable   bool
+	Err            error
+}
+
+var _ services.EmailValidator = (*FakeEmailValidator)(nil)
+
+func (f *FakeEmailValidator) Verify(ctx context.Context, email string) (services.EmailVerificationResult, error) {
+	if f.Err != nil {
+		return services.EmailVerificationResult{}, f.Err
+	}
+	return services.EmailVerificationResult{
+		Classification: f.Classification,
+		IsDisposable:   f.IsDisposable,
+	}, nil
 }
 
 // FakeTokenService is a services.TokenService that issues predictable tokens

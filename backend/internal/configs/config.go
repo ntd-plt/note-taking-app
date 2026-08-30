@@ -19,6 +19,10 @@ type Config struct {
 	// AppEnv is "development" or "production". Defaults to "development"
 	// (dev-safe) unless explicitly set otherwise via the APP_ENV env var.
 	AppEnv string
+
+	// DisableEmailVerification skips signup email verification (fails open)
+	// when set via the DISABLE_EMAIL_VERIFICATION env var.
+	DisableEmailVerification bool
 }
 
 func Default() *Config {
@@ -44,14 +48,16 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		DBHost:     os.Getenv("DB_HOST"),
-		DBPort:     os.Getenv("DB_PORT"),
-		DBUser:     os.Getenv("DB_USER"),
-		DBPass:     os.Getenv("DB_PASS"),
-		DBName:     os.Getenv("DB_NAME"),
+		DBHost:     os.Getenv("POSTGRES_HOST"),
+		DBPort:     os.Getenv("POSTGRES_PORT"),
+		DBUser:     os.Getenv("POSTGRES_USER"),
+		DBPass:     os.Getenv("POSTGRES_PASSWORD"),
+		DBName:     os.Getenv("POSTGRES_DB"),
 		ServerPort: os.Getenv("SERVER_PORT"),
 		JWTSecret:  os.Getenv("JWT_SECRET"),
 		AppEnv:     appEnv,
+
+		DisableEmailVerification: os.Getenv("DISABLE_EMAIL_VERIFICATION") == "true",
 	}, nil
 }
 

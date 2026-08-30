@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,17 +10,17 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { getAuthErrorMessage } from '#/shared/lib/auth_errors'
 
 import useLogin from '../api/useLogin'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const { mutate, isPending, error } = useLogin()
-  async function handleLogin(formData: FormData) {
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
-    console.log(email)
-    console.log(password)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+
+  async function handleLogin() {
     if (email && password) {
       mutate(
         {
@@ -44,7 +45,9 @@ export function LoginPage() {
           </CardHeader>
           <CardContent>
             {error && (
-              <div className="text-sm text-destructive">{error.message}</div>
+              <div className="text-sm text-destructive">
+                {getAuthErrorMessage(error)}
+              </div>
             )}
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
@@ -54,12 +57,21 @@ export function LoginPage() {
                   type="email"
                   name="email"
                   placeholder="m@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="password">Password</Label>
-                <Input name="password" id="password" type="password" required />
+                <Input
+                  name="password"
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
               </div>
             </div>
           </CardContent>

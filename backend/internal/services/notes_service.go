@@ -1,4 +1,4 @@
-package handlers
+package services
 
 import (
 	"encoding/json"
@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 )
 
-type NotesHandler struct {
-	db database.Database
+type NotesService struct {
+	db database.NotesDataSource
 }
 
 type CreateNoteRequest struct {
@@ -35,7 +35,6 @@ type UpdateNoteItem struct {
 }
 
 func (item *UpdateNoteItem) UnmarshalJSON(data []byte) error {
-	type Alias UpdateNoteItem
 	var aux struct {
 		ID       uuid.UUID  `json:"id" binding:"required"`
 		Title    *string    `json:"title"`
@@ -70,8 +69,8 @@ type DeleteNotesRequest struct {
 	IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
 }
 
-func NewNotesHandler(db database.Database) *NotesHandler {
-	return &NotesHandler{
+func NewNotesService(db database.NotesDataSource) *NotesService {
+	return &NotesService{
 		db: db,
 	}
 }
@@ -89,7 +88,7 @@ func NewNotesHandler(db database.Database) *NotesHandler {
 // @Failure      401      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /api/notes [post]
-func (h *NotesHandler) CreateNote(c *gin.Context) {
+func (h *NotesService) CreateNote(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -131,7 +130,7 @@ func (h *NotesHandler) CreateNote(c *gin.Context) {
 // @Failure      403  {object}  map[string]string
 // @Failure      404  {object}  map[string]string
 // @Router       /api/notes/{id} [get]
-func (h *NotesHandler) GetNote(c *gin.Context) {
+func (h *NotesService) GetNote(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -158,7 +157,7 @@ func (h *NotesHandler) GetNote(c *gin.Context) {
 	c.JSON(http.StatusOK, note)
 }
 
-func (h *NotesHandler) GetNotes(c *gin.Context) {
+func (h *NotesService) GetNotes(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -188,7 +187,7 @@ func (h *NotesHandler) GetNotes(c *gin.Context) {
 // @Failure      404      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /api/notes [put]
-func (h *NotesHandler) UpdateNotes(c *gin.Context) {
+func (h *NotesService) UpdateNotes(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -248,7 +247,7 @@ func (h *NotesHandler) UpdateNotes(c *gin.Context) {
 // @Failure      404      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /api/notes [delete]
-func (h *NotesHandler) DeleteNotes(c *gin.Context) {
+func (h *NotesService) DeleteNotes(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})

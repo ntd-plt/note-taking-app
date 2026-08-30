@@ -20,36 +20,30 @@ export const authHandlers = [
     return HttpResponse.json(response)
   }),
 
-  http.post('/api/auth/login', async ({ request }) => {
+  http.post('/auth/login', async ({ request }) => {
     const { email } = (await request.json()) as { email: string }
     if (email.includes('error')) {
       return HttpResponse.json(
-        { message: 'Invalid credentials' },
+        { error: 'wrong email or password' },
         { status: 401 },
       )
     }
 
-    const user = {
+    mockState.currentUser = {
       id: '123',
       username: email.split('@')[0],
       email: email,
     }
-    mockState.currentUser = user
     return HttpResponse.json({
-      token: 'mock-jwt-token-12345',
-      user,
+      access_token: 'mock-access-token',
+      refresh_token: 'mock-refresh-token',
     })
   }),
 
-  http.post('/api/auth/register', async ({ request }) => {
-    const { username, email } = (await request.json()) as any
+  http.post('/auth/signup', async () => {
     return HttpResponse.json({
-      token: 'mock-jwt-token-12345',
-      user: {
-        id: '123',
-        username: username,
-        email: email,
-      },
+      access_token: 'mock-access-token',
+      refresh_token: 'mock-refresh-token',
     })
   }),
 ]

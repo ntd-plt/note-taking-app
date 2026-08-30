@@ -1,0 +1,8 @@
+.git
+bin/
+.env
+.env.example
+*.test
+*.out
+coverage.*
+README.md

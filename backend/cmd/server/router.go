@@ -1,7 +1,6 @@
 package main
 
 import (
-	"backend/internal/handlers"
 	"backend/internal/middleware"
 	"backend/internal/services"
 
@@ -12,7 +11,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func NewRouter(authHandler *handlers.AuthHandler, notesHandler *handlers.NotesHandler, foldersHandler *handlers.FoldersHandler, tokenService *services.JWTService, enableSwagger bool) *gin.Engine {
+func NewRouter(authService *services.AuthService, notesService *services.NotesService, foldersService *services.FoldersService, tokenService *services.JWTService, enableSwagger bool) *gin.Engine {
 	router := gin.Default()
 
 	router.Use(middleware.CORS())
@@ -23,25 +22,25 @@ func NewRouter(authHandler *handlers.AuthHandler, notesHandler *handlers.NotesHa
 
 	authGroup := router.Group("/auth")
 	{
-		authGroup.POST("/login", authHandler.Login)
-		authGroup.POST("/signup", authHandler.Signup)
-		authGroup.POST("/refresh-token", authHandler.RefreshToken)
+		authGroup.POST("/login", authService.Login)
+		authGroup.POST("/signup", authService.Signup)
+		authGroup.POST("/refresh-token", authService.RefreshToken)
 	}
 
 	protected := router.Group("/api")
 	protected.Use(middleware.Auth(tokenService))
 	{
-		protected.GET("/notes", notesHandler.GetNotes)
-		protected.POST("/notes", notesHandler.CreateNote)
-		protected.GET("/notes/:id", notesHandler.GetNote)
-		protected.PUT("/notes", notesHandler.UpdateNotes)
-		protected.DELETE("/notes", notesHandler.DeleteNotes)
+		protected.GET("/notes", notesService.GetNotes)
+		protected.POST("/notes", notesService.CreateNote)
+		protected.GET("/notes/:id", notesService.GetNote)
+		protected.PUT("/notes", notesService.UpdateNotes)
+		protected.DELETE("/notes", notesService.DeleteNotes)
 
-		protected.GET("/folders", foldersHandler.GetFolders)
-		protected.POST("/folders", foldersHandler.CreateFolder)
-		protected.GET("/folders/:id", foldersHandler.GetFolder)
-		protected.PUT("/folders", foldersHandler.UpdateFolders)
-		protected.DELETE("/folders", foldersHandler.DeleteFolders)
+		protected.GET("/folders", foldersService.GetFolders)
+		protected.POST("/folders", foldersService.CreateFolder)
+		protected.GET("/folders/:id", foldersService.GetFolder)
+		protected.PUT("/folders", foldersService.UpdateFolders)
+		protected.DELETE("/folders", foldersService.DeleteFolders)
 
 	}
 	return router

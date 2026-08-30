@@ -1,12 +1,12 @@
-package handlers_test
+package services_test
 
 import (
 	"encoding/json"
 	"net/http"
 	"testing"
 
-	"backend/internal/handlers"
 	"backend/internal/model"
+	"backend/internal/services"
 	"backend/internal/testutil"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +18,7 @@ import (
 // simulate an unauthenticated request.
 func newNotesRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := handlers.NewNotesHandler(db)
+	h := services.NewNotesService(db)
 
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -50,7 +50,7 @@ func TestCreateNoteSuccess(t *testing.T) {
 	userID := uuid.New()
 	r := newNotesRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPost, "/api/notes", handlers.CreateNoteRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/notes", services.CreateNoteRequest{
 		Title:   "My note",
 		Content: "Hello",
 	})
@@ -83,7 +83,7 @@ func TestCreateNoteInFolder(t *testing.T) {
 	folderID := uuid.New()
 	r := newNotesRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPost, "/api/notes", handlers.CreateNoteRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/notes", services.CreateNoteRequest{
 		Title:    "My note",
 		Content:  "Hello",
 		FolderID: &folderID,
@@ -118,7 +118,7 @@ func TestCreateNoteUnauthenticated(t *testing.T) {
 	db := testutil.NewFakeDatabase()
 	r := newNotesRouter(db, nil)
 
-	w := doJSON(t, r, http.MethodPost, "/api/notes", handlers.CreateNoteRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/notes", services.CreateNoteRequest{
 		Title:   "My note",
 		Content: "Hello",
 	})
@@ -315,7 +315,7 @@ func TestUpdateNotesEmptyList(t *testing.T) {
 	userID := uuid.New()
 	r := newNotesRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPut, "/api/notes", handlers.UpdateNotesRequest{Notes: []handlers.UpdateNoteItem{}})
+	w := doJSON(t, r, http.MethodPut, "/api/notes", services.UpdateNotesRequest{Notes: []services.UpdateNoteItem{}})
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
@@ -329,7 +329,7 @@ func TestDeleteNotesSuccess(t *testing.T) {
 	note2 := addNote(db, userID, "Note 2")
 	r := newNotesRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodDelete, "/api/notes", handlers.DeleteNotesRequest{
+	w := doJSON(t, r, http.MethodDelete, "/api/notes", services.DeleteNotesRequest{
 		IDs: []uuid.UUID{note1.ID, note2.ID},
 	})
 
@@ -346,7 +346,7 @@ func TestDeleteNotesNotFound(t *testing.T) {
 	userID := uuid.New()
 	r := newNotesRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodDelete, "/api/notes", handlers.DeleteNotesRequest{
+	w := doJSON(t, r, http.MethodDelete, "/api/notes", services.DeleteNotesRequest{
 		IDs: []uuid.UUID{uuid.New()},
 	})
 
@@ -361,7 +361,7 @@ func TestDeleteNotesForbidden(t *testing.T) {
 	otherUser := uuid.New()
 	r := newNotesRouter(db, &otherUser)
 
-	w := doJSON(t, r, http.MethodDelete, "/api/notes", handlers.DeleteNotesRequest{
+	w := doJSON(t, r, http.MethodDelete, "/api/notes", services.DeleteNotesRequest{
 		IDs: []uuid.UUID{note.ID},
 	})
 

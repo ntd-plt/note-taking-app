@@ -74,6 +74,7 @@ definitions:
   backend_internal_pkg.SignupResponse:
     properties:
       email:
+        maxLength: 254
         type: string
       name:
         type: string
@@ -85,7 +86,7 @@ definitions:
     - name
     - password
     type: object
-  internal_handlers.CreateFolderRequest:
+  internal_services.CreateFolderRequest:
     properties:
       name:
         type: string
@@ -94,7 +95,7 @@ definitions:
     required:
     - name
     type: object
-  internal_handlers.CreateNoteRequest:
+  internal_services.CreateNoteRequest:
     properties:
       content:
         type: string
@@ -109,7 +110,7 @@ definitions:
     required:
     - title
     type: object
-  internal_handlers.DeleteFoldersRequest:
+  internal_services.DeleteFoldersRequest:
     properties:
       ids:
         items:
@@ -119,7 +120,7 @@ definitions:
     required:
     - ids
     type: object
-  internal_handlers.DeleteNotesRequest:
+  internal_services.DeleteNotesRequest:
     properties:
       ids:
         items:
@@ -129,7 +130,7 @@ definitions:
     required:
     - ids
     type: object
-  internal_handlers.FolderResponse:
+  internal_services.FolderResponse:
     properties:
       children:
         items:
@@ -148,7 +149,7 @@ definitions:
       user_id:
         type: string
     type: object
-  internal_handlers.UpdateFolderItem:
+  internal_services.UpdateFolderItem:
     properties:
       id:
         type: string
@@ -159,17 +160,17 @@ definitions:
     required:
     - id
     type: object
-  internal_handlers.UpdateFoldersRequest:
+  internal_services.UpdateFoldersRequest:
     properties:
       folders:
         items:
-          $ref: '#/definitions/internal_handlers.UpdateFolderItem'
+          $ref: '#/definitions/internal_services.UpdateFolderItem'
         minItems: 1
         type: array
     required:
     - folders
     type: object
-  internal_handlers.UpdateNoteItem:
+  internal_services.UpdateNoteItem:
     properties:
       content:
         type: string
@@ -187,11 +188,11 @@ definitions:
         description: Flags to track presence in JSON
         type: boolean
     type: object
-  internal_handlers.UpdateNotesRequest:
+  internal_services.UpdateNotesRequest:
     properties:
       notes:
         items:
-          $ref: '#/definitions/internal_handlers.UpdateNoteItem'
+          $ref: '#/definitions/internal_services.UpdateNoteItem'
         minItems: 1
         type: array
     required:
@@ -215,7 +216,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.DeleteFoldersRequest'
+          $ref: '#/definitions/internal_services.DeleteFoldersRequest'
       produces:
       - application/json
       responses:
@@ -292,7 +293,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.CreateFolderRequest'
+          $ref: '#/definitions/internal_services.CreateFolderRequest'
       produces:
       - application/json
       responses:
@@ -334,7 +335,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.UpdateFoldersRequest'
+          $ref: '#/definitions/internal_services.UpdateFoldersRequest'
       produces:
       - application/json
       responses:
@@ -388,7 +389,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_handlers.FolderResponse'
+            $ref: '#/definitions/internal_services.FolderResponse'
         "400":
           description: Bad Request
           schema:
@@ -430,7 +431,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.DeleteNotesRequest'
+          $ref: '#/definitions/internal_services.DeleteNotesRequest'
       produces:
       - application/json
       responses:
@@ -479,7 +480,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.CreateNoteRequest'
+          $ref: '#/definitions/internal_services.CreateNoteRequest'
       produces:
       - application/json
       responses:
@@ -521,7 +522,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_handlers.UpdateNotesRequest'
+          $ref: '#/definitions/internal_services.UpdateNotesRequest'
       produces:
       - application/json
       responses:
@@ -694,6 +695,12 @@ paths:
             type: object
         "409":
           description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
           schema:
             additionalProperties:
               type: string
