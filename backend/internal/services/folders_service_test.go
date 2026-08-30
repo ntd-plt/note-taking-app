@@ -1,4 +1,4 @@
-package handlers_test
+package services_test
 
 import (
 	"encoding/json"
@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"backend/internal/handlers"
 	"backend/internal/model"
+	"backend/internal/services"
 	"backend/internal/testutil"
 
 	"github.com/gin-gonic/gin"
@@ -19,7 +19,7 @@ import (
 // simulate an unauthenticated request.
 func newFoldersRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := handlers.NewFoldersHandler(db)
+	h := services.NewFoldersService(db)
 
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -53,7 +53,7 @@ func TestCreateFolderSuccess(t *testing.T) {
 	userID := uuid.New()
 	r := newFoldersRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPost, "/api/folders", handlers.CreateFolderRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/folders", services.CreateFolderRequest{
 		Name: "Documents",
 	})
 
@@ -79,7 +79,7 @@ func TestCreateFolderNested(t *testing.T) {
 	parent := addFolder(db, userID, "Parent", nil)
 	r := newFoldersRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPost, "/api/folders", handlers.CreateFolderRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/folders", services.CreateFolderRequest{
 		Name:           "Child",
 		ParentFolderID: &parent.ID,
 	})
@@ -113,7 +113,7 @@ func TestCreateFolderUnauthenticated(t *testing.T) {
 	db := testutil.NewFakeDatabase()
 	r := newFoldersRouter(db, nil)
 
-	w := doJSON(t, r, http.MethodPost, "/api/folders", handlers.CreateFolderRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/folders", services.CreateFolderRequest{
 		Name: "Documents",
 	})
 
@@ -140,7 +140,7 @@ func TestGetFolderWithChildren(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 
-	var resp handlers.FolderResponse
+	var resp services.FolderResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decoding response: %v", err)
 	}
@@ -248,8 +248,8 @@ func TestUpdateFoldersSuccess(t *testing.T) {
 	newParent := addFolder(db, userID, "New parent", nil)
 	r := newFoldersRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPut, "/api/folders", handlers.UpdateFoldersRequest{
-		Folders: []handlers.UpdateFolderItem{
+	w := doJSON(t, r, http.MethodPut, "/api/folders", services.UpdateFoldersRequest{
+		Folders: []services.UpdateFolderItem{
 			{ID: folder.ID, Name: "New name", ParentFolderID: &newParent.ID},
 		},
 	})
@@ -271,8 +271,8 @@ func TestUpdateFoldersNotFound(t *testing.T) {
 	userID := uuid.New()
 	r := newFoldersRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPut, "/api/folders", handlers.UpdateFoldersRequest{
-		Folders: []handlers.UpdateFolderItem{
+	w := doJSON(t, r, http.MethodPut, "/api/folders", services.UpdateFoldersRequest{
+		Folders: []services.UpdateFolderItem{
 			{ID: uuid.New(), Name: "New name"},
 		},
 	})
@@ -288,8 +288,8 @@ func TestUpdateFoldersForbidden(t *testing.T) {
 	otherUser := uuid.New()
 	r := newFoldersRouter(db, &otherUser)
 
-	w := doJSON(t, r, http.MethodPut, "/api/folders", handlers.UpdateFoldersRequest{
-		Folders: []handlers.UpdateFolderItem{
+	w := doJSON(t, r, http.MethodPut, "/api/folders", services.UpdateFoldersRequest{
+		Folders: []services.UpdateFolderItem{
 			{ID: folder.ID, Name: "Hijacked"},
 		},
 	})
@@ -307,7 +307,7 @@ func TestUpdateFoldersEmptyList(t *testing.T) {
 	userID := uuid.New()
 	r := newFoldersRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodPut, "/api/folders", handlers.UpdateFoldersRequest{Folders: []handlers.UpdateFolderItem{}})
+	w := doJSON(t, r, http.MethodPut, "/api/folders", services.UpdateFoldersRequest{Folders: []services.UpdateFolderItem{}})
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
@@ -321,7 +321,7 @@ func TestDeleteFoldersSuccess(t *testing.T) {
 	folder2 := addFolder(db, userID, "Folder 2", nil)
 	r := newFoldersRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodDelete, "/api/folders", handlers.DeleteFoldersRequest{
+	w := doJSON(t, r, http.MethodDelete, "/api/folders", services.DeleteFoldersRequest{
 		IDs: []uuid.UUID{folder1.ID, folder2.ID},
 	})
 
@@ -338,7 +338,7 @@ func TestDeleteFoldersNotFound(t *testing.T) {
 	userID := uuid.New()
 	r := newFoldersRouter(db, &userID)
 
-	w := doJSON(t, r, http.MethodDelete, "/api/folders", handlers.DeleteFoldersRequest{
+	w := doJSON(t, r, http.MethodDelete, "/api/folders", services.DeleteFoldersRequest{
 		IDs: []uuid.UUID{uuid.New()},
 	})
 
@@ -353,7 +353,7 @@ func TestDeleteFoldersForbidden(t *testing.T) {
 	otherUser := uuid.New()
 	r := newFoldersRouter(db, &otherUser)
 
-	w := doJSON(t, r, http.MethodDelete, "/api/folders", handlers.DeleteFoldersRequest{
+	w := doJSON(t, r, http.MethodDelete, "/api/folders", services.DeleteFoldersRequest{
 		IDs: []uuid.UUID{folder.ID},
 	})
 

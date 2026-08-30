@@ -57,15 +57,34 @@ func (e *EmailVerifierValidator) Verify(ctx context.Context, email string) (Emai
 		log.Printf("email-verifier: verification timed out for %s, failing open", email)
 		return EmailVerificationResult{}, ctx.Err()
 	case o := <-ch:
-		if o.err != nil {
-			log.Printf("email-verifier: verification failed for %s, failing open: %v", email, o.err)
-			return EmailVerificationResult{}, o.err
-		}
-		return EmailVerificationResult{
-			Classification: translateReachable(o.result.Reachable),
-			IsDisposable:   o.result.Disposable,
-		}, nil
+		return classifyVerifyOutcome(email, o.result, o.err)
 	}
+}
+
+// classifyVerifyOutcome turns the underlying library's Verify() outcome into
+// our own result type. Verify() always returns a non-nil *Result alongside a
+// non-nil error when the MX or SMTP stage fails - it never returns nil, err.
+// When the MX lookup itself failed (no mail infrastructure at all for the
+// domain), that's a confident "undeliverable" signal, not a network blip, so
+// we fail closed on it instead of the usual fail-open-on-error behavior. Any
+// other error (SMTP stage blocked/timed out, e.g. major providers rate
+// limiting probes) keeps failing open, since that's routinely a false
+// negative rather than a real signal.
+func classifyVerifyOutcome(email string, result *emailverifier.Result, err error) (EmailVerificationResult, error) {
+	if err != nil {
+		if result != nil && !result.HasMxRecords {
+			return EmailVerificationResult{
+				Classification: EmailVerificationUndeliverable,
+				IsDisposable:   result.Disposable,
+			}, nil
+		}
+		log.Printf("email-verifier: verification failed for %s, failing open: %v", email, err)
+		return EmailVerificationResult{}, err
+	}
+	return EmailVerificationResult{
+		Classification: translateReachable(result.Reachable),
+		IsDisposable:   result.Disposable,
+	}, nil
 }
 
 func translateReachable(reachable string) EmailVerificationClassification {

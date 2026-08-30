@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,18 +12,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import useRegister from '../api/useRegister'
-import { AArrowDownIcon, PencilIcon } from 'lucide-react'
+import { PencilIcon } from 'lucide-react'
 import { getAuthErrorMessage } from '#/shared/lib/auth_errors'
 
 export function RegisterPage() {
   const navigate = useNavigate()
   const { mutate, isPending, error } = useRegister()
+  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
 
-  async function handleRegister(formData: FormData) {
-    const username = formData.get('username') as string
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
-
+  async function handleRegister() {
     if (username && email && password) {
       mutate(
         {
@@ -65,6 +65,8 @@ export function RegisterPage() {
                   type="text"
                   name="username"
                   placeholder="johndoe"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   required
                 />
               </div>
@@ -75,12 +77,21 @@ export function RegisterPage() {
                   type="email"
                   name="email"
                   placeholder="m@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="password">Password</Label>
-                <Input name="password" id="password" type="password" required />
+                <Input
+                  name="password"
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
               </div>
             </div>
           </CardContent>

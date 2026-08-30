@@ -77,7 +77,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.UpdateFoldersRequest"
+                            "$ref": "#/definitions/internal_services.UpdateFoldersRequest"
                         }
                     }
                 ],
@@ -153,7 +153,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.CreateFolderRequest"
+                            "$ref": "#/definitions/internal_services.CreateFolderRequest"
                         }
                     }
                 ],
@@ -217,7 +217,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.DeleteFoldersRequest"
+                            "$ref": "#/definitions/internal_services.DeleteFoldersRequest"
                         }
                     }
                 ],
@@ -298,7 +298,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.FolderResponse"
+                            "$ref": "#/definitions/internal_services.FolderResponse"
                         }
                     },
                     "400": {
@@ -365,7 +365,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.UpdateNotesRequest"
+                            "$ref": "#/definitions/internal_services.UpdateNotesRequest"
                         }
                     }
                 ],
@@ -441,7 +441,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.CreateNoteRequest"
+                            "$ref": "#/definitions/internal_services.CreateNoteRequest"
                         }
                     }
                 ],
@@ -505,7 +505,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_handlers.DeleteNotesRequest"
+                            "$ref": "#/definitions/internal_services.DeleteNotesRequest"
                         }
                     }
                 ],
@@ -772,6 +772,15 @@
                             }
                         }
                     },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -902,7 +911,8 @@
             ],
             "properties": {
                 "email": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 254
                 },
                 "name": {
                     "type": "string"
@@ -913,7 +923,7 @@
                 }
             }
         },
-        "internal_handlers.CreateFolderRequest": {
+        "internal_services.CreateFolderRequest": {
             "type": "object",
             "required": [
                 "name"
@@ -927,7 +937,7 @@
                 }
             }
         },
-        "internal_handlers.CreateNoteRequest": {
+        "internal_services.CreateNoteRequest": {
             "type": "object",
             "required": [
                 "title"
@@ -949,7 +959,7 @@
                 }
             }
         },
-        "internal_handlers.DeleteFoldersRequest": {
+        "internal_services.DeleteFoldersRequest": {
             "type": "object",
             "required": [
                 "ids"
@@ -964,7 +974,7 @@
                 }
             }
         },
-        "internal_handlers.DeleteNotesRequest": {
+        "internal_services.DeleteNotesRequest": {
             "type": "object",
             "required": [
                 "ids"
@@ -979,7 +989,7 @@
                 }
             }
         },
-        "internal_handlers.FolderResponse": {
+        "internal_services.FolderResponse": {
             "type": "object",
             "properties": {
                 "children": {
@@ -1008,7 +1018,7 @@
                 }
             }
         },
-        "internal_handlers.UpdateFolderItem": {
+        "internal_services.UpdateFolderItem": {
             "type": "object",
             "required": [
                 "id"
@@ -1025,7 +1035,7 @@
                 }
             }
         },
-        "internal_handlers.UpdateFoldersRequest": {
+        "internal_services.UpdateFoldersRequest": {
             "type": "object",
             "required": [
                 "folders"
@@ -1035,12 +1045,12 @@
                     "type": "array",
                     "minItems": 1,
                     "items": {
-                        "$ref": "#/definitions/internal_handlers.UpdateFolderItem"
+                        "$ref": "#/definitions/internal_services.UpdateFolderItem"
                     }
                 }
             }
         },
-        "internal_handlers.UpdateNoteItem": {
+        "internal_services.UpdateNoteItem": {
             "type": "object",
             "properties": {
                 "content": {
@@ -1067,7 +1077,7 @@
                 }
             }
         },
-        "internal_handlers.UpdateNotesRequest": {
+        "internal_services.UpdateNotesRequest": {
             "type": "object",
             "required": [
                 "notes"
@@ -1077,7 +1087,7 @@
                     "type": "array",
                     "minItems": 1,
                     "items": {
-                        "$ref": "#/definitions/internal_handlers.UpdateNoteItem"
+                        "$ref": "#/definitions/internal_services.UpdateNoteItem"
                     }
                 }
             }

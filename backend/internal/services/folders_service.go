@@ -1,18 +1,17 @@
-package handlers
+package services
 
 import (
-	"net/http"
-	"time"
-
 	"backend/internal/database"
 	"backend/internal/model"
+	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-type FoldersHandler struct {
-	db database.Database
+type FoldersService struct {
+	db database.FoldersDataSource
 }
 
 type FolderResponse struct {
@@ -44,8 +43,8 @@ type DeleteFoldersRequest struct {
 	IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
 }
 
-func NewFoldersHandler(db database.Database) *FoldersHandler {
-	return &FoldersHandler{
+func NewFoldersService(db database.FoldersDataSource) *FoldersService {
+	return &FoldersService{
 		db: db,
 	}
 }
@@ -63,7 +62,7 @@ func NewFoldersHandler(db database.Database) *FoldersHandler {
 // @Failure      401      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /api/folders [post]
-func (h *FoldersHandler) CreateFolder(c *gin.Context) {
+func (h *FoldersService) CreateFolder(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -103,7 +102,7 @@ func (h *FoldersHandler) CreateFolder(c *gin.Context) {
 // @Failure      404  {object}  map[string]string
 // @Failure      500  {object}  map[string]string
 // @Router       /api/folders/{id} [get]
-func (h *FoldersHandler) GetFolder(c *gin.Context) {
+func (h *FoldersService) GetFolder(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -159,7 +158,7 @@ func (h *FoldersHandler) GetFolder(c *gin.Context) {
 // @Failure      401  {object}  map[string]string
 // @Failure      500  {object}  map[string]string
 // @Router       /api/folders [get]
-func (h *FoldersHandler) GetFolders(c *gin.Context) {
+func (h *FoldersService) GetFolders(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -189,7 +188,7 @@ func (h *FoldersHandler) GetFolders(c *gin.Context) {
 // @Failure      404      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /api/folders [put]
-func (h *FoldersHandler) UpdateFolders(c *gin.Context) {
+func (h *FoldersService) UpdateFolders(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -257,7 +256,7 @@ func (h *FoldersHandler) UpdateFolders(c *gin.Context) {
 // @Failure      404      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /api/folders [delete]
-func (h *FoldersHandler) DeleteFolders(c *gin.Context) {
+func (h *FoldersService) DeleteFolders(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
