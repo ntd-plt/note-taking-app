@@ -19,6 +19,8 @@ type FolderResponse struct {
 	ParentFolderID *uuid.UUID   `json:"parent_folder_id,omitempty"`
 	Name           string       `json:"name"`
 	UserID         string       `json:"user_id"`
+	Icon           string       `json:"icon"`
+	IsFavorite     bool         `json:"is_favorite"`
 	CreatedAt      string       `json:"created_at"`
 	UpdatedAt      string       `json:"updated_at"`
 	Children       []model.Item `json:"children,omitempty"`
@@ -27,12 +29,16 @@ type FolderResponse struct {
 type CreateFolderRequest struct {
 	Name           string     `json:"name" binding:"required"`
 	ParentFolderID *uuid.UUID `json:"parent_folder_id"`
+	Icon           string     `json:"icon"` // optional, defaults to 📁 when empty
+	IsFavorite     bool       `json:"is_favorite"`
 }
 
 type UpdateFolderItem struct {
 	ID             uuid.UUID  `json:"id" binding:"required"`
 	Name           string     `json:"name"`
 	ParentFolderID *uuid.UUID `json:"parent_folder_id"`
+	Icon           *string    `json:"icon"`
+	IsFavorite     *bool      `json:"is_favorite"`
 }
 
 type UpdateFoldersRequest struct {
@@ -78,6 +84,8 @@ func (h *FoldersService) CreateFolder(c *gin.Context) {
 		Name:           req.Name,
 		ParentFolderID: req.ParentFolderID,
 		UserID:         userID.(uuid.UUID),
+		Icon:           req.Icon,
+		IsFavorite:     req.IsFavorite,
 	}
 
 	createdFolder, err := h.db.CreateFolder(folder)
@@ -142,6 +150,8 @@ func (h *FoldersService) GetFolder(c *gin.Context) {
 		ParentFolderID: folder.ParentFolderID,
 		Name:           folder.Name,
 		UserID:         folder.UserID.String(),
+		Icon:           folder.Icon,
+		IsFavorite:     folder.IsFavorite,
 		CreatedAt:      folder.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      folder.UpdatedAt.Format(time.RFC3339),
 		Children:       children,
@@ -176,7 +186,7 @@ func (h *FoldersService) GetFolders(c *gin.Context) {
 
 // UpdateFolders godoc
 // @Summary      Update multiple folders
-// @Description  Updates the name and/or parent of one or more folders in a single batch
+// @Description  Updates the name, parent, icon and/or favorite flag of one or more folders in a single batch
 // @Tags         folders
 // @Accept       json
 // @Produce      json
@@ -231,6 +241,12 @@ func (h *FoldersService) UpdateFolders(c *gin.Context) {
 
 		folder.Name = f.Name
 		folder.ParentFolderID = f.ParentFolderID
+		if f.Icon != nil {
+			folder.Icon = *f.Icon
+		}
+		if f.IsFavorite != nil {
+			folder.IsFavorite = *f.IsFavorite
+		}
 		folders = append(folders, folder)
 	}
 

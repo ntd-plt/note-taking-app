@@ -16,30 +16,38 @@ type NotesService struct {
 }
 
 type CreateNoteRequest struct {
-	ID       uuid.UUID  `json:"id"` // optional, if not provided, a new UUID will be generated
-	Title    string     `json:"title" binding:"required"`
-	Content  string     `json:"content"`
-	FolderID *uuid.UUID `json:"folder_id"` // nil to create the note outside any folder
+	ID         uuid.UUID  `json:"id"` // optional, if not provided, a new UUID will be generated
+	Title      string     `json:"title" binding:"required"`
+	Content    string     `json:"content"`
+	FolderID   *uuid.UUID `json:"folder_id"` // nil to create the note outside any folder
+	Icon       string     `json:"icon"`      // optional, defaults to 📄 when empty
+	IsFavorite bool       `json:"is_favorite"`
 }
 
 type UpdateNoteItem struct {
-	ID       uuid.UUID
-	Title    *string
-	Content  *string
-	FolderID *uuid.UUID
+	ID         uuid.UUID
+	Title      *string
+	Content    *string
+	FolderID   *uuid.UUID
+	Icon       *string
+	IsFavorite *bool
 
 	// Flags to track presence in JSON
 	UpdateTitle    bool
 	UpdateContent  bool
 	UpdateFolderID bool
+	UpdateIcon     bool
+	UpdateFavorite bool
 }
 
 func (item *UpdateNoteItem) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		ID       uuid.UUID  `json:"id" binding:"required"`
-		Title    *string    `json:"title"`
-		Content  *string    `json:"content"`
-		FolderID *uuid.UUID `json:"folder_id"`
+		ID         uuid.UUID  `json:"id" binding:"required"`
+		Title      *string    `json:"title"`
+		Content    *string    `json:"content"`
+		FolderID   *uuid.UUID `json:"folder_id"`
+		Icon       *string    `json:"icon"`
+		IsFavorite *bool      `json:"is_favorite"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -49,6 +57,8 @@ func (item *UpdateNoteItem) UnmarshalJSON(data []byte) error {
 	item.Title = aux.Title
 	item.Content = aux.Content
 	item.FolderID = aux.FolderID
+	item.Icon = aux.Icon
+	item.IsFavorite = aux.IsFavorite
 
 	var raw map[string]interface{}
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -57,6 +67,8 @@ func (item *UpdateNoteItem) UnmarshalJSON(data []byte) error {
 	_, item.UpdateTitle = raw["title"]
 	_, item.UpdateContent = raw["content"]
 	_, item.UpdateFolderID = raw["folder_id"]
+	_, item.UpdateIcon = raw["icon"]
+	_, item.UpdateFavorite = raw["is_favorite"]
 
 	return nil
 }
@@ -102,11 +114,13 @@ func (h *NotesService) CreateNote(c *gin.Context) {
 	}
 
 	note := model.Note{
-		ID:       req.ID,
-		Title:    req.Title,
-		Content:  req.Content,
-		FolderID: req.FolderID,
-		UserID:   userID.(uuid.UUID),
+		ID:         req.ID,
+		Title:      req.Title,
+		Content:    req.Content,
+		FolderID:   req.FolderID,
+		UserID:     userID.(uuid.UUID),
+		Icon:       req.Icon,
+		IsFavorite: req.IsFavorite,
 	}
 
 	createdNote, err := h.db.CreateNote(note)
@@ -175,7 +189,7 @@ func (h *NotesService) GetNotes(c *gin.Context) {
 
 // UpdateNotes godoc
 // @Summary      Update multiple notes
-// @Description  Updates the title and/or content of one or more notes in a single batch
+// @Description  Updates the title, content, folder, icon and/or favorite flag of one or more notes in a single batch
 // @Tags         notes
 // @Accept       json
 // @Produce      json
@@ -221,6 +235,12 @@ func (h *NotesService) UpdateNotes(c *gin.Context) {
 		}
 		if noteReq.UpdateFolderID {
 			note.FolderID = noteReq.FolderID
+		}
+		if noteReq.UpdateIcon && noteReq.Icon != nil {
+			note.Icon = *noteReq.Icon
+		}
+		if noteReq.UpdateFavorite && noteReq.IsFavorite != nil {
+			note.IsFavorite = *noteReq.IsFavorite
 		}
 		notes = append(notes, note)
 	}

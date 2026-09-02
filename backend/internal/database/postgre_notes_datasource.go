@@ -21,8 +21,12 @@ func (db *PostgreNotesDataSource) CreateNote(note user.Note) (user.Note, error) 
 	if note.ID == uuid.Nil {
 		note.ID = uuid.New()
 	}
-	queryString := "INSERT INTO notes (id, folder_id, user_id, title, content) VALUES ($1, $2, $3, $4, $5) RETURNING created_at, updated_at"
-	err := db.conn.QueryRow(context.Background(), queryString, note.ID, note.FolderID, note.UserID, note.Title, note.Content).Scan(&note.CreatedAt, &note.UpdatedAt)
+	queryString := `
+		INSERT INTO notes (id, folder_id, user_id, title, content, icon, is_favorite)
+		VALUES ($1, $2, $3, $4, $5, COALESCE(NULLIF($6, ''), '📄'), $7)
+		RETURNING icon, is_favorite, created_at, updated_at`
+	err := db.conn.QueryRow(context.Background(), queryString, note.ID, note.FolderID, note.UserID, note.Title, note.Content, note.Icon, note.IsFavorite).
+		Scan(&note.Icon, &note.IsFavorite, &note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
 		return user.Note{}, err
 	}
@@ -31,8 +35,9 @@ func (db *PostgreNotesDataSource) CreateNote(note user.Note) (user.Note, error) 
 
 func (db *PostgreNotesDataSource) GetNoteByID(id uuid.UUID) (user.Note, error) {
 	var note user.Note
-	queryString := "SELECT id, folder_id, title, content, user_id, created_at, updated_at FROM notes WHERE id = $1"
-	err := db.conn.QueryRow(context.Background(), queryString, id).Scan(&note.ID, &note.FolderID, &note.Title, &note.Content, &note.UserID, &note.CreatedAt, &note.UpdatedAt)
+	queryString := "SELECT id, folder_id, title, content, user_id, icon, is_favorite, created_at, updated_at FROM notes WHERE id = $1"
+	err := db.conn.QueryRow(context.Background(), queryString, id).
+		Scan(&note.ID, &note.FolderID, &note.Title, &note.Content, &note.UserID, &note.Icon, &note.IsFavorite, &note.CreatedAt, &note.UpdatedAt)
 	if err != nil {
 		return user.Note{}, err
 	}
@@ -40,7 +45,7 @@ func (db *PostgreNotesDataSource) GetNoteByID(id uuid.UUID) (user.Note, error) {
 }
 
 func (db *PostgreNotesDataSource) GetNotesByUserID(userID uuid.UUID) ([]user.Note, error) {
-	queryString := "SELECT id, folder_id, title, content, user_id, created_at, updated_at FROM notes WHERE user_id = $1"
+	queryString := "SELECT id, folder_id, title, content, user_id, icon, is_favorite, created_at, updated_at FROM notes WHERE user_id = $1"
 	rows, err := db.conn.Query(context.Background(), queryString, userID)
 	if err != nil {
 		return nil, err
@@ -50,7 +55,7 @@ func (db *PostgreNotesDataSource) GetNotesByUserID(userID uuid.UUID) ([]user.Not
 	var notes []user.Note
 	for rows.Next() {
 		var note user.Note
-		if err := rows.Scan(&note.ID, &note.FolderID, &note.Title, &note.Content, &note.UserID, &note.CreatedAt, &note.UpdatedAt); err != nil {
+		if err := rows.Scan(&note.ID, &note.FolderID, &note.Title, &note.Content, &note.UserID, &note.Icon, &note.IsFavorite, &note.CreatedAt, &note.UpdatedAt); err != nil {
 			return nil, err
 		}
 		notes = append(notes, note)
@@ -63,16 +68,23 @@ func (db *PostgreNotesDataSource) UpdateNotes(notes []user.Note) error {
 	titles := make([]string, len(notes))
 	contents := make([]string, len(notes))
 	folderIDs := make([]*uuid.UUID, len(notes))
+	icons := make([]string, len(notes))
+	favorites := make([]bool, len(notes))
 	for i, note := range notes {
 		ids[i], titles[i], contents[i], folderIDs[i] = note.ID, note.Title, note.Content, note.FolderID
+		icons[i], favorites[i] = note.Icon, note.IsFavorite
 	}
 
 	queryString := `
 		UPDATE notes AS n
-		SET title = u.title, content = u.content, folder_id = u.folder_id, updated_at = NOW()
-		FROM (SELECT * FROM UNNEST($1::uuid[], $2::text[], $3::text[], $4::uuid[]) AS t(id, title, content, folder_id)) AS u
+		SET title = u.title, content = u.content, folder_id = u.folder_id,
+		    icon = u.icon, is_favorite = u.is_favorite, updated_at = NOW()
+		FROM (
+			SELECT * FROM UNNEST($1::uuid[], $2::text[], $3::text[], $4::uuid[], $5::text[], $6::bool[])
+			AS t(id, title, content, folder_id, icon, is_favorite)
+		) AS u
 		WHERE n.id = u.id`
-	_, err := db.conn.Exec(context.Background(), queryString, ids, titles, contents, folderIDs)
+	_, err := db.conn.Exec(context.Background(), queryString, ids, titles, contents, folderIDs, icons, favorites)
 	return err
 }
 

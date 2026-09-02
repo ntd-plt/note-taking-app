@@ -4,8 +4,12 @@ definitions:
     properties:
       created_at:
         type: string
+      icon:
+        type: string
       id:
         type: string
+      is_favorite:
+        type: boolean
       name:
         type: string
       parent_folder_id:
@@ -37,8 +41,12 @@ definitions:
       folder_id:
         description: nil for notes outside any folder
         type: string
+      icon:
+        type: string
       id:
         type: string
+      is_favorite:
+        type: boolean
       title:
         type: string
       updated_at:
@@ -88,6 +96,11 @@ definitions:
     type: object
   internal_services.CreateFolderRequest:
     properties:
+      icon:
+        description: "optional, defaults to \U0001F4C1 when empty"
+        type: string
+      is_favorite:
+        type: boolean
       name:
         type: string
       parent_folder_id:
@@ -102,9 +115,14 @@ definitions:
       folder_id:
         description: nil to create the note outside any folder
         type: string
+      icon:
+        description: "optional, defaults to \U0001F4C4 when empty"
+        type: string
       id:
         description: optional, if not provided, a new UUID will be generated
         type: string
+      is_favorite:
+        type: boolean
       title:
         type: string
     required:
@@ -138,8 +156,12 @@ definitions:
         type: array
       created_at:
         type: string
+      icon:
+        type: string
       id:
         type: string
+      is_favorite:
+        type: boolean
       name:
         type: string
       parent_folder_id:
@@ -151,8 +173,12 @@ definitions:
     type: object
   internal_services.UpdateFolderItem:
     properties:
+      icon:
+        type: string
       id:
         type: string
+      is_favorite:
+        type: boolean
       name:
         type: string
       parent_folder_id:
@@ -176,13 +202,21 @@ definitions:
         type: string
       folderID:
         type: string
+      icon:
+        type: string
       id:
         type: string
+      isFavorite:
+        type: boolean
       title:
         type: string
       updateContent:
         type: boolean
+      updateFavorite:
+        type: boolean
       updateFolderID:
+        type: boolean
+      updateIcon:
         type: boolean
       updateTitle:
         description: Flags to track presence in JSON
@@ -327,8 +361,8 @@ paths:
     put:
       consumes:
       - application/json
-      description: Updates the name and/or parent of one or more folders in a single
-        batch
+      description: Updates the name, parent, icon and/or favorite flag of one or more
+        folders in a single batch
       parameters:
       - description: Folders to update
         in: body
@@ -514,8 +548,8 @@ paths:
     put:
       consumes:
       - application/json
-      description: Updates the title and/or content of one or more notes in a single
-        batch
+      description: Updates the title, content, folder, icon and/or favorite flag of
+        one or more notes in a single batch
       parameters:
       - description: Notes to update
         in: body

@@ -66,7 +66,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates the name and/or parent of one or more folders in a single batch",
+                "description": "Updates the name, parent, icon and/or favorite flag of one or more folders in a single batch",
                 "consumes": [
                     "application/json"
                 ],
@@ -354,7 +354,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates the title and/or content of one or more notes in a single batch",
+                "description": "Updates the title, content, folder, icon and/or favorite flag of one or more notes in a single batch",
                 "consumes": [
                     "application/json"
                 ],
@@ -808,8 +808,14 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"
@@ -857,8 +863,14 @@ const docTemplate = `{
                     "description": "nil for notes outside any folder",
                     "type": "string"
                 },
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "title": {
                     "type": "string"
@@ -936,6 +948,13 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "icon": {
+                    "description": "optional, defaults to 📁 when empty",
+                    "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -957,9 +976,16 @@ const docTemplate = `{
                     "description": "nil to create the note outside any folder",
                     "type": "string"
                 },
+                "icon": {
+                    "description": "optional, defaults to 📄 when empty",
+                    "type": "string"
+                },
                 "id": {
                     "description": "optional, if not provided, a new UUID will be generated",
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "title": {
                     "type": "string"
@@ -1008,8 +1034,14 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"
@@ -1031,8 +1063,14 @@ const docTemplate = `{
                 "id"
             ],
             "properties": {
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"
@@ -1066,8 +1104,14 @@ const docTemplate = `{
                 "folderID": {
                     "type": "string"
                 },
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "isFavorite": {
+                    "type": "boolean"
                 },
                 "title": {
                     "type": "string"
@@ -1075,7 +1119,13 @@ const docTemplate = `{
                 "updateContent": {
                     "type": "boolean"
                 },
+                "updateFavorite": {
+                    "type": "boolean"
+                },
                 "updateFolderID": {
+                    "type": "boolean"
+                },
+                "updateIcon": {
                     "type": "boolean"
                 },
                 "updateTitle": {
