@@ -215,7 +215,7 @@ function EditorWithSlash() {
       <div className="h-full" onMouseLeave={handleMouseLeave}>
         <Card
           ref={cardRef}
-          className="relative h-full border-none shadow-none rounded-none bg-background flex flex-col overflow-y-auto"
+          className="relative h-full border-none shadow-none rounded-none bg-background flex flex-col overflow-y-auto pt-2"
         >
           {/* Editor Page Header / Meta Block */}
           <EditorHeader
