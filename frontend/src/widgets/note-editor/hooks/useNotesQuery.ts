@@ -110,19 +110,29 @@ export function useUpdateNote() {
   return { updateNote, isSaving: mutation.isPending }
 }
 
+function creationDefaults(newNote: Partial<Note>) {
+  const title = newNote.title || 'Untitled Note'
+  const escapedTitle = title
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+  return {
+    title,
+    content:
+      newNote.content ?? `<h1>${escapedTitle}</h1><p>Start writing here...</p>`,
+    parentId: newNote.parentId || null,
+    icon: newNote.icon || '📄',
+    isFavorite: newNote.isFavorite ?? false,
+  }
+}
+
 export function useCreateNote() {
   const queryClient = useQueryClient()
   const setActiveNoteId = useNotesStore((state) => state.setActiveNoteId)
 
   return useMutation({
     mutationFn: async (newNote: Partial<Note>) => {
-      const mapped = await api.createNote({
-        title: newNote.title || 'Untitled Note',
-        content: newNote.content || '',
-        parentId: newNote.parentId || null,
-        icon: newNote.icon || '📄',
-        isFavorite: newNote.isFavorite || false,
-      })
+      const mapped = await api.createNote(creationDefaults(newNote))
       return mapped
     },
     onMutate: async (newNote) => {
@@ -132,32 +142,42 @@ export function useCreateNote() {
       const id = newNote.id || generateUUID()
       const optimisticNote: Note = {
         id,
-        title: newNote.title || 'Untitled Note',
-        parentId: newNote.parentId || null,
-        icon: newNote.icon || '📄',
-        content:
-          newNote.content ||
-          `<h1>${newNote.title || 'Untitled Note'}</h1><p>Start writing here...</p>`,
+        ...creationDefaults(newNote),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
 
       await queryClient.cancelQueries({ queryKey: ['notes'] })
+      const previousActiveNoteId = useNotesStore.getState().activeNoteId
       queryClient.setQueryData<Note[]>(['notes'], (old) => [
         ...(old || []),
         optimisticNote,
       ])
       setActiveNoteId(id)
 
-      return { optimisticId: id }
+      return { optimisticId: id, previousActiveNoteId }
     },
     onSuccess: (createdNote, _variables, context) => {
       queryClient.setQueryData<Note[]>(['notes'], (old) => {
         if (!old) return [createdNote]
         return old.map((n) => (n.id === context.optimisticId ? createdNote : n))
       })
-      if (context.optimisticId) {
+      if (useNotesStore.getState().activeNoteId === context.optimisticId) {
         setActiveNoteId(createdNote.id)
+      }
+    },
+    onError: (_error, _variables, context) => {
+      if (!context) return
+      queryClient.setQueryData<Note[]>(['notes'], (old) =>
+        (old || []).filter((note) => note.id !== context.optimisticId),
+      )
+      if (useNotesStore.getState().activeNoteId === context.optimisticId) {
+        const notes = queryClient.getQueryData<Note[]>(['notes']) || []
+        setActiveNoteId(
+          notes.some((note) => note.id === context.previousActiveNoteId)
+            ? context.previousActiveNoteId
+            : null,
+        )
       }
     },
     onSettled: () => {

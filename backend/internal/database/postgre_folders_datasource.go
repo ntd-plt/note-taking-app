@@ -63,9 +63,13 @@ func (db *PostgreFoldersDataSource) GetFoldersByIDs(ids []uuid.UUID) ([]user.Fol
 
 func (db *PostgreFoldersDataSource) GetFolderChildrenByID(id uuid.UUID) ([]user.Item, error) {
 	queryString := `
-		SELECT id::text, name, 'folder' AS type, updated_at FROM folders WHERE parent_folder_id = $1
-		UNION ALL
-		SELECT id::text, title AS name, 'note' AS type, updated_at FROM notes WHERE folder_id = $1`
+		SELECT id, name, type, updated_at
+		FROM (
+			SELECT id::text, name, 'folder' AS type, updated_at, created_at FROM folders WHERE parent_folder_id = $1
+			UNION ALL
+			SELECT id::text, title AS name, 'note' AS type, updated_at, created_at FROM notes WHERE folder_id = $1
+		) AS children
+		ORDER BY CASE WHEN type = 'folder' THEN 0 ELSE 1 END, created_at ASC, id ASC`
 	rows, err := db.conn.Query(context.Background(), queryString, id)
 	if err != nil {
 		return nil, err

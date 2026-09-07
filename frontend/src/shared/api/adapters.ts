@@ -18,7 +18,7 @@ export function mapBackendNote(n: any): Note {
     title: n.title,
     content: n.content,
     parentId: n.folder_id || null,
-    isFavorite: n.isFavorite || false,
+    isFavorite: n.is_favorite ?? false,
     icon: n.icon || '📄',
     createdAt: n.created_at,
     updatedAt: n.updated_at,
@@ -37,7 +37,7 @@ export function toBackendNote(n: Partial<Note>): any {
   if (n.title !== undefined) payload.title = n.title
   if (n.content !== undefined) payload.content = n.content
   if (n.parentId !== undefined) payload.folder_id = n.parentId
-  if (n.isFavorite !== undefined) payload.isFavorite = n.isFavorite
+  if (n.isFavorite !== undefined) payload.is_favorite = n.isFavorite
   if (n.icon !== undefined) payload.icon = n.icon
   return payload
 }

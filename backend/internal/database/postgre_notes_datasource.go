@@ -45,7 +45,7 @@ func (db *PostgreNotesDataSource) GetNoteByID(id uuid.UUID) (user.Note, error) {
 }
 
 func (db *PostgreNotesDataSource) GetNotesByUserID(userID uuid.UUID) ([]user.Note, error) {
-	queryString := "SELECT id, folder_id, title, content, user_id, icon, is_favorite, created_at, updated_at FROM notes WHERE user_id = $1"
+	queryString := "SELECT id, folder_id, title, content, user_id, icon, is_favorite, created_at, updated_at FROM notes WHERE user_id = $1 ORDER BY created_at ASC, id ASC"
 	rows, err := db.conn.Query(context.Background(), queryString, userID)
 	if err != nil {
 		return nil, err

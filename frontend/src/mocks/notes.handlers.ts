@@ -1,5 +1,5 @@
 // src/mocks/notes.handlers.ts
-import { http, HttpResponse, delay } from 'msw'
+import { http, HttpResponse } from 'msw'
 import type { Note } from '#/widgets/note-editor/model'
 import initialNotes from './initialNotes'
 
@@ -11,7 +11,7 @@ const toBackendNoteShape = (n: Note) => ({
   title: n.title,
   content: n.content,
   folder_id: n.parentId,
-  isFavorite: n.isFavorite,
+  is_favorite: n.isFavorite,
   icon: n.icon,
   created_at: n.createdAt,
   updated_at: n.updatedAt,
@@ -39,21 +39,19 @@ export const notesHandlers = [
   // POST create a new note
   http.post('/api/notes', async ({ request }) => {
     const body = (await request.json()) as any
-    const id = body.id || Math.random().toString(36).substring(2, 9)
+    const id = body.id || crypto.randomUUID()
     const newNote: Note = {
       id,
       title: body.title || 'Untitled Note',
       parentId: body.folder_id || null,
       icon: body.icon || '📄',
-      content:
-        body.content ||
-        `<h1>${body.title || 'Untitled Note'}</h1><p>Start writing here...</p>`,
-      isFavorite: body.isFavorite || false,
+      content: body.content ?? '',
+      isFavorite: body.is_favorite ?? false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
     mockNotes.push(newNote)
-    return HttpResponse.json(toBackendNoteShape(newNote))
+    return HttpResponse.json(toBackendNoteShape(newNote), { status: 201 })
   }),
 
   // PUT update notes (batch update)
@@ -65,6 +63,8 @@ export const notesHandlers = [
       if (index !== -1) {
         mockNotes[index] = {
           ...mockNotes[index],
+          icon: noteReq.icon ?? mockNotes[index].icon,
+          isFavorite: noteReq.is_favorite ?? mockNotes[index].isFavorite,
           title:
             noteReq.title !== undefined
               ? noteReq.title
