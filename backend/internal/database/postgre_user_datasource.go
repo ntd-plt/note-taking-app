@@ -51,6 +51,22 @@ func (db *PostgreUserDataSource) GetUserByID(id uuid.UUID) (user.User, error) {
 	return u, nil
 }
 
+func (db *PostgreUserDataSource) UpdateUser(u user.User) error {
+	queryString := "UPDATE users SET name = $1, email = $2, updated_at = NOW() WHERE id = $3"
+	tag, err := db.conn.Exec(context.Background(), queryString, u.Name, u.Email, u.ID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if stderrors.As(err, &pgErr) && pgErr.Code == postgresUniqueViolationCode {
+			return pkg.NewAlreadyExistsError("user with this email")
+		}
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pkg.NewNotFoundError("user")
+	}
+	return nil
+}
+
 func (db *PostgreUserDataSource) AddUser(u user.User) error {
 	_, err := db.conn.Exec(context.Background(), "INSERT INTO users (id, name, email, password_hash, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)", u.ID, u.Name, u.Email, u.PasswordHash, u.CreatedAt, u.UpdatedAt)
 	if err != nil {

@@ -26,11 +26,30 @@ import {
 import { PanelLeftIcon } from 'lucide-react'
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state'
+const SIDEBAR_WIDTH_COOKIE_NAME = 'sidebar_width'
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = '16rem'
 const SIDEBAR_WIDTH_MOBILE = '18rem'
 const SIDEBAR_WIDTH_ICON = '3rem'
 const SIDEBAR_KEYBOARD_SHORTCUT = 'b'
+
+// Resizable sidebar bounds (px). The rail drags --sidebar-width between these.
+const SIDEBAR_WIDTH_DEFAULT = 256
+const SIDEBAR_WIDTH_MIN = 180
+const SIDEBAR_WIDTH_MAX = 480
+
+const clampSidebarWidth = (w: number) =>
+  Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(w)))
+
+function readSidebarWidthCookie() {
+  if (typeof document === 'undefined') return SIDEBAR_WIDTH_DEFAULT
+  const match = document.cookie.match(
+    new RegExp(`(?:^|; )${SIDEBAR_WIDTH_COOKIE_NAME}=([^;]+)`),
+  )
+  const parsed = match ? parseInt(match[1], 10) : NaN
+  return Number.isFinite(parsed)
+    ? clampSidebarWidth(parsed)
+    : SIDEBAR_WIDTH_DEFAULT
+}
 
 type SidebarContextProps = {
   state: 'expanded' | 'collapsed'
@@ -40,6 +59,11 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
+  width: number
+  setWidth: (width: number) => void
+  resetWidth: () => void
+  isResizing: boolean
+  setIsResizing: (resizing: boolean) => void
 }
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -94,6 +118,20 @@ function SidebarProvider({
       : setOpen((prevOpen) => !prevOpen)
   }, [isMobile, setOpen, setOpenMobile])
 
+  // Resizable width, driven by dragging <SidebarRail />. Persisted in a cookie.
+  const [width, _setWidth] = React.useState<number>(readSidebarWidthCookie)
+  const [isResizing, setIsResizing] = React.useState(false)
+
+  const setWidth = React.useCallback((value: number) => {
+    const next = clampSidebarWidth(value)
+    _setWidth(next)
+    document.cookie = `${SIDEBAR_WIDTH_COOKIE_NAME}=${next}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+  }, [])
+
+  const resetWidth = React.useCallback(() => {
+    setWidth(SIDEBAR_WIDTH_DEFAULT)
+  }, [setWidth])
+
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -123,23 +161,43 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
+      width,
+      setWidth,
+      resetWidth,
+      isResizing,
+      setIsResizing,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar],
+    [
+      state,
+      open,
+      setOpen,
+      isMobile,
+      openMobile,
+      setOpenMobile,
+      toggleSidebar,
+      width,
+      setWidth,
+      resetWidth,
+      isResizing,
+    ],
   )
 
   return (
     <SidebarContext.Provider value={contextValue}>
       <div
         data-slot="sidebar-wrapper"
+        data-resizing={isResizing || undefined}
         style={
           {
-            '--sidebar-width': SIDEBAR_WIDTH,
+            '--sidebar-width': `${width}px`,
             '--sidebar-width-icon': SIDEBAR_WIDTH_ICON,
             ...style,
           } as React.CSSProperties
         }
         className={cn(
           'group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar',
+          // Kill width transitions mid-drag so the sidebar tracks the cursor 1:1.
+          'data-[resizing]:[&_*]:!transition-none data-[resizing]:select-none',
           className,
         )}
         {...props}
@@ -279,20 +337,57 @@ function SidebarTrigger({
 }
 
 function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, state, setWidth, resetWidth, setIsResizing } =
+    useSidebar()
+
+  const handlePointerDown = React.useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      // When collapsed the rail can't resize anything — fall back to opening.
+      if (state === 'collapsed') {
+        toggleSidebar()
+        return
+      }
+
+      event.preventDefault()
+      const sidebarEl = event.currentTarget.closest<HTMLElement>(
+        '[data-slot="sidebar"]',
+      )
+      const side = sidebarEl?.dataset.side === 'right' ? 'right' : 'left'
+
+      setIsResizing(true)
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        const next =
+          side === 'right'
+            ? window.innerWidth - moveEvent.clientX
+            : moveEvent.clientX
+        setWidth(next)
+      }
+
+      const handleUp = () => {
+        setIsResizing(false)
+        window.removeEventListener('pointermove', handleMove)
+        window.removeEventListener('pointerup', handleUp)
+      }
+
+      window.addEventListener('pointermove', handleMove)
+      window.addEventListener('pointerup', handleUp)
+    },
+    [state, toggleSidebar, setWidth, setIsResizing],
+  )
 
   return (
     <button
       data-sidebar="rail"
       data-slot="sidebar-rail"
-      aria-label="Toggle Sidebar"
+      aria-label="Resize Sidebar"
       tabIndex={-1}
-      onClick={toggleSidebar}
-      title="Toggle Sidebar"
+      onPointerDown={handlePointerDown}
+      onDoubleClick={resetWidth}
+      title="Drag to resize · double-click to reset"
       className={cn(
         'absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2',
-        'in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize',
-        '[[data-side=left][data-state=collapsed]_&]:cursor-e-resize [[data-side=right][data-state=collapsed]_&]:cursor-w-resize',
+        'cursor-col-resize group-data-[state=collapsed]:cursor-e-resize',
         'group-data-[collapsible=offcanvas]:translate-x-0 group-data-[collapsible=offcanvas]:after:left-full hover:group-data-[collapsible=offcanvas]:bg-sidebar',
         '[[data-side=left][data-collapsible=offcanvas]_&]:-right-2',
         '[[data-side=right][data-collapsible=offcanvas]_&]:-left-2',

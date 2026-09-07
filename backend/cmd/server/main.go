@@ -50,7 +50,7 @@ func main() {
 	notesService := services.NewNotesService(notesDataSource)
 	foldersService := services.NewFoldersService(foldersDataSource)
 
-	router := NewRouter(authService, notesService, foldersService, tokenService, !cfg.IsProduction())
+	router := NewRouter(authService, userService, notesService, foldersService, tokenService, !cfg.IsProduction())
 	if err := router.Run(":8080"); err != nil {
 		panic(err)
 	}

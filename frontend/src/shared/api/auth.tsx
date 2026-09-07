@@ -4,7 +4,33 @@ import type {
   LoginCredentials,
   RegisterCredentials,
   AuthResponse,
+  User,
 } from '../models'
+
+// Shape returned by the backend GET /api/user/:id endpoint, after the api
+// client has camelized the snake_case keys.
+interface UserApiResponse {
+  id: string
+  name: string
+  email: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * Fetches the authenticated user's profile from the backend and maps it onto
+ * the frontend User shape (backend `name` -> `username`).
+ */
+export async function fetchUserById(id: string): Promise<User> {
+  const data = await apiClient.get<UserApiResponse>(`/api/user/${id}`)
+  return {
+    id: data.id,
+    username: data.name,
+    email: data.email,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  }
+}
 
 function decodeJwt(token: string): any {
   try {
@@ -88,10 +114,20 @@ export async function login(
     }
 
     const decoded = decodeJwt(data.accessToken)
-    const user = {
-      id: decoded?.user_id || 'abc-123',
+    const userId = decoded?.user_id || 'abc-123'
+
+    // Pull the real profile from the backend before the session starts, so
+    // the app enters with the persisted name/email instead of values guessed
+    // from the login form. Fall back to those guesses if the call fails.
+    let user: User = {
+      id: userId,
       username: credentials.email.split('@')[0],
       email: credentials.email,
+    }
+    try {
+      user = await fetchUserById(userId)
+    } catch (error) {
+      console.error('Failed to load user profile after login:', error)
     }
     localStorage.setItem('user_profile', JSON.stringify(user))
 

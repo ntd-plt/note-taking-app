@@ -26,6 +26,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import {
   DropdownMenu,
@@ -68,6 +69,8 @@ import {
   HelpCircle,
   Undo,
   FolderPlus,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import NoteTreeItem from './NodeTreeItem'
@@ -87,8 +90,31 @@ export interface NodeSidebarProps {
   data?: NoteSidebarData
 }
 
+/**
+ * Floating button anchored to the top-left of the page, shown only while the
+ * sidebar is closed, that opens it again.
+ */
+function SidebarOpenButton() {
+  const { isMobile, openMobile, state, setOpen, setOpenMobile } = useSidebar()
+  const isClosed = isMobile ? !openMobile : state === 'collapsed'
+
+  if (!isClosed) return null
+
+  return (
+    <button
+      onClick={() => (isMobile ? setOpenMobile(true) : setOpen(true))}
+      title="Open sidebar"
+      aria-label="Open sidebar"
+      className="fixed left-3 top-3 z-30 flex h-8 w-8 items-center justify-center rounded-md border border-border/40 bg-background/90 text-muted-foreground shadow-sm backdrop-blur-md transition-all hover:bg-accent hover:text-foreground cursor-pointer animate-in fade-in slide-in-from-left-2 duration-200"
+    >
+      <PanelLeft className="h-4 w-4" />
+    </button>
+  )
+}
+
 export function AppSidebar() {
   const navigate = useNavigate()
+  const { toggleSidebar } = useSidebar()
   const [user, setUser] = React.useState<{
     name: string
     email: string
@@ -413,47 +439,58 @@ export function AppSidebar() {
 
   return (
     <>
+      <SidebarOpenButton />
       <Sidebar className="border-r border-sidebar-border/30 bg-sidebar/95 backdrop-blur-md">
         {/* Workspace Profile Switcher Header */}
         <SidebarHeader className="border-b border-sidebar-border/20 px-4 py-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-all hover:bg-sidebar-accent/50 focus:outline-none">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary font-heading font-semibold shadow-sm ring-1 ring-primary/20">
-                    {initials}
+          <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex min-w-0 flex-1 items-center justify-between rounded-lg px-2 py-1.5 text-left transition-all hover:bg-sidebar-accent/50 focus:outline-none">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary font-heading font-semibold shadow-sm ring-1 ring-primary/20">
+                      {initials}
+                    </div>
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] font-semibold tracking-wide text-sidebar-foreground">
+                        {displayName} (Free Plan)
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-col text-left">
-                    <span className="text-[10px] font-semibold tracking-wide text-sidebar-foreground">
-                      {displayName} (Free Plan)
-                    </span>
-                  </div>
-                </div>
-                <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground opacity-60" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              className="w-56"
-              align="start"
-              side="bottom"
-              sideOffset={6}
-            >
-              <DropdownMenuGroup>
-                <DropdownMenuItem className="text-xs px-2 py-1.5 cursor-pointer">
-                  <User className="mr-2 h-3.5 w-3.5 opacity-60" />
-                  <span>Profile Settings</span>
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleLogout}
-                className="text-xs text-destructive hover:text-destructive px-2 py-1.5 cursor-pointer"
+                  <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground opacity-60" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-56"
+                align="start"
+                side="bottom"
+                sideOffset={6}
               >
-                <LogOut className="mr-2 h-3.5 w-3.5 opacity-60" />
-                <span>Log Out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuGroup>
+                  <DropdownMenuItem className="text-xs px-2 py-1.5 cursor-pointer">
+                    <User className="mr-2 h-3.5 w-3.5 opacity-60" />
+                    <span>Profile Settings</span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className="text-xs text-destructive hover:text-destructive px-2 py-1.5 cursor-pointer"
+                >
+                  <LogOut className="mr-2 h-3.5 w-3.5 opacity-60" />
+                  <span>Log Out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <button
+              onClick={toggleSidebar}
+              title="Close sidebar"
+              aria-label="Close sidebar"
+              className="shrink-0 rounded-md p-1.5 text-muted-foreground/70 transition-all hover:bg-sidebar-accent/60 hover:text-foreground cursor-pointer"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </div>
         </SidebarHeader>
 
         {/* Sidebar Navigation Content */}

@@ -2,6 +2,8 @@ export interface User {
   id: string
   username: string
   email: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface AuthState {
@@ -31,6 +33,8 @@ export interface Folder {
   parentId: string | null // Points to another Folder's id, or null for root
   icon?: string // e.g., "📁", "🚀"
   isExpanded?: boolean // Local state for sidebar visibility
+  createdAt?: string // RFC3339 timestamp from the backend
+  updatedAt?: string // RFC3339 timestamp from the backend
 }
 
 export interface Note {
@@ -41,4 +45,6 @@ export interface Note {
   isFavorite?: boolean
   icon?: string // e.g., "📄"
   path?: string[]
+  createdAt?: string // RFC3339 timestamp from the backend
+  updatedAt?: string // RFC3339 timestamp from the backend
 }

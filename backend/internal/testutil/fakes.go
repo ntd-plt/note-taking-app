@@ -85,6 +85,17 @@ func (f *FakeDatabase) AddUser(user model.User) error {
 	return nil
 }
 
+func (f *FakeDatabase) UpdateUser(user model.User) error {
+	if err := f.Errs["UpdateUser"]; err != nil {
+		return err
+	}
+	if _, ok := f.Users[user.ID]; !ok {
+		return ErrUserNotFound
+	}
+	f.Users[user.ID] = user
+	return nil
+}
+
 func (f *FakeDatabase) CreateNote(note model.Note) (model.Note, error) {
 	if err := f.Errs["CreateNote"]; err != nil {
 		return model.Note{}, err

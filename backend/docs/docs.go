@@ -66,7 +66,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates the name and/or parent of one or more folders in a single batch",
+                "description": "Updates the name, parent, icon and/or favorite flag of one or more folders in a single batch",
                 "consumes": [
                     "application/json"
                 ],
@@ -354,7 +354,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Updates the title and/or content of one or more notes in a single batch",
+                "description": "Updates the title, content, folder, icon and/or favorite flag of one or more notes in a single batch",
                 "consumes": [
                     "application/json"
                 ],
@@ -626,6 +626,183 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/user/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the authenticated user's profile (never includes the password hash)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Get a user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_services.UserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates the authenticated user's own profile (name and/or email). Partial update: omitted fields are left unchanged.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users"
+                ],
+                "summary": "Update a user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to update",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_services.UpdateUserRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_services.UserResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/auth/login": {
             "post": {
                 "description": "Authenticates a user and returns access/refresh tokens",
@@ -808,8 +985,14 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"
@@ -857,8 +1040,14 @@ const docTemplate = `{
                     "description": "nil for notes outside any folder",
                     "type": "string"
                 },
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "title": {
                     "type": "string"
@@ -936,6 +1125,13 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "icon": {
+                    "description": "optional, defaults to 📁 when empty",
+                    "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -957,9 +1153,16 @@ const docTemplate = `{
                     "description": "nil to create the note outside any folder",
                     "type": "string"
                 },
+                "icon": {
+                    "description": "optional, defaults to 📄 when empty",
+                    "type": "string"
+                },
                 "id": {
                     "description": "optional, if not provided, a new UUID will be generated",
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "title": {
                     "type": "string"
@@ -1008,8 +1211,14 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"
@@ -1031,8 +1240,14 @@ const docTemplate = `{
                 "id"
             ],
             "properties": {
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "is_favorite": {
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"
@@ -1066,8 +1281,14 @@ const docTemplate = `{
                 "folderID": {
                     "type": "string"
                 },
+                "icon": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
+                },
+                "isFavorite": {
+                    "type": "boolean"
                 },
                 "title": {
                     "type": "string"
@@ -1075,7 +1296,13 @@ const docTemplate = `{
                 "updateContent": {
                     "type": "boolean"
                 },
+                "updateFavorite": {
+                    "type": "boolean"
+                },
                 "updateFolderID": {
+                    "type": "boolean"
+                },
+                "updateIcon": {
                     "type": "boolean"
                 },
                 "updateTitle": {
@@ -1096,6 +1323,37 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/internal_services.UpdateNoteItem"
                     }
+                }
+            }
+        },
+        "internal_services.UpdateUserRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_services.UserResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
                 }
             }
         }
