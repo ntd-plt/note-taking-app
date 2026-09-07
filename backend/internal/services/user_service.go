@@ -3,12 +3,36 @@ package services
 import (
 	"backend/internal/database"
 	"backend/internal/model"
+	"backend/internal/pkg"
+	stderrors "errors"
+	"net/http"
+	"strings"
+	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
 type UserService struct {
 	db database.UserDataSource
+}
+
+type UserResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+func newUserResponse(u model.User) UserResponse {
+	return UserResponse{
+		ID:        u.ID.String(),
+		Name:      u.Name,
+		Email:     u.Email,
+		CreatedAt: u.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: u.UpdatedAt.Format(time.RFC3339),
+	}
 }
 
 func NewUserService(db database.UserDataSource) *UserService {
@@ -29,4 +53,153 @@ func (s *UserService) CreateUser(name, email string, passwordHash []byte) (model
 		return model.User{}, err
 	}
 	return *newUser, nil
+}
+
+// GetUser godoc
+// @Summary      Get a user
+// @Description  Returns the authenticated user's profile (never includes the password hash)
+// @Tags         users
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "User ID"
+// @Success      200  {object}  UserResponse
+// @Failure      400  {object}  map[string]string
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /api/user/{id} [get]
+func (s *UserService) GetUser(c *gin.Context) {
+	authID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	// A user may only read their own record.
+	if id != authID.(uuid.UUID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to access this user"})
+		return
+	}
+
+	user, err := s.db.GetUserByID(id)
+	if err != nil {
+		var notFound *pkg.NotFoundError
+		if stderrors.As(err, &notFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, newUserResponse(user))
+}
+
+// UpdateUserRequest is a partial update: only the fields present in the JSON
+// body are changed. The password hash cannot be updated through this route.
+type UpdateUserRequest struct {
+	Name  *string `json:"name"`
+	Email *string `json:"email"`
+}
+
+// UpdateUser godoc
+// @Summary      Update a user
+// @Description  Updates the authenticated user's own profile (name and/or email). Partial update: omitted fields are left unchanged.
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id       path      string             true  "User ID"
+// @Param        request  body      UpdateUserRequest  true  "Fields to update"
+// @Success      200      {object}  UserResponse
+// @Failure      400      {object}  map[string]string
+// @Failure      401      {object}  map[string]string
+// @Failure      403      {object}  map[string]string
+// @Failure      404      {object}  map[string]string
+// @Failure      409      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
+// @Router       /api/user/{id} [put]
+func (s *UserService) UpdateUser(c *gin.Context) {
+	authID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		return
+	}
+
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	// A user may only update their own record.
+	if id != authID.(uuid.UUID) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this user"})
+		return
+	}
+
+	var req UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	user, err := s.db.GetUserByID(id)
+	if err != nil {
+		var notFound *pkg.NotFoundError
+		if stderrors.As(err, &notFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name cannot be empty"})
+			return
+		}
+		user.Name = name
+	}
+	if req.Email != nil {
+		email := normalizeEmail(*req.Email)
+		if email == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "email cannot be empty"})
+			return
+		}
+		user.Email = email
+	}
+
+	if err := s.db.UpdateUser(user); err != nil {
+		var alreadyExists *pkg.AlreadyExistsError
+		if stderrors.As(err, &alreadyExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		var notFound *pkg.NotFoundError
+		if stderrors.As(err, &notFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	// Re-read so the response carries the persisted updated_at.
+	updated, err := s.db.GetUserByID(id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, newUserResponse(updated))
 }

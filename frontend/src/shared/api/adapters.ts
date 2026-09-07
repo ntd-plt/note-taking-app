@@ -37,5 +37,7 @@ export function toBackendNote(n: Partial<Note>): any {
   if (n.title !== undefined) payload.title = n.title
   if (n.content !== undefined) payload.content = n.content
   if (n.parentId !== undefined) payload.folder_id = n.parentId
+  if (n.isFavorite !== undefined) payload.isFavorite = n.isFavorite
+  if (n.icon !== undefined) payload.icon = n.icon
   return payload
 }

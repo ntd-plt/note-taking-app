@@ -10,4 +10,5 @@ type UserDataSource interface {
 	GetUserByEmail(email string) (user.User, error)
 	GetUserByID(id uuid.UUID) (user.User, error)
 	AddUser(user user.User) error
+	UpdateUser(user user.User) error
 }

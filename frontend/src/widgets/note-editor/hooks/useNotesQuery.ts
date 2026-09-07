@@ -43,12 +43,20 @@ export function useUpdateNote() {
         updates.content !== undefined
           ? updates.content
           : currentNote?.content || ''
+      const icon =
+        updates.icon !== undefined ? updates.icon : currentNote?.icon || '📄'
 
-      const mapped = await api.updateNote(id, { title, content })
-      if (currentNote) {
-        mapped.icon = currentNote.icon
-        mapped.isFavorite = currentNote.isFavorite
-      }
+      const isFavorite =
+        updates.isFavorite !== undefined
+          ? updates.isFavorite
+          : currentNote?.isFavorite || false
+
+      const mapped = await api.updateNote(id, {
+        title,
+        icon,
+        content,
+        isFavorite,
+      })
       return mapped
     },
     onSuccess: () => {
@@ -112,9 +120,9 @@ export function useCreateNote() {
         title: newNote.title || 'Untitled Note',
         content: newNote.content || '',
         parentId: newNote.parentId || null,
+        icon: newNote.icon || '📄',
+        isFavorite: newNote.isFavorite || false,
       })
-      mapped.icon = newNote.icon || '📄'
-      mapped.isFavorite = newNote.isFavorite || false
       return mapped
     },
     onMutate: async (newNote) => {
@@ -201,9 +209,9 @@ export function useDuplicateNote() {
         title: `${noteToDup.title} (Copy)`,
         content: noteToDup.content,
         parentId: noteToDup.parentId || null,
+        icon: noteToDup.icon || '📄',
+        isFavorite: noteToDup.isFavorite || false,
       })
-      mapped.icon = noteToDup.icon || '📄'
-      mapped.isFavorite = false
       return mapped
     },
     onSuccess: (newNote) => {
