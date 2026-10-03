@@ -1,4 +1,5 @@
 import type { Note, Folder } from '../models'
+import type { ItemRef } from '../lib/hierarchy'
 
 export function mapBackendFolder(f: any): Folder {
   return {
@@ -40,4 +41,36 @@ export function toBackendNote(n: Partial<Note>): any {
   if (n.isFavorite !== undefined) payload.is_favorite = n.isFavorite
   if (n.icon !== undefined) payload.icon = n.icon
   return payload
+}
+
+export interface MoveResult {
+  moved: { folders: Folder[]; notes: Note[] }
+  created: { folders: Folder[]; notes: Note[] }
+}
+
+export function toBackendMoveRequest(
+  items: ItemRef[],
+  destinationId: string | null,
+): any {
+  return {
+    items: items.map(({ id, type }) => ({ id, type })),
+    destination_folder_id: destinationId,
+  }
+}
+
+export function toBackendDuplicateRequest(items: ItemRef[]): any {
+  return { items: items.map(({ id, type }) => ({ id, type })) }
+}
+
+export function mapBackendMoveResult(r: any): MoveResult {
+  return {
+    moved: {
+      folders: (r.moved?.folders ?? []).map(mapBackendFolder),
+      notes: (r.moved?.notes ?? []).map(mapBackendNote),
+    },
+    created: {
+      folders: (r.created?.folders ?? []).map(mapBackendFolder),
+      notes: (r.created?.notes ?? []).map(mapBackendNote),
+    },
+  }
 }

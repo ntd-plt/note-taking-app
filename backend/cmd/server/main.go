@@ -33,6 +33,7 @@ func main() {
 	userDataSource := database.NewPostgreUserDataSource(pool)
 	notesDataSource := database.NewPostgreNotesDataSource(pool)
 	foldersDataSource := database.NewPostgreFoldersDataSource(pool)
+	hierarchyDataSource := database.NewPostgreHierarchyDataSource(pool)
 
 	hasher := hash.NewBcryptHasher()
 	tokenService := services.NewJWTService()
@@ -47,10 +48,11 @@ func main() {
 
 	userService := services.NewUserService(userDataSource)
 	authService := services.NewAuthService(userService, hasher, tokenService, emailValidator)
-	notesService := services.NewNotesService(notesDataSource)
+	notesService := services.NewNotesService(notesDataSource, foldersDataSource)
 	foldersService := services.NewFoldersService(foldersDataSource)
+	hierarchyService := services.NewHierarchyService(hierarchyDataSource)
 
-	router := NewRouter(authService, userService, notesService, foldersService, tokenService, !cfg.IsProduction())
+	router := NewRouter(authService, userService, notesService, foldersService, hierarchyService, tokenService, !cfg.IsProduction())
 	if err := router.Run(":8080"); err != nil {
 		panic(err)
 	}

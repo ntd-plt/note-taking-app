@@ -7,6 +7,7 @@ export {
   useCreateNote,
   useDeleteNote,
   useDuplicateNote,
+  useDuplicateFolder,
   useCreateFolder,
   useDeleteFolder,
   useUpdateFolder,

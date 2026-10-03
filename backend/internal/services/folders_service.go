@@ -80,6 +80,11 @@ func (h *FoldersService) CreateFolder(c *gin.Context) {
 		return
 	}
 
+	if status, msg := checkParentFolder(h.db, userID.(uuid.UUID), req.ParentFolderID); status != 0 {
+		c.JSON(status, gin.H{"error": msg})
+		return
+	}
+
 	folder := model.Folder{
 		Name:           req.Name,
 		ParentFolderID: req.ParentFolderID,
@@ -226,6 +231,24 @@ func (h *FoldersService) UpdateFolders(c *gin.Context) {
 		existingByID[folder.ID] = folder
 	}
 
+	// Current folder-to-parent links for the user, updated as the batch is applied
+	// so two updates in one request cannot together create a cycle.
+	var parents map[uuid.UUID]*uuid.UUID
+	for _, f := range req.Folders {
+		if f.ParentFolderID != nil {
+			userFolders, err := h.db.GetFoldersByUserID(userID.(uuid.UUID))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			parents = make(map[uuid.UUID]*uuid.UUID, len(userFolders))
+			for _, uf := range userFolders {
+				parents[uf.ID] = uf.ParentFolderID
+			}
+			break
+		}
+	}
+
 	folders := make([]model.Folder, 0, len(req.Folders))
 	for _, f := range req.Folders {
 		folder, ok := existingByID[f.ID]
@@ -237,6 +260,18 @@ func (h *FoldersService) UpdateFolders(c *gin.Context) {
 		if folder.UserID != userID.(uuid.UUID) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this folder", "id": f.ID})
 			return
+		}
+
+		if status, msg := checkParentFolder(h.db, userID.(uuid.UUID), f.ParentFolderID); status != 0 {
+			c.JSON(status, gin.H{"error": msg, "id": f.ID})
+			return
+		}
+		if f.ParentFolderID != nil && wouldCreateCycle(parents, f.ID, f.ParentFolderID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "a folder cannot be moved into itself or one of its descendants", "id": f.ID})
+			return
+		}
+		if parents != nil {
+			parents[f.ID] = f.ParentFolderID
 		}
 
 		folder.Name = f.Name

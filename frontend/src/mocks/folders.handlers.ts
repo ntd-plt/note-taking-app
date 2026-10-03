@@ -33,7 +33,13 @@ let mockFolders: Folder[] = [
   },
 ]
 
-const toBackendFolderShape = (f: Folder) => ({
+// Lets other mock handlers (e.g. hierarchy moves) read and extend the folder store.
+export const folderStore = {
+  all: () => mockFolders,
+  add: (folder: Folder) => mockFolders.push(folder),
+}
+
+export const toBackendFolderShape = (f: Folder) => ({
   id: f.id,
   name: f.name,
   parent_folder_id: f.parentId,

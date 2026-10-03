@@ -2,9 +2,14 @@ import type { Folder, Note } from './model'
 import {
   mapBackendFolder,
   mapBackendNote,
+  mapBackendMoveResult,
+  toBackendDuplicateRequest,
   toBackendFolder,
+  toBackendMoveRequest,
   toBackendNote,
 } from '#/shared/api'
+import type { MoveResult } from '#/shared/api'
+import type { ItemRef } from '#/shared/lib/hierarchy'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
 
@@ -30,8 +35,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     } catch {
       errorData = null
     }
+    // The Go backend reports failures as {"error": "..."}; other callers use "message".
     throw new Error(
-      errorData?.message || `HTTP error! Status: ${response.status}`,
+      errorData?.message ||
+        errorData?.error ||
+        `HTTP error! Status: ${response.status}`,
     )
   }
 
@@ -136,4 +144,26 @@ export const deleteNote = async (id: string): Promise<void> => {
     method: 'DELETE',
     body: JSON.stringify(payload),
   })
+}
+
+// Hierarchy API
+export const moveItems = async (
+  items: ItemRef[],
+  destinationId: string | null,
+): Promise<MoveResult> => {
+  const data = await request<any>('/api/hierarchy/move', {
+    method: 'POST',
+    body: JSON.stringify(toBackendMoveRequest(items, destinationId)),
+  })
+  return mapBackendMoveResult(data)
+}
+
+// Copies the items next to the originals with "(Copy N)" names; folders are copied
+// recursively. The same server-side clone logic that moves use.
+export const duplicateItems = async (items: ItemRef[]): Promise<MoveResult> => {
+  const data = await request<any>('/api/hierarchy/duplicate', {
+    method: 'POST',
+    body: JSON.stringify(toBackendDuplicateRequest(items)),
+  })
+  return mapBackendMoveResult(data)
 }

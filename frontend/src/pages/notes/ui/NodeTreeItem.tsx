@@ -12,6 +12,10 @@ import {
   Edit3,
 } from 'lucide-react'
 import * as React from 'react'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
+import type { ItemRef } from '#/shared/lib/hierarchy'
+import { itemKey } from '../model/treeDnd'
+import { useTreeInteraction } from '../model/TreeInteractionContext'
 
 import {
   DropdownMenu,
@@ -20,6 +24,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+
+// Selected rows get their own hue so they stay distinguishable from the open note's
+// primary-tinted highlight, and the colour also applies when the open note is selected.
+const SELECTED_ROW_CLASS =
+  'bg-blue-500/25 ring-1 ring-blue-500/60 text-sidebar-foreground hover:bg-blue-500/30'
 
 const EMOJI_LIST = [
   '📁',
@@ -50,6 +59,7 @@ interface NoteTreeItemProps {
   onDeleteNote: (id: string, e: React.MouseEvent) => void
   onDeleteFolder: (id: string, e: React.MouseEvent) => void
   onDuplicateNote: (id: string, e: React.MouseEvent) => void
+  onDuplicateFolder: (id: string, e: React.MouseEvent) => void
   onToggleFavorite: (id: string) => void
   onToggleFolderExpand: (id: string) => void
   onUpdateFolderIcon: (id: string, icon: string | undefined) => void
@@ -67,12 +77,35 @@ export default function NodeTreeItem({
   onDeleteNote,
   onDeleteFolder,
   onDuplicateNote,
+  onDuplicateFolder,
   onToggleFavorite,
   onToggleFolderExpand,
   onUpdateFolderIcon,
   onUpdateNoteIcon,
   onUpdateFolderName,
 }: NoteTreeItemProps) {
+  const { selectedKeys, draggingKeys, dropFolderId, onRowClick } =
+    useTreeInteraction()
+  const ref: ItemRef = { id: item.id, type: item.type }
+  const isSelected = selectedKeys.has(itemKey(ref))
+  const isDragging = draggingKeys.has(itemKey(ref))
+
+  // Every row can be dragged. Rows are also drop zones: a folder receives the drop itself
+  // and a note stands for its parent folder (resolved by the sidebar, not here).
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+  } = useDraggable({ id: item.id, data: ref })
+  const { setNodeRef: setDropRef } = useDroppable({ id: item.id })
+  const setRowRef = React.useCallback(
+    (node: HTMLElement | null) => {
+      setDragRef(node)
+      setDropRef(node)
+    },
+    [setDragRef, setDropRef],
+  )
+
   if (item.type === 'note') {
     const note = item.data
     const isActive = currentNoteId === note.id
@@ -80,13 +113,20 @@ export default function NodeTreeItem({
     return (
       <div className="flex flex-col">
         <div
-          onClick={() => onSelectNote(note.id)}
+          ref={setRowRef}
+          {...attributes}
+          {...listeners}
+          role={undefined}
+          data-selected={isSelected || undefined}
+          onClick={(e) => onRowClick(ref, e, () => onSelectNote(note.id))}
           style={{ paddingLeft: `${depth * 12 + 10}px` }}
           className={cn(
             'group flex items-center justify-between rounded-md py-1.5 pr-2 text-xs transition-all duration-150 cursor-pointer relative',
             isActive
               ? 'bg-primary/10 text-primary font-semibold shadow-2xs border-l-2 border-primary pl-[8px]'
               : 'text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-foreground',
+            isSelected && SELECTED_ROW_CLASS,
+            isDragging && 'opacity-40',
           )}
         >
           <div className="flex items-center gap-1.5 truncate w-full pr-14 pl-5">
@@ -194,9 +234,23 @@ export default function NodeTreeItem({
     return (
       <div className="flex flex-col">
         <div
-          onClick={handleToggleExpand}
+          ref={setRowRef}
+          {...attributes}
+          {...listeners}
+          role={undefined}
+          data-selected={isSelected || undefined}
+          data-drop-target={dropFolderId === folder.id || undefined}
+          onClick={(e) =>
+            onRowClick(ref, e, () => onToggleFolderExpand(folder.id))
+          }
           style={{ paddingLeft: `${depth * 12 + 10}px` }}
-          className="group flex items-center justify-between rounded-md py-1.5 pr-2 text-xs transition-all duration-150 cursor-pointer relative text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-foreground"
+          className={cn(
+            'group flex items-center justify-between rounded-md py-1.5 pr-2 text-xs transition-all duration-150 cursor-pointer relative text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-foreground',
+            isSelected && SELECTED_ROW_CLASS,
+            isDragging && 'opacity-40',
+            dropFolderId === folder.id &&
+              'bg-primary/25 text-sidebar-foreground ring-2 ring-primary',
+          )}
         >
           <div className="flex items-center gap-1 truncate w-full pr-14">
             {/* Chevron Collapse Toggle */}
@@ -316,6 +370,13 @@ export default function NodeTreeItem({
                   <Edit3 className="mr-2 h-3.5 w-3.5 opacity-60" />
                   <span>Rename Folder</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => onDuplicateFolder(folder.id, e)}
+                  className="cursor-pointer text-xs"
+                >
+                  <Copy className="mr-2 h-3.5 w-3.5 opacity-60" />
+                  <span>Duplicate</span>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={(e) => onDeleteFolder(folder.id, e)}
@@ -344,6 +405,7 @@ export default function NodeTreeItem({
                 onDeleteNote={onDeleteNote}
                 onDeleteFolder={onDeleteFolder}
                 onDuplicateNote={onDuplicateNote}
+                onDuplicateFolder={onDuplicateFolder}
                 onToggleFavorite={onToggleFavorite}
                 onToggleFolderExpand={onToggleFolderExpand}
                 onUpdateFolderIcon={onUpdateFolderIcon}

@@ -148,6 +148,16 @@ definitions:
     required:
     - ids
     type: object
+  internal_services.DuplicateItemsRequest:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/internal_services.MoveItemRef'
+        minItems: 1
+        type: array
+    required:
+    - items
+    type: object
   internal_services.FolderResponse:
     properties:
       children:
@@ -170,6 +180,50 @@ definitions:
         type: string
       user_id:
         type: string
+    type: object
+  internal_services.MoveItemRef:
+    properties:
+      id:
+        type: string
+      type:
+        enum:
+        - note
+        - folder
+        type: string
+    required:
+    - id
+    - type
+    type: object
+  internal_services.MoveItemsRequest:
+    properties:
+      destination_folder_id:
+        description: nil moves the items to the top level
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/internal_services.MoveItemRef'
+        minItems: 1
+        type: array
+    required:
+    - items
+    type: object
+  internal_services.MoveItemsResponse:
+    properties:
+      created:
+        $ref: '#/definitions/internal_services.MovedItems'
+      moved:
+        $ref: '#/definitions/internal_services.MovedItems'
+    type: object
+  internal_services.MovedItems:
+    properties:
+      folders:
+        items:
+          $ref: '#/definitions/backend_internal_model.Folder'
+        type: array
+      notes:
+        items:
+          $ref: '#/definitions/backend_internal_model.Note'
+        type: array
     type: object
   internal_services.UpdateFolderItem:
     properties:
@@ -473,6 +527,135 @@ paths:
       summary: Get a folder
       tags:
       - folders
+  /api/hierarchy/duplicate:
+    post:
+      consumes:
+      - application/json
+      description: Copies the selected folders and notes next to the originals, in
+        the same parent. Copies are named "Name (Copy N)" with the smallest unused
+        N, and a copied folder includes everything inside it. The whole request is
+        applied atomically. The response lists the copies under "created"; "moved"
+        is always empty.
+      parameters:
+      - description: Items to duplicate
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_services.DuplicateItemsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_services.MoveItemsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Duplicate folders and notes
+      tags:
+      - hierarchy
+  /api/hierarchy/move:
+    post:
+      consumes:
+      - application/json
+      description: Moves the selected folders and notes into a destination folder
+        (or the top level when destination_folder_id is null). A selected item that
+        sits inside another selected folder is cloned next to the moved parent instead,
+        so the destination gains exactly one new direct entry per selected item. Clones
+        are named "Name (Copy N)"; cloned folders are copied recursively. The whole
+        request is applied atomically.
+      parameters:
+      - description: Items to move and the destination
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_services.MoveItemsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_services.MoveItemsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Move folders and notes
+      tags:
+      - hierarchy
   /api/notes:
     delete:
       consumes:

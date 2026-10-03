@@ -347,6 +347,192 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/hierarchy/duplicate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Copies the selected folders and notes next to the originals, in the same parent. Copies are named \"Name (Copy N)\" with the smallest unused N, and a copied folder includes everything inside it. The whole request is applied atomically. The response lists the copies under \"created\"; \"moved\" is always empty.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "hierarchy"
+                ],
+                "summary": "Duplicate folders and notes",
+                "parameters": [
+                    {
+                        "description": "Items to duplicate",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_services.DuplicateItemsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_services.MoveItemsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/hierarchy/move": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Moves the selected folders and notes into a destination folder (or the top level when destination_folder_id is null). A selected item that sits inside another selected folder is cloned next to the moved parent instead, so the destination gains exactly one new direct entry per selected item. Clones are named \"Name (Copy N)\"; cloned folders are copied recursively. The whole request is applied atomically.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "hierarchy"
+                ],
+                "summary": "Move folders and notes",
+                "parameters": [
+                    {
+                        "description": "Items to move and the destination",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_services.MoveItemsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_services.MoveItemsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/api/notes": {
             "put": {
                 "security": [
@@ -1199,6 +1385,21 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_services.DuplicateItemsRequest": {
+            "type": "object",
+            "required": [
+                "items"
+            ],
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/internal_services.MoveItemRef"
+                    }
+                }
+            }
+        },
         "internal_services.FolderResponse": {
             "type": "object",
             "properties": {
@@ -1231,6 +1432,72 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_services.MoveItemRef": {
+            "type": "object",
+            "required": [
+                "id",
+                "type"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "note",
+                        "folder"
+                    ]
+                }
+            }
+        },
+        "internal_services.MoveItemsRequest": {
+            "type": "object",
+            "required": [
+                "items"
+            ],
+            "properties": {
+                "destination_folder_id": {
+                    "description": "nil moves the items to the top level",
+                    "type": "string"
+                },
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/internal_services.MoveItemRef"
+                    }
+                }
+            }
+        },
+        "internal_services.MoveItemsResponse": {
+            "type": "object",
+            "properties": {
+                "created": {
+                    "$ref": "#/definitions/internal_services.MovedItems"
+                },
+                "moved": {
+                    "$ref": "#/definitions/internal_services.MovedItems"
+                }
+            }
+        },
+        "internal_services.MovedItems": {
+            "type": "object",
+            "properties": {
+                "folders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backend_internal_model.Folder"
+                    }
+                },
+                "notes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backend_internal_model.Note"
+                    }
                 }
             }
         },

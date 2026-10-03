@@ -12,7 +12,8 @@ import (
 )
 
 type NotesService struct {
-	db database.NotesDataSource
+	db      database.NotesDataSource
+	folders database.FoldersDataSource
 }
 
 type CreateNoteRequest struct {
@@ -81,9 +82,10 @@ type DeleteNotesRequest struct {
 	IDs []uuid.UUID `json:"ids" binding:"required,min=1"`
 }
 
-func NewNotesService(db database.NotesDataSource) *NotesService {
+func NewNotesService(db database.NotesDataSource, folders database.FoldersDataSource) *NotesService {
 	return &NotesService{
-		db: db,
+		db:      db,
+		folders: folders,
 	}
 }
 
@@ -110,6 +112,11 @@ func (h *NotesService) CreateNote(c *gin.Context) {
 	var req CreateNoteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if status, msg := checkParentFolder(h.folders, userID.(uuid.UUID), req.FolderID); status != 0 {
+		c.JSON(status, gin.H{"error": msg})
 		return
 	}
 
@@ -225,6 +232,13 @@ func (h *NotesService) UpdateNotes(c *gin.Context) {
 		if note.UserID != userID.(uuid.UUID) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this note", "id": noteReq.ID})
 			return
+		}
+
+		if noteReq.UpdateFolderID {
+			if status, msg := checkParentFolder(h.folders, userID.(uuid.UUID), noteReq.FolderID); status != 0 {
+				c.JSON(status, gin.H{"error": msg, "id": noteReq.ID})
+				return
+			}
 		}
 
 		if noteReq.UpdateTitle {

@@ -11,7 +11,7 @@ import (
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func NewRouter(authService *services.AuthService, userService *services.UserService, notesService *services.NotesService, foldersService *services.FoldersService, tokenService *services.JWTService, enableSwagger bool) *gin.Engine {
+func NewRouter(authService *services.AuthService, userService *services.UserService, notesService *services.NotesService, foldersService *services.FoldersService, hierarchyService *services.HierarchyService, tokenService *services.JWTService, enableSwagger bool) *gin.Engine {
 	router := gin.Default()
 
 	router.Use(middleware.CORS())
@@ -44,6 +44,9 @@ func NewRouter(authService *services.AuthService, userService *services.UserServ
 		protected.GET("/folders/:id", foldersService.GetFolder)
 		protected.PUT("/folders", foldersService.UpdateFolders)
 		protected.DELETE("/folders", foldersService.DeleteFolders)
+
+		protected.POST("/hierarchy/move", hierarchyService.MoveItems)
+		protected.POST("/hierarchy/duplicate", hierarchyService.DuplicateItems)
 	}
 	return router
 }
