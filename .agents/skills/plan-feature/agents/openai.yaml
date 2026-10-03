@@ -1,0 +1,13 @@
+interface:
+  display_name: Plan Feature
+  short_description: Turn requirements into a verifiable implementation plan
+  default_prompt: Use $plan-feature for the current feature request.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

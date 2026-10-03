@@ -1,0 +1,13 @@
+interface:
+  display_name: Implement Feature
+  short_description: Implement scoped changes using repository conventions
+  default_prompt: Use $implement-feature for the current feature request.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

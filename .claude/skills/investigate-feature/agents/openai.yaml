@@ -1,0 +1,13 @@
+interface:
+  display_name: Investigate Feature
+  short_description: Understand repository behavior before changing code
+  default_prompt: Use $investigate-feature for the current feature request.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

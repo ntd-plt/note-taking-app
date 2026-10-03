@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Feature"
+  short_description: "Review a diff for evidence-backed bugs and regressions"
+  default_prompt: "Use $review-feature for the current feature request."

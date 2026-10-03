@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Feature"
+  short_description: "Validate behavior and report concrete check results"
+  default_prompt: "Use $verify-feature for the current feature request."
