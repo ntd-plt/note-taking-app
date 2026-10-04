@@ -6,7 +6,13 @@ import initialNotes from './initialNotes'
 // In-memory mock database for notes, seeded with initialNotes
 let mockNotes: Note[] = [...initialNotes]
 
-const toBackendNoteShape = (n: Note) => ({
+// Lets other mock handlers (e.g. hierarchy moves) read and extend the note store.
+export const noteStore = {
+  all: () => mockNotes,
+  add: (note: Note) => mockNotes.push(note),
+}
+
+export const toBackendNoteShape = (n: Note) => ({
   id: n.id,
   title: n.title,
   content: n.content,

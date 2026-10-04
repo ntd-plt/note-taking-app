@@ -167,3 +167,77 @@ describe('Sidebar Component', () => {
     })
   })
 })
+
+describe('Sidebar multi-select', () => {
+  const rowOf = (text: string) => {
+    const row = screen
+      .getAllByText(text)
+      .map((el) => el.closest('.group'))
+      .find((el): el is Element => el !== null)
+    if (!row) throw new Error(`Row not found: ${text}`)
+    return row
+  }
+  const isSelected = (text: string) =>
+    rowOf(text).getAttribute('data-selected') === 'true'
+
+  async function renderLoaded() {
+    renderSidebar()
+    await waitFor(() => {
+      expect(screen.queryByText('Work')).not.toBeNull()
+      expect(screen.queryAllByText('Getting Started').length).toBeGreaterThan(0)
+    })
+  }
+
+  it('toggles rows with Ctrl-click without opening them', async () => {
+    mockNavigate.mockClear()
+    await renderLoaded()
+
+    fireEvent.click(rowOf('Work'), { ctrlKey: true })
+    fireEvent.click(rowOf('Getting Started'), { metaKey: true })
+
+    expect(isSelected('Work')).toBe(true)
+    expect(isSelected('Getting Started')).toBe(true)
+    expect(isSelected('Personal')).toBe(false)
+    expect(mockNavigate).not.toHaveBeenCalled()
+
+    fireEvent.click(rowOf('Work'), { ctrlKey: true })
+    expect(isSelected('Work')).toBe(false)
+    expect(isSelected('Getting Started')).toBe(true)
+  })
+
+  it('selects the visible range with Shift-click', async () => {
+    await renderLoaded()
+
+    // Visible order at the top level: folders first (alphabetical), then notes.
+    fireEvent.click(rowOf('Personal'), { ctrlKey: true })
+    fireEvent.click(rowOf('Getting Started'), { shiftKey: true })
+
+    expect(isSelected('Work')).toBe(true)
+    expect(isSelected('Personal')).toBe(true)
+    expect(isSelected('Getting Started')).toBe(true)
+  })
+
+  it('clears the selection on a plain click, which still opens the note', async () => {
+    mockNavigate.mockClear()
+    await renderLoaded()
+    fireEvent.click(rowOf('Work'), { ctrlKey: true })
+
+    fireEvent.click(rowOf('Getting Started'))
+
+    expect(isSelected('Work')).toBe(false)
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/notes/$noteId',
+      params: { noteId: 'getting-started' },
+    })
+  })
+
+  it('clears the selection on Escape', async () => {
+    await renderLoaded()
+    fireEvent.click(rowOf('Work'), { ctrlKey: true })
+    expect(isSelected('Work')).toBe(true)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    await waitFor(() => expect(isSelected('Work')).toBe(false))
+  })
+})

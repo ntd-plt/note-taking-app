@@ -364,3 +364,71 @@ func TestDeleteFoldersForbidden(t *testing.T) {
 		t.Error("folder was deleted despite forbidden response")
 	}
 }
+
+func TestFolderParentIsValidated(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	userID := uuid.New()
+	foreign := addFolder(db, uuid.New(), "Not mine", nil)
+	folder := addFolder(db, userID, "Mine", nil)
+	missing := uuid.New()
+	r := newFoldersRouter(db, &userID)
+
+	cases := []struct {
+		name   string
+		parent uuid.UUID
+		want   int
+	}{
+		{"foreign parent", foreign.ID, http.StatusForbidden},
+		{"missing parent", missing, http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		t.Run("create/"+tc.name, func(t *testing.T) {
+			w := doJSON(t, r, http.MethodPost, "/api/folders", services.CreateFolderRequest{Name: "x", ParentFolderID: &tc.parent})
+			if w.Code != tc.want {
+				t.Errorf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+		})
+		t.Run("update/"+tc.name, func(t *testing.T) {
+			w := doJSON(t, r, http.MethodPut, "/api/folders", services.UpdateFoldersRequest{
+				Folders: []services.UpdateFolderItem{{ID: folder.ID, Name: "Mine", ParentFolderID: &tc.parent}},
+			})
+			if w.Code != tc.want {
+				t.Errorf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+			if db.Folders[folder.ID].ParentFolderID != nil {
+				t.Error("rejected update must not change the folder")
+			}
+		})
+	}
+}
+
+func TestUpdateFoldersRejectsCycles(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	userID := uuid.New()
+	a := addFolder(db, userID, "A", nil)
+	b := addFolder(db, userID, "B", &a.ID)
+	c := addFolder(db, userID, "C", &b.ID)
+	d := addFolder(db, userID, "D", nil)
+	r := newFoldersRouter(db, &userID)
+
+	cases := map[string][]services.UpdateFolderItem{
+		"into itself":     {{ID: a.ID, Name: "A", ParentFolderID: &a.ID}},
+		"into descendant": {{ID: a.ID, Name: "A", ParentFolderID: &c.ID}},
+		// Each update is fine alone; applied in order they close a loop A -> D -> A.
+		"within one batch": {
+			{ID: d.ID, Name: "D", ParentFolderID: &a.ID},
+			{ID: a.ID, Name: "A", ParentFolderID: &d.ID},
+		},
+	}
+	for name, folders := range cases {
+		t.Run(name, func(t *testing.T) {
+			w := doJSON(t, r, http.MethodPut, "/api/folders", services.UpdateFoldersRequest{Folders: folders})
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+			}
+			if db.Folders[a.ID].ParentFolderID != nil || db.Folders[d.ID].ParentFolderID != nil {
+				t.Error("rejected update must not change any folder")
+			}
+		})
+	}
+}

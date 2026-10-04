@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Note, Folder } from '../model'
 import { useNotesStore } from './useNotesStore'
 import { debounce } from '@/shared/lib/debounce'
+import { splitSelection } from '@/shared/lib/hierarchy'
+import type { ItemRef } from '@/shared/lib/hierarchy'
 import * as React from 'react'
 import * as api from '../api'
 
@@ -224,25 +226,51 @@ export function useDuplicateNote() {
   const setActiveNoteId = useNotesStore((state) => state.setActiveNoteId)
 
   return useMutation({
+    // Duplicates through the server, which names the copy "Title (Copy N)" and keeps
+    // its content, icon and favorite flag, exactly like a clone made by a move.
     mutationFn: async (noteToDup: Note) => {
-      const mapped = await api.createNote({
-        title: `${noteToDup.title} (Copy)`,
-        content: noteToDup.content,
-        parentId: noteToDup.parentId || null,
-        icon: noteToDup.icon || '📄',
-        isFavorite: noteToDup.isFavorite || false,
-      })
-      return mapped
-    },
-    onSuccess: (newNote) => {
-      queryClient.setQueryData<Note[]>(['notes'], (old) => [
-        ...(old || []),
-        newNote,
+      const result = await api.duplicateItems([
+        { id: noteToDup.id, type: 'note' },
       ])
+      return result.created.notes[0]
+    },
+    // The response is the new note, so no refetch is needed.
+    onSuccess: (newNote) => {
+      queryClient.setQueryData<Note[]>(['notes'], (old) => {
+        const notes = old || []
+        return notes.some((n) => n.id === newNote.id)
+          ? notes
+          : [...notes, newNote]
+      })
       setActiveNoteId(newNote.id)
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['notes'] })
+  })
+}
+
+// Duplicates a folder with everything inside it. The server names the copy
+// "Name (Copy N)" and keeps the contents' names, exactly like a clone made by a move.
+export function useDuplicateFolder() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (folderId: string) =>
+      api.duplicateItems([{ id: folderId, type: 'folder' }]),
+    // The response lists every created row, so no refetch is needed.
+    onSuccess: (result) => {
+      const addNew = <T extends { id: string }>(
+        current: T[] | undefined,
+        created: T[],
+      ) => {
+        if (!current) return current
+        const known = new Set(current.map((row) => row.id))
+        return [...current, ...created.filter((row) => !known.has(row.id))]
+      }
+      queryClient.setQueryData<Folder[]>(['folders'], (old) =>
+        addNew(old, result.created.folders),
+      )
+      queryClient.setQueryData<Note[]>(['notes'], (old) =>
+        addNew(old, result.created.notes),
+      )
     },
   })
 }
@@ -375,6 +403,96 @@ export function useDeleteFolder() {
       }
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['folders'] })
+      queryClient.invalidateQueries({ queryKey: ['notes'] })
+    },
+  })
+}
+
+// Move selected items to a folder (or the top level when destinationId is null).
+// Items that are not inside another selected folder move optimistically; clones
+// only exist once the server answers, so they appear when its response is applied.
+export function useMoveItems() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      items,
+      destinationId,
+    }: {
+      items: ItemRef[]
+      destinationId: string | null
+    }) => api.moveItems(items, destinationId),
+    onMutate: async ({ items, destinationId }) => {
+      await queryClient.cancelQueries({ queryKey: ['folders'] })
+      await queryClient.cancelQueries({ queryKey: ['notes'] })
+
+      const previousFolders = queryClient.getQueryData<Folder[]>(['folders'])
+      const previousNotes = queryClient.getQueryData<Note[]>(['notes'])
+
+      const { moved } = splitSelection(
+        items,
+        previousFolders || [],
+        previousNotes || [],
+      )
+      const movedFolderIds = new Set(
+        moved.filter((i) => i.type === 'folder').map((i) => i.id),
+      )
+      const movedNoteIds = new Set(
+        moved.filter((i) => i.type === 'note').map((i) => i.id),
+      )
+
+      if (previousFolders) {
+        queryClient.setQueryData<Folder[]>(
+          ['folders'],
+          previousFolders.map((f) =>
+            movedFolderIds.has(f.id) ? { ...f, parentId: destinationId } : f,
+          ),
+        )
+      }
+      if (previousNotes) {
+        queryClient.setQueryData<Note[]>(
+          ['notes'],
+          previousNotes.map((n) =>
+            movedNoteIds.has(n.id) ? { ...n, parentId: destinationId } : n,
+          ),
+        )
+      }
+
+      return { previousFolders, previousNotes }
+    },
+    // The response lists every moved and created row, so the cache is updated from it
+    // directly. No refetch is needed on success.
+    onSuccess: (result) => {
+      const upsert = <T extends { id: string }>(
+        current: T[] | undefined,
+        moved: T[],
+        created: T[],
+      ) => {
+        if (!current) return current
+        const movedById = new Map(moved.map((row) => [row.id, row]))
+        const known = new Set(current.map((row) => row.id))
+        return [
+          ...current.map((row) => movedById.get(row.id) ?? row),
+          ...created.filter((row) => !known.has(row.id)),
+        ]
+      }
+      queryClient.setQueryData<Folder[]>(['folders'], (old) =>
+        upsert(old, result.moved.folders, result.created.folders),
+      )
+      queryClient.setQueryData<Note[]>(['notes'], (old) =>
+        upsert(old, result.moved.notes, result.created.notes),
+      )
+    },
+    // On failure, restore the tree and resync with the server in case it moved on.
+    onError: (err, _vars, context) => {
+      console.error('Failed to move items:', err)
+      if (context?.previousFolders) {
+        queryClient.setQueryData(['folders'], context.previousFolders)
+      }
+      if (context?.previousNotes) {
+        queryClient.setQueryData(['notes'], context.previousNotes)
+      }
       queryClient.invalidateQueries({ queryKey: ['folders'] })
       queryClient.invalidateQueries({ queryKey: ['notes'] })
     },

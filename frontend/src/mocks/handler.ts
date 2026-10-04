@@ -2,6 +2,7 @@
 import { userHandlers } from '#/entities/user/api/user.handlers'
 import { authHandlers } from '#/features/auth/api/auth.handlers'
 import { foldersHandlers } from './folders.handlers'
+import { hierarchyHandlers } from './hierarchy.handlers'
 import { notesHandlers } from './notes.handlers'
 
 export const handlers = [
@@ -9,4 +10,5 @@ export const handlers = [
   ...authHandlers,
   ...foldersHandlers,
   ...notesHandlers,
+  ...hierarchyHandlers,
 ]

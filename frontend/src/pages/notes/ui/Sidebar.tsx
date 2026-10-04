@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { validateSession, logout } from '@/shared/api'
+import { DndContext, DragOverlay, useDroppable } from '@dnd-kit/core'
 import {
   useNotesStore,
   useNotesQuery,
@@ -8,6 +9,7 @@ import {
   useCreateNote,
   useDeleteNote,
   useDuplicateNote,
+  useDuplicateFolder,
   useCreateFolder,
   useDeleteFolder,
   useUpdateFolder,
@@ -71,9 +73,14 @@ import {
   FolderPlus,
   PanelLeftClose,
   PanelLeft,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import NoteTreeItem from './NodeTreeItem'
+import { ROOT_DROP_ID, flattenVisible, itemKey } from '../model/treeDnd'
+import { TreeInteractionProvider } from '../model/TreeInteractionContext'
+import { useTreeSelection } from '../model/useTreeSelection'
+import { useTreeDragAndDrop } from '../model/useTreeDragAndDrop'
 
 export interface NoteSidebarData {
   spaces: {
@@ -109,6 +116,31 @@ function SidebarOpenButton() {
     >
       <PanelLeft className="h-4 w-4" />
     </button>
+  )
+}
+
+/**
+ * The tree area. Dropping on it (and not on a row) moves the dragged items to the top level.
+ */
+function TreeDropZone({
+  active,
+  children,
+}: {
+  active: boolean
+  children: React.ReactNode
+}) {
+  const { setNodeRef } = useDroppable({ id: ROOT_DROP_ID })
+  return (
+    <div
+      ref={setNodeRef}
+      data-drop-target={active || undefined}
+      className={cn(
+        'min-h-16 flex-1 rounded-md transition-colors',
+        active && 'bg-primary/10 ring-2 ring-primary/50',
+      )}
+    >
+      {children}
+    </div>
   )
 }
 
@@ -155,6 +187,7 @@ export function AppSidebar() {
   const createNoteMutation = useCreateNote()
   const deleteNoteMutation = useDeleteNote()
   const duplicateNoteMutation = useDuplicateNote()
+  const duplicateFolderMutation = useDuplicateFolder()
   const { updateNote } = useUpdateNote()
 
   const createFolderMutation = useCreateFolder()
@@ -329,6 +362,49 @@ export function AppSidebar() {
 
   const favoriteNotes = notes.filter((n) => n.isFavorite)
 
+  // Multi-select and drag-and-drop over the tree
+  const visibleItems = React.useMemo(
+    () => flattenVisible(sidebarTree),
+    [sidebarTree],
+  )
+  const treeSelection = useTreeSelection(visibleItems)
+  const dnd = useTreeDragAndDrop({
+    folders,
+    notes,
+    selection: treeSelection.selection,
+    onSelectOnly: treeSelection.replaceWith,
+    onDropInto: (destinationId) => {
+      if (destinationId) {
+        setExpandedFolders((prev) => ({ ...prev, [destinationId]: true }))
+      }
+    },
+    onDropped: treeSelection.clear,
+  })
+  const treeInteraction = React.useMemo(
+    () => ({
+      selectedKeys: new Set(treeSelection.selection.map(itemKey)),
+      invalidTargetIds: dnd.invalidTargetIds,
+      draggingKeys: new Set(dnd.dragged.map(itemKey)),
+      dropFolderId: dnd.dropFolderId,
+      onRowClick: treeSelection.onRowClick,
+    }),
+    [
+      treeSelection.selection,
+      treeSelection.onRowClick,
+      dnd.invalidTargetIds,
+      dnd.dragged,
+      dnd.dropFolderId,
+    ],
+  )
+  const dragLabel = (() => {
+    if (dnd.dragged.length === 0) return ''
+    if (dnd.dragged.length > 1) return `${dnd.dragged.length} items`
+    const only = dnd.dragged[0]
+    return only.type === 'folder'
+      ? folders.find((f) => f.id === only.id)?.name
+      : notes.find((n) => n.id === only.id)?.title
+  })()
+
   // Handlers
   const handleCreateNewPage = (parentId: string | null = null) => {
     createNoteMutation.mutate(
@@ -424,6 +500,12 @@ export function AppSidebar() {
         },
       })
     }
+  }
+
+  const handleDuplicateFolder = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    duplicateFolderMutation.mutate(id)
   }
 
   const handleSelectNote = (id: string) => {
@@ -544,74 +626,118 @@ export function AppSidebar() {
           </SidebarGroup>
 
           {/* Private Notes COLLAPSIBLE Group */}
-          <SidebarGroup className="mt-4 p-0">
-            <div className="flex items-center justify-between px-2 py-1">
-              <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-muted-foreground/80 uppercase">
-                Private Pages
-              </SidebarGroupLabel>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handleCreateNewFolder(null)}
-                  className="rounded-sm p-0.5 text-muted-foreground/60 hover:bg-sidebar-accent/70 hover:text-primary transition-all cursor-pointer"
-                  title="Create a new root folder"
-                >
-                  <FolderPlus className="h-3 w-3" />
-                </button>
-                <button
-                  onClick={() => handleCreateNewPage(null)}
-                  className="rounded-sm p-0.5 text-muted-foreground/60 hover:bg-sidebar-accent/70 hover:text-primary transition-all cursor-pointer"
-                  title="Create a new root note"
-                >
-                  <Plus className="h-3 w-3" />
-                </button>
-              </div>
-            </div>
-
-            <SidebarGroupContent>
-              {sidebarTree.length === 0 ? (
-                <div className="px-3 py-2 text-[11px] text-muted-foreground/60 italic">
-                  No pages yet. Click + to add one.
+          <TreeInteractionProvider value={treeInteraction}>
+            <DndContext
+              sensors={dnd.sensors}
+              collisionDetection={dnd.collisionDetection}
+              onDragStart={dnd.onDragStart}
+              onDragOver={dnd.onDragOver}
+              onDragEnd={dnd.onDragEnd}
+              onDragCancel={dnd.onDragCancel}
+            >
+              <SidebarGroup className="mt-4 flex-1 p-0">
+                <div className="flex items-center justify-between px-2 py-1">
+                  <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-muted-foreground/80 uppercase">
+                    Private Pages
+                  </SidebarGroupLabel>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleCreateNewFolder(null)}
+                      className="rounded-sm p-0.5 text-muted-foreground/60 hover:bg-sidebar-accent/70 hover:text-primary transition-all cursor-pointer"
+                      title="Create a new root folder"
+                    >
+                      <FolderPlus className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => handleCreateNewPage(null)}
+                      className="rounded-sm p-0.5 text-muted-foreground/60 hover:bg-sidebar-accent/70 hover:text-primary transition-all cursor-pointer"
+                      title="Create a new root note"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                <SidebarMenu className="space-y-0.5 px-0.5">
-                  {sidebarTree.map((item) => (
-                    <NoteTreeItem
-                      key={item.id}
-                      item={item}
-                      currentNoteId={currentNoteId}
-                      depth={0}
-                      onSelectNote={handleSelectNote}
-                      onAddNote={handleCreateNewPage}
-                      onAddFolder={handleCreateNewFolder}
-                      onDeleteNote={handleDeletePage}
-                      onDeleteFolder={handleDeleteFolder}
-                      onDuplicateNote={handleDuplicatePage}
-                      onToggleFavorite={(id) => {
-                        const note = notes.find((n) => n.id === id)
-                        if (note)
-                          updateNote(id, { isFavorite: !note.isFavorite })
-                      }}
-                      onToggleFolderExpand={(id) => {
-                        setExpandedFolders((prev) => ({
-                          ...prev,
-                          [id]: !prev[id],
-                        }))
-                      }}
-                      onUpdateFolderIcon={(id, icon) => {
-                        updateFolderMutation.mutate({ id, updates: { icon } })
-                      }}
-                      onUpdateNoteIcon={(id, icon) => {
-                        updateNote(id, { icon })
-                      }}
-                      onUpdateFolderName={(id, name) => {
-                        updateFolderMutation.mutate({ id, updates: { name } })
-                      }}
-                    />
-                  ))}
-                </SidebarMenu>
-              )}
-            </SidebarGroupContent>
-          </SidebarGroup>
+
+                {dnd.moveError && (
+                  <div
+                    role="alert"
+                    className="mx-2 mb-1 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[11px] text-destructive"
+                  >
+                    <span className="flex-1">
+                      Couldn't move items: {dnd.moveError}
+                    </span>
+                    <button
+                      onClick={dnd.dismissMoveError}
+                      aria-label="Dismiss"
+                      className="shrink-0 cursor-pointer opacity-70 hover:opacity-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                <TreeDropZone active={dnd.dropOnRoot}>
+                  <SidebarGroupContent>
+                    {sidebarTree.length === 0 ? (
+                      <div className="px-3 py-2 text-[11px] text-muted-foreground/60 italic">
+                        No pages yet. Click + to add one.
+                      </div>
+                    ) : (
+                      <SidebarMenu className="space-y-0.5 px-0.5">
+                        {sidebarTree.map((item) => (
+                          <NoteTreeItem
+                            key={item.id}
+                            item={item}
+                            currentNoteId={currentNoteId}
+                            depth={0}
+                            onSelectNote={handleSelectNote}
+                            onAddNote={handleCreateNewPage}
+                            onAddFolder={handleCreateNewFolder}
+                            onDeleteNote={handleDeletePage}
+                            onDeleteFolder={handleDeleteFolder}
+                            onDuplicateNote={handleDuplicatePage}
+                            onDuplicateFolder={handleDuplicateFolder}
+                            onToggleFavorite={(id) => {
+                              const note = notes.find((n) => n.id === id)
+                              if (note)
+                                updateNote(id, { isFavorite: !note.isFavorite })
+                            }}
+                            onToggleFolderExpand={(id) => {
+                              setExpandedFolders((prev) => ({
+                                ...prev,
+                                [id]: !prev[id],
+                              }))
+                            }}
+                            onUpdateFolderIcon={(id, icon) => {
+                              updateFolderMutation.mutate({
+                                id,
+                                updates: { icon },
+                              })
+                            }}
+                            onUpdateNoteIcon={(id, icon) => {
+                              updateNote(id, { icon })
+                            }}
+                            onUpdateFolderName={(id, name) => {
+                              updateFolderMutation.mutate({
+                                id,
+                                updates: { name },
+                              })
+                            }}
+                          />
+                        ))}
+                      </SidebarMenu>
+                    )}
+                  </SidebarGroupContent>
+                </TreeDropZone>
+              </SidebarGroup>
+              <DragOverlay dropAnimation={null}>
+                {dnd.dragged.length > 0 && (
+                  <div className="w-fit max-w-56 truncate rounded-md border border-primary/40 bg-sidebar px-2.5 py-1.5 text-xs font-medium text-sidebar-foreground shadow-lg">
+                    {dragLabel || 'Untitled'}
+                  </div>
+                )}
+              </DragOverlay>
+            </DndContext>
+          </TreeInteractionProvider>
         </SidebarContent>
 
         {/* Sidebar Footer */}

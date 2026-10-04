@@ -18,7 +18,7 @@ import (
 // simulate an unauthenticated request.
 func newNotesRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := services.NewNotesService(db)
+	h := services.NewNotesService(db, db)
 
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -80,7 +80,7 @@ func TestCreateNoteSuccess(t *testing.T) {
 func TestCreateNoteInFolder(t *testing.T) {
 	db := testutil.NewFakeDatabase()
 	userID := uuid.New()
-	folderID := uuid.New()
+	folderID := addFolder(db, userID, "Folder", nil).ID
 	r := newNotesRouter(db, &userID)
 
 	w := doJSON(t, r, http.MethodPost, "/api/notes", services.CreateNoteRequest{
@@ -278,7 +278,7 @@ func TestUpdateNotesFolder(t *testing.T) {
 	note := addNote(db, userID, "My note")
 	r := newNotesRouter(db, &userID)
 
-	folderID := uuid.New()
+	folderID := addFolder(db, userID, "Folder", nil).ID
 
 	w := doJSON(t, r, http.MethodPut, "/api/notes", map[string]any{
 		"notes": []map[string]any{
@@ -370,5 +370,42 @@ func TestDeleteNotesForbidden(t *testing.T) {
 	}
 	if _, ok := db.Notes[note.ID]; !ok {
 		t.Error("note was deleted despite forbidden response")
+	}
+}
+
+func TestNoteDestinationFolderIsValidated(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	userID := uuid.New()
+	foreignFolder := addFolder(db, uuid.New(), "Not mine", nil)
+	missing := uuid.New()
+	note := addNote(db, userID, "Mine")
+	r := newNotesRouter(db, &userID)
+
+	cases := []struct {
+		name   string
+		folder uuid.UUID
+		want   int
+	}{
+		{"foreign folder", foreignFolder.ID, http.StatusForbidden},
+		{"missing folder", missing, http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		t.Run("create/"+tc.name, func(t *testing.T) {
+			w := doJSON(t, r, http.MethodPost, "/api/notes", services.CreateNoteRequest{Title: "x", FolderID: &tc.folder})
+			if w.Code != tc.want {
+				t.Errorf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+		})
+		t.Run("update/"+tc.name, func(t *testing.T) {
+			w := doJSON(t, r, http.MethodPut, "/api/notes", map[string]any{
+				"notes": []map[string]any{{"id": note.ID, "folder_id": tc.folder}},
+			})
+			if w.Code != tc.want {
+				t.Errorf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+			if db.Notes[note.ID].FolderID != nil {
+				t.Error("rejected update must not change the note")
+			}
+		})
 	}
 }

@@ -37,9 +37,10 @@ type FakeDatabase struct {
 }
 
 var (
-	_ database.UserDataSource    = (*FakeDatabase)(nil)
-	_ database.NotesDataSource   = (*FakeDatabase)(nil)
-	_ database.FoldersDataSource = (*FakeDatabase)(nil)
+	_ database.UserDataSource      = (*FakeDatabase)(nil)
+	_ database.NotesDataSource     = (*FakeDatabase)(nil)
+	_ database.FoldersDataSource   = (*FakeDatabase)(nil)
+	_ database.HierarchyDataSource = (*FakeDatabase)(nil)
 )
 
 func NewFakeDatabase() *FakeDatabase {
@@ -247,6 +248,94 @@ func (f *FakeDatabase) DeleteFolders(ids []uuid.UUID) error {
 		delete(f.Folders, id)
 	}
 	return nil
+}
+
+func (f *FakeDatabase) LoadHierarchy(userID uuid.UUID, probeIDs []uuid.UUID) (model.HierarchySnapshot, error) {
+	if err := f.Errs["LoadHierarchy"]; err != nil {
+		return model.HierarchySnapshot{}, err
+	}
+	snap := model.HierarchySnapshot{Foreign: map[uuid.UUID]bool{}}
+	for _, folder := range f.Folders {
+		if folder.UserID == userID {
+			snap.Folders = append(snap.Folders, model.HierarchyFolderNode{ID: folder.ID, ParentID: folder.ParentFolderID, Name: folder.Name})
+		}
+	}
+	for _, note := range f.Notes {
+		if note.UserID == userID {
+			snap.Notes = append(snap.Notes, model.HierarchyNoteNode{ID: note.ID, FolderID: note.FolderID, Title: note.Title})
+		}
+	}
+	for _, id := range probeIDs {
+		if folder, ok := f.Folders[id]; ok && folder.UserID != userID {
+			snap.Foreign[id] = true
+		}
+		if note, ok := f.Notes[id]; ok && note.UserID != userID {
+			snap.Foreign[id] = true
+		}
+	}
+	return snap, nil
+}
+
+// ApplyMove mirrors the Postgres implementation: it validates every row first and
+// only then mutates, so a failure leaves the fake untouched like a rolled-back transaction.
+func (f *FakeDatabase) ApplyMove(plan model.MovePlan) (model.MoveResult, error) {
+	if err := f.Errs["ApplyMove"]; err != nil {
+		return model.MoveResult{}, err
+	}
+	for _, id := range plan.MovedFolders {
+		if folder, ok := f.Folders[id]; !ok || folder.UserID != plan.UserID {
+			return model.MoveResult{}, database.ErrMoveConflict
+		}
+	}
+	for _, id := range plan.MovedNotes {
+		if note, ok := f.Notes[id]; !ok || note.UserID != plan.UserID {
+			return model.MoveResult{}, database.ErrMoveConflict
+		}
+	}
+	for _, c := range plan.FolderClones {
+		if folder, ok := f.Folders[c.SourceID]; !ok || folder.UserID != plan.UserID {
+			return model.MoveResult{}, database.ErrMoveConflict
+		}
+	}
+	for _, c := range plan.NoteClones {
+		if note, ok := f.Notes[c.SourceID]; !ok || note.UserID != plan.UserID {
+			return model.MoveResult{}, database.ErrMoveConflict
+		}
+	}
+
+	var result model.MoveResult
+	now := time.Now()
+	for _, id := range plan.MovedFolders {
+		folder := f.Folders[id]
+		folder.ParentFolderID, folder.UpdatedAt = plan.Destination, now
+		f.Folders[id] = folder
+		result.MovedFolders = append(result.MovedFolders, folder)
+	}
+	for _, id := range plan.MovedNotes {
+		note := f.Notes[id]
+		note.FolderID, note.UpdatedAt = plan.Destination, now
+		f.Notes[id] = note
+		result.MovedNotes = append(result.MovedNotes, note)
+	}
+	for _, c := range plan.FolderClones {
+		src := f.Folders[c.SourceID]
+		clone := model.Folder{
+			ID: c.NewID, ParentFolderID: c.ParentID, Name: c.Name, UserID: plan.UserID,
+			Icon: src.Icon, IsFavorite: src.IsFavorite, CreatedAt: now, UpdatedAt: now,
+		}
+		f.Folders[clone.ID] = clone
+		result.CreatedFolders = append(result.CreatedFolders, clone)
+	}
+	for _, c := range plan.NoteClones {
+		src := f.Notes[c.SourceID]
+		clone := model.Note{
+			ID: c.NewID, FolderID: c.FolderID, Title: c.Title, Content: src.Content, UserID: plan.UserID,
+			Icon: src.Icon, IsFavorite: src.IsFavorite, CreatedAt: now, UpdatedAt: now,
+		}
+		f.Notes[clone.ID] = clone
+		result.CreatedNotes = append(result.CreatedNotes, clone)
+	}
+	return result, nil
 }
 
 // FakeHasher is a trivial hash.Hasher: Hash prefixes the password with
