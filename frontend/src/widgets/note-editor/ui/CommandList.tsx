@@ -98,6 +98,27 @@ export function SlashCommandMenu() {
     },
     [state, dispatch],
   )
+  const listRef = useRef<HTMLDivElement>(null)
+  const selectedIndexForScroll =
+    state.status === 'open' ? state.selectedIndex : -1
+
+  useEffect(() => {
+    if (selectedIndexForScroll < 0) return
+    const list = listRef.current
+    const item =
+      list?.querySelectorAll<HTMLElement>('[cmdk-item]')[selectedIndexForScroll]
+    if (!list || !item) return
+    // Scroll the list container itself so the item is fully visible,
+    // without relying on cmdk's own (lagging) selected state.
+    const listRect = list.getBoundingClientRect()
+    const itemRect = item.getBoundingClientRect()
+    if (itemRect.top < listRect.top) {
+      list.scrollTop -= listRect.top - itemRect.top
+    } else if (itemRect.bottom > listRect.bottom) {
+      list.scrollTop += itemRect.bottom - listRect.bottom
+    }
+  }, [selectedIndexForScroll])
+
   if (state.status !== 'open') return null
 
   const { items, selectedIndex, position } = state
@@ -150,7 +171,7 @@ export function SlashCommandMenu() {
               })
           }}
         >
-          <CommandList>
+          <CommandList ref={listRef}>
             <CommandEmpty>No results</CommandEmpty>
             <CommandGroup>
               {items.map((item, index) => (
