@@ -302,3 +302,19 @@ li.block-handle-hovered {
   > [data-node-view-content-react] {
   display: contents;
 }
+
+/* Thin scrollbar, used in place of shadcn's no-scrollbar. */
+@utility thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 9999px;
+  }
+}
