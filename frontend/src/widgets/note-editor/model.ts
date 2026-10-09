@@ -1,22 +1,17 @@
 import type { Editor, Range } from '@tiptap/react'
 import type { SuggestionOptions, SuggestionProps } from '@tiptap/suggestion'
 import type { ComponentType } from 'react'
-import type { Folder, Note } from '#/shared/models'
+import type { Item, ItemType } from '#/shared/models'
 
-export type { Folder, Note }
+export type { Item, ItemType }
 
-export type SidebarItem =
-  | {
-      type: 'folder'
-      id: string
-      data: Folder
-      children: SidebarItem[]
-    }
-  | {
-      type: 'note'
-      id: string
-      data: Note
-    }
+export interface SidebarItem {
+  id: string
+  type: ItemType
+  data: Item
+  isExpanded: boolean
+  children: SidebarItem[]
+}
 
 export type HoveredNodeData = {
   rect: DOMRect

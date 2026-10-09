@@ -22,7 +22,7 @@ func Auth(tokenService *services.JWTService) gin.HandlerFunc {
 
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": middlewareErrors.ErrInvalidBearerFormat})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": middlewareErrors.ErrInvalidBearerFormat.Error()})
 			c.Abort()
 			return
 		}

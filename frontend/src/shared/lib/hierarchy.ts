@@ -1,120 +1,102 @@
-import type { Folder, Note } from '../models'
+import type { Item } from '../models'
 
-export type ItemType = 'note' | 'folder'
-
-export interface ItemRef {
-  id: string
-  type: ItemType
-}
-
-export interface SelectionSplit {
-  /** Selected items with no selected ancestor folder: they keep their id and move. */
-  moved: ItemRef[]
-  /** Selected items inside another selected folder: the server clones them. */
-  cloned: ItemRef[]
-}
-
-/** True when a selected folder strictly contains an item whose parent is `parentId`. */
-function hasSelectedAncestor(
-  parentId: string | null,
-  selectedFolderIds: Set<string>,
-  parentOf: Map<string, string | null>,
-): boolean {
-  const visited = new Set<string>()
-  let current = parentId
-  while (current !== null && !visited.has(current)) {
-    if (selectedFolderIds.has(current)) return true
-    visited.add(current)
-    current = parentOf.get(current) ?? null
+export function compareItems(a: Item, b: Item): number {
+  if ((a.type === 'folder') !== (b.type === 'folder')) {
+    return a.type === 'folder' ? -1 : 1
   }
-  return false
+  return a.name.localeCompare(b.name)
 }
 
-/**
- * Splits a selection into moved and cloned items. Mirrors the server rule, so the
- * UI can predict what a drop will do before the request returns.
- */
-export function splitSelection(
-  selection: ItemRef[],
-  folders: Folder[],
-  notes: Note[],
-): SelectionSplit {
-  const parentOf = new Map(folders.map((f) => [f.id, f.parentId]))
-  const noteParent = new Map(notes.map((n) => [n.id, n.parentId]))
-  const selectedFolderIds = new Set(
-    selection.filter((i) => i.type === 'folder').map((i) => i.id),
-  )
+export function sortItems(items: Item[]): Item[] {
+  return [...items].sort(compareItems)
+}
 
-  const split: SelectionSplit = { moved: [], cloned: [] }
-  const seen = new Set<string>()
-  for (const item of selection) {
-    if (seen.has(item.id)) continue
-    seen.add(item.id)
-    const parentId =
-      item.type === 'folder'
-        ? (parentOf.get(item.id) ?? null)
-        : (noteParent.get(item.id) ?? null)
-    const nested = hasSelectedAncestor(parentId, selectedFolderIds, parentOf)
-    ;(nested ? split.cloned : split.moved).push(item)
+export function buildChildrenMap(items: Item[]): Map<string, Item[]> {
+  const map = new Map<string, Item[]>()
+  for (const item of items) {
+    if (item.parentId === null) continue
+    const siblings = map.get(item.parentId)
+    if (siblings) siblings.push(item)
+    else map.set(item.parentId, [item])
   }
-  return split
+  return map
 }
 
-/**
- * Folders that can never be a drop target for this selection: every selected
- * folder and all of its descendants.
- */
-export function getInvalidDropTargetIds(
-  selection: ItemRef[],
-  folders: Folder[],
+export function getSubtreeIds(
+  rootIds: Iterable<string>,
+  childrenMap: Map<string, Item[]>,
 ): Set<string> {
-  const childrenOf = new Map<string, string[]>()
-  for (const f of folders) {
-    if (f.parentId === null) continue
-    childrenOf.set(f.parentId, [...(childrenOf.get(f.parentId) ?? []), f.id])
-  }
-
-  const invalid = new Set<string>()
-  const stack = selection.filter((i) => i.type === 'folder').map((i) => i.id)
+  const out = new Set<string>()
+  const stack = [...rootIds]
   while (stack.length > 0) {
     const id = stack.pop()!
-    if (invalid.has(id)) continue
-    invalid.add(id)
-    stack.push(...(childrenOf.get(id) ?? []))
+    if (out.has(id)) continue
+    out.add(id)
+    for (const child of childrenMap.get(id) ?? []) stack.push(child.id)
   }
-  return invalid
+  return out
+}
+
+export function getAncestorIds(
+  id: string,
+  parentOf: ReadonlyMap<string, string | null>,
+): string[] {
+  const out: string[] = []
+  const seen = new Set<string>([id])
+  let current = parentOf.get(id) ?? null
+  while (current !== null && !seen.has(current)) {
+    out.push(current)
+    seen.add(current)
+    current = parentOf.get(current) ?? null
+  }
+  return out
+}
+
+export function buildParentMap(items: Item[]): Map<string, string | null> {
+  return new Map(items.map((i) => [i.id, i.parentId]))
+}
+
+export function getTopLevelMembers(
+  selectedIds: ReadonlySet<string>,
+  items: Item[],
+): Item[] {
+  return items.filter(
+    (i) =>
+      selectedIds.has(i.id) &&
+      (i.parentId === null || !selectedIds.has(i.parentId)),
+  )
+}
+
+export function getInvalidDropTargetIds(
+  movedIds: string[],
+  items: Item[],
+): Set<string> {
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const folders = movedIds.filter((id) => byId.get(id)?.type === 'folder')
+  return getSubtreeIds(folders, buildChildrenMap(items))
 }
 
 /** True when dropping would change nothing: every item already lives in the destination. */
 export function isNoopMove(
-  selection: ItemRef[],
+  movedIds: string[],
   destinationId: string | null,
-  folders: Folder[],
-  notes: Note[],
+  items: Item[],
 ): boolean {
-  const { moved, cloned } = splitSelection(selection, folders, notes)
-  if (cloned.length > 0) return false
-  const parentById = new Map<string, string | null>([
-    ...folders.map((f) => [f.id, f.parentId] as const),
-    ...notes.map((n) => [n.id, n.parentId] as const),
-  ])
-  return moved.every((i) => (parentById.get(i.id) ?? null) === destinationId)
+  const parentOf = buildParentMap(items)
+  return movedIds.every((id) => (parentOf.get(id) ?? null) === destinationId)
 }
 
-const COPY_SUFFIX = /^(.*) \(Copy \d+\)$/
-
-/** Picks the smallest unused "Name (Copy N)" and records it in `taken`. */
-export function nextCloneName(name: string, taken: Set<string>): string {
-  const match = COPY_SUFFIX.exec(name)
-  const base = match && match[1] !== '' ? match[1] : name
-  for (let n = 1; ; n++) {
-    const suffix = ` (Copy ${n})`
-    const room = 255 - [...suffix].length
-    const trimmed = [...base].slice(0, room).join('')
-    const candidate = `${trimmed}${suffix}`
-    if (!taken.has(candidate)) {
-      taken.add(candidate)
-      return candidate
-    }
+export function getItemPath(item: Item, items: Item[]): Item[] {
+  const byId = new Map(items.map((i) => [i.id, i]))
+  const path: Item[] = []
+  const seen = new Set<string>([item.id])
+  let parentId = item.parentId
+  while (parentId !== null && !seen.has(parentId)) {
+    const parent = byId.get(parentId)
+    if (!parent) break
+    path.unshift(parent)
+    seen.add(parentId)
+    parentId = parent.parentId
   }
+  return path
 }

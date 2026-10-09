@@ -21,34 +21,27 @@ var (
 	// against that type see the fake behave the same way the real Postgres
 	// datasource does.
 	ErrUserNotFound error = pkg.NewNotFoundError("user")
-
-	ErrNoteNotFound   = errors.New("note not found")
-	ErrFolderNotFound = errors.New("folder not found")
 )
 
-// FakeDatabase is an in-memory implementation of database.UserDataSource,
-// database.NotesDataSource, and database.FoldersDataSource.
 // Set Errs["MethodName"] to force that method to fail.
 type FakeDatabase struct {
-	Users   map[uuid.UUID]model.User
-	Notes   map[uuid.UUID]model.Note
-	Folders map[uuid.UUID]model.Folder
-	Errs    map[string]error
+	Users    map[uuid.UUID]model.User
+	Items    map[uuid.UUID]model.Item
+	Contents map[uuid.UUID]model.NoteContent
+	Errs     map[string]error
 }
 
 var (
-	_ database.UserDataSource      = (*FakeDatabase)(nil)
-	_ database.NotesDataSource     = (*FakeDatabase)(nil)
-	_ database.FoldersDataSource   = (*FakeDatabase)(nil)
-	_ database.HierarchyDataSource = (*FakeDatabase)(nil)
+	_ database.UserDataSource  = (*FakeDatabase)(nil)
+	_ database.ItemsDataSource = (*FakeDatabase)(nil)
 )
 
 func NewFakeDatabase() *FakeDatabase {
 	return &FakeDatabase{
-		Users:   make(map[uuid.UUID]model.User),
-		Notes:   make(map[uuid.UUID]model.Note),
-		Folders: make(map[uuid.UUID]model.Folder),
-		Errs:    make(map[string]error),
+		Users:    make(map[uuid.UUID]model.User),
+		Items:    make(map[uuid.UUID]model.Item),
+		Contents: make(map[uuid.UUID]model.NoteContent),
+		Errs:     make(map[string]error),
 	}
 }
 
@@ -97,245 +90,245 @@ func (f *FakeDatabase) UpdateUser(user model.User) error {
 	return nil
 }
 
-func (f *FakeDatabase) CreateNote(note model.Note) (model.Note, error) {
-	if err := f.Errs["CreateNote"]; err != nil {
-		return model.Note{}, err
+func (f *FakeDatabase) owned(userID, id uuid.UUID) (model.Item, bool) {
+	it, ok := f.Items[id]
+	if !ok || it.UserID != userID {
+		return model.Item{}, false
 	}
-	if note.ID == uuid.Nil {
-		note.ID = uuid.New()
-	}
-	note.CreatedAt = time.Now()
-	note.UpdatedAt = time.Now()
-	f.Notes[note.ID] = note
-	return note, nil
+	return it, true
 }
 
-func (f *FakeDatabase) GetNoteByID(id uuid.UUID) (model.Note, error) {
-	if err := f.Errs["GetNoteByID"]; err != nil {
-		return model.Note{}, err
+func (f *FakeDatabase) depthOf(id uuid.UUID) int {
+	n := 0
+	for cur := &id; cur != nil && n <= database.MaxTreeDepth+1; {
+		it, ok := f.Items[*cur]
+		if !ok {
+			break
+		}
+		n++
+		cur = it.ParentID
 	}
-	n, ok := f.Notes[id]
-	if !ok {
-		return model.Note{}, ErrNoteNotFound
-	}
-	return n, nil
+	return n
 }
 
-func (f *FakeDatabase) GetNotesByUserID(userID uuid.UUID) ([]model.Note, error) {
-	if err := f.Errs["GetNotesByUserID"]; err != nil {
-		return nil, err
+func (f *FakeDatabase) CreateItem(item model.Item, content string) (model.Item, error) {
+	if err := f.Errs["CreateItem"]; err != nil {
+		return model.Item{}, err
 	}
-	notes := []model.Note{}
-	for _, n := range f.Notes {
-		if n.UserID == userID {
-			notes = append(notes, n)
+	if item.ID == uuid.Nil {
+		item.ID = uuid.New()
+	}
+	if _, taken := f.Items[item.ID]; taken {
+		return model.Item{}, pkg.NewAlreadyExistsError("item")
+	}
+	if item.ParentID != nil {
+		parent, ok := f.owned(item.UserID, *item.ParentID)
+		if !ok || parent.Type != model.ItemTypeFolder {
+			return model.Item{}, database.ErrInvalidParent
 		}
 	}
-	return notes, nil
+	now := time.Now()
+	item.CreatedAt, item.UpdatedAt = now, now
+	f.Items[item.ID] = item
+	if f.depthOf(item.ID) > database.MaxTreeDepth {
+		delete(f.Items, item.ID)
+		return model.Item{}, database.ErrTooDeep
+	}
+	if item.Type == model.ItemTypeNote {
+		f.Contents[item.ID] = model.NoteContent{ItemID: item.ID, Content: content, UpdatedAt: now}
+	}
+	return item, nil
 }
 
-func (f *FakeDatabase) UpdateNotes(notes []model.Note) error {
-	if err := f.Errs["UpdateNotes"]; err != nil {
-		return err
+func (f *FakeDatabase) GetItem(userID, id uuid.UUID) (model.Item, error) {
+	if err := f.Errs["GetItem"]; err != nil {
+		return model.Item{}, err
 	}
-	for _, n := range notes {
-		if _, ok := f.Notes[n.ID]; !ok {
-			return ErrNoteNotFound
-		}
-		n.UpdatedAt = time.Now()
-		f.Notes[n.ID] = n
-	}
-	return nil
-}
-
-func (f *FakeDatabase) DeleteNotes(ids []uuid.UUID) error {
-	if err := f.Errs["DeleteNotes"]; err != nil {
-		return err
-	}
-	for _, id := range ids {
-		delete(f.Notes, id)
-	}
-	return nil
-}
-
-func (f *FakeDatabase) CreateFolder(folder model.Folder) (model.Folder, error) {
-	if err := f.Errs["CreateFolder"]; err != nil {
-		return model.Folder{}, err
-	}
-	if folder.ID == uuid.Nil {
-		folder.ID = uuid.New()
-	}
-	folder.CreatedAt = time.Now()
-	folder.UpdatedAt = time.Now()
-	f.Folders[folder.ID] = folder
-	return folder, nil
-}
-
-func (f *FakeDatabase) GetFolderByID(id uuid.UUID) (model.Folder, error) {
-	if err := f.Errs["GetFolderByID"]; err != nil {
-		return model.Folder{}, err
-	}
-	folder, ok := f.Folders[id]
+	it, ok := f.owned(userID, id)
 	if !ok {
-		return model.Folder{}, ErrFolderNotFound
+		return model.Item{}, pkg.NewNotFoundError("item")
 	}
-	return folder, nil
+	return it, nil
 }
 
-func (f *FakeDatabase) GetFolderChildrenByID(id uuid.UUID) ([]model.Item, error) {
-	if err := f.Errs["GetFolderChildrenByID"]; err != nil {
+func (f *FakeDatabase) ListItems(userID uuid.UUID, filter model.ItemFilter) ([]model.Item, error) {
+	if err := f.Errs["ListItems"]; err != nil {
 		return nil, err
 	}
 	items := []model.Item{}
-	for _, folder := range f.Folders {
-		if folder.ParentFolderID != nil && *folder.ParentFolderID == id {
-			items = append(items, model.Item{ID: folder.ID.String(), Name: folder.Name, Type: "folder", UpdatedAt: folder.UpdatedAt})
+	for _, it := range f.Items {
+		if it.UserID != userID {
+			continue
 		}
-	}
-	for _, note := range f.Notes {
-		if note.FolderID != nil && *note.FolderID == id {
-			items = append(items, model.Item{ID: note.ID.String(), Name: note.Title, Type: "note", UpdatedAt: note.UpdatedAt})
+		if filter.ParentSet && !samePtr(it.ParentID, filter.ParentID) {
+			continue
 		}
+		items = append(items, it)
 	}
+	model.SortItems(items)
 	return items, nil
 }
 
-func (f *FakeDatabase) GetFoldersByUserID(userID uuid.UUID) ([]model.Folder, error) {
-	if err := f.Errs["GetFoldersByUserID"]; err != nil {
+func samePtr(a, b *uuid.UUID) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+func (f *FakeDatabase) UpdateItem(userID, id uuid.UUID, patch model.ItemPatch) (model.Item, error) {
+	if err := f.Errs["UpdateItem"]; err != nil {
+		return model.Item{}, err
+	}
+	it, ok := f.owned(userID, id)
+	if !ok {
+		return model.Item{}, pkg.NewNotFoundError("item")
+	}
+	if patch.Name != nil {
+		it.Name = *patch.Name
+	}
+	if patch.Icon != nil {
+		it.Icon = *patch.Icon
+	}
+	if patch.IsFavorite != nil {
+		it.IsFavorite = *patch.IsFavorite
+	}
+	it.UpdatedAt = time.Now()
+	f.Items[id] = it
+	return it, nil
+}
+
+func (f *FakeDatabase) MoveItems(userID uuid.UUID, moves []model.ItemMove) ([]model.Item, error) {
+	if err := f.Errs["MoveItems"]; err != nil {
 		return nil, err
 	}
-	folders := []model.Folder{}
-	for _, folder := range f.Folders {
-		if folder.UserID == userID {
-			folders = append(folders, folder)
-		}
+	staged := make(map[uuid.UUID]model.Item, len(f.Items))
+	for id, it := range f.Items {
+		staged[id] = it
 	}
-	return folders, nil
-}
-
-func (f *FakeDatabase) GetFoldersByIDs(ids []uuid.UUID) ([]model.Folder, error) {
-	if err := f.Errs["GetFoldersByIDs"]; err != nil {
-		return nil, err
-	}
-	folders := []model.Folder{}
-	for _, id := range ids {
-		if folder, ok := f.Folders[id]; ok {
-			folders = append(folders, folder)
-		}
-	}
-	return folders, nil
-}
-
-func (f *FakeDatabase) UpdateFolders(folders []model.Folder) error {
-	if err := f.Errs["UpdateFolders"]; err != nil {
-		return err
-	}
-	for _, folder := range folders {
-		if _, ok := f.Folders[folder.ID]; !ok {
-			return ErrFolderNotFound
-		}
-		folder.UpdatedAt = time.Now()
-		f.Folders[folder.ID] = folder
-	}
-	return nil
-}
-
-func (f *FakeDatabase) DeleteFolders(ids []uuid.UUID) error {
-	if err := f.Errs["DeleteFolders"]; err != nil {
-		return err
-	}
-	for _, id := range ids {
-		delete(f.Folders, id)
-	}
-	return nil
-}
-
-func (f *FakeDatabase) LoadHierarchy(userID uuid.UUID, probeIDs []uuid.UUID) (model.HierarchySnapshot, error) {
-	if err := f.Errs["LoadHierarchy"]; err != nil {
-		return model.HierarchySnapshot{}, err
-	}
-	snap := model.HierarchySnapshot{Foreign: map[uuid.UUID]bool{}}
-	for _, folder := range f.Folders {
-		if folder.UserID == userID {
-			snap.Folders = append(snap.Folders, model.HierarchyFolderNode{ID: folder.ID, ParentID: folder.ParentFolderID, Name: folder.Name})
-		}
-	}
-	for _, note := range f.Notes {
-		if note.UserID == userID {
-			snap.Notes = append(snap.Notes, model.HierarchyNoteNode{ID: note.ID, FolderID: note.FolderID, Title: note.Title})
-		}
-	}
-	for _, id := range probeIDs {
-		if folder, ok := f.Folders[id]; ok && folder.UserID != userID {
-			snap.Foreign[id] = true
-		}
-		if note, ok := f.Notes[id]; ok && note.UserID != userID {
-			snap.Foreign[id] = true
-		}
-	}
-	return snap, nil
-}
-
-// ApplyMove mirrors the Postgres implementation: it validates every row first and
-// only then mutates, so a failure leaves the fake untouched like a rolled-back transaction.
-func (f *FakeDatabase) ApplyMove(plan model.MovePlan) (model.MoveResult, error) {
-	if err := f.Errs["ApplyMove"]; err != nil {
-		return model.MoveResult{}, err
-	}
-	for _, id := range plan.MovedFolders {
-		if folder, ok := f.Folders[id]; !ok || folder.UserID != plan.UserID {
-			return model.MoveResult{}, database.ErrMoveConflict
-		}
-	}
-	for _, id := range plan.MovedNotes {
-		if note, ok := f.Notes[id]; !ok || note.UserID != plan.UserID {
-			return model.MoveResult{}, database.ErrMoveConflict
-		}
-	}
-	for _, c := range plan.FolderClones {
-		if folder, ok := f.Folders[c.SourceID]; !ok || folder.UserID != plan.UserID {
-			return model.MoveResult{}, database.ErrMoveConflict
-		}
-	}
-	for _, c := range plan.NoteClones {
-		if note, ok := f.Notes[c.SourceID]; !ok || note.UserID != plan.UserID {
-			return model.MoveResult{}, database.ErrMoveConflict
-		}
-	}
-
-	var result model.MoveResult
 	now := time.Now()
-	for _, id := range plan.MovedFolders {
-		folder := f.Folders[id]
-		folder.ParentFolderID, folder.UpdatedAt = plan.Destination, now
-		f.Folders[id] = folder
-		result.MovedFolders = append(result.MovedFolders, folder)
+	for _, m := range moves {
+		it, ok := staged[m.ID]
+		if !ok || it.UserID != userID {
+			return nil, database.ErrMoveConflict
+		}
+		if m.ParentID != nil {
+			parent, ok := staged[*m.ParentID]
+			if !ok || parent.UserID != userID || parent.Type != model.ItemTypeFolder {
+				return nil, database.ErrInvalidParent
+			}
+		}
+		it.ParentID, it.UpdatedAt = m.ParentID, now
+		staged[m.ID] = it
 	}
-	for _, id := range plan.MovedNotes {
-		note := f.Notes[id]
-		note.FolderID, note.UpdatedAt = plan.Destination, now
-		f.Notes[id] = note
-		result.MovedNotes = append(result.MovedNotes, note)
+
+	committed := f.Items
+	f.Items = staged
+	for _, m := range moves {
+		seen := map[uuid.UUID]bool{}
+		for cur := f.Items[m.ID].ParentID; cur != nil; cur = f.Items[*cur].ParentID {
+			if *cur == m.ID || seen[*cur] {
+				f.Items = committed
+				return nil, database.ErrMoveConflict
+			}
+			seen[*cur] = true
+		}
+		if f.depthOf(m.ID) > database.MaxTreeDepth {
+			f.Items = committed
+			return nil, database.ErrTooDeep
+		}
 	}
-	for _, c := range plan.FolderClones {
-		src := f.Folders[c.SourceID]
-		clone := model.Folder{
-			ID: c.NewID, ParentFolderID: c.ParentID, Name: c.Name, UserID: plan.UserID,
+
+	moved := make([]model.Item, 0, len(moves))
+	for _, m := range moves {
+		moved = append(moved, f.Items[m.ID])
+	}
+	return moved, nil
+}
+
+func (f *FakeDatabase) DeleteItem(userID, id uuid.UUID) error {
+	if err := f.Errs["DeleteItem"]; err != nil {
+		return err
+	}
+	if _, ok := f.owned(userID, id); !ok {
+		return pkg.NewNotFoundError("item")
+	}
+	doomed := map[uuid.UUID]bool{id: true}
+	for changed := true; changed; {
+		changed = false
+		for _, it := range f.Items {
+			if it.ParentID != nil && doomed[*it.ParentID] && !doomed[it.ID] {
+				doomed[it.ID] = true
+				changed = true
+			}
+		}
+	}
+	for doomedID := range doomed {
+		delete(f.Items, doomedID)
+		delete(f.Contents, doomedID)
+	}
+	return nil
+}
+
+func (f *FakeDatabase) ApplyDuplicate(plan model.DuplicatePlan) (model.Item, error) {
+	if err := f.Errs["ApplyDuplicate"]; err != nil {
+		return model.Item{}, err
+	}
+	for _, c := range plan.Copies {
+		if _, ok := f.owned(plan.UserID, c.SourceID); !ok {
+			return model.Item{}, database.ErrMoveConflict
+		}
+	}
+	now := time.Now()
+	var root model.Item
+	for i, c := range plan.Copies {
+		src := f.Items[c.SourceID]
+		clone := model.Item{
+			ID: c.NewID, UserID: plan.UserID, ParentID: c.ParentID, Type: src.Type, Name: c.Name,
 			Icon: src.Icon, IsFavorite: src.IsFavorite, CreatedAt: now, UpdatedAt: now,
 		}
-		f.Folders[clone.ID] = clone
-		result.CreatedFolders = append(result.CreatedFolders, clone)
-	}
-	for _, c := range plan.NoteClones {
-		src := f.Notes[c.SourceID]
-		clone := model.Note{
-			ID: c.NewID, FolderID: c.FolderID, Title: c.Title, Content: src.Content, UserID: plan.UserID,
-			Icon: src.Icon, IsFavorite: src.IsFavorite, CreatedAt: now, UpdatedAt: now,
+		f.Items[clone.ID] = clone
+		if src.Type == model.ItemTypeNote {
+			f.Contents[clone.ID] = model.NoteContent{ItemID: clone.ID, Content: f.Contents[src.ID].Content, UpdatedAt: now}
 		}
-		f.Notes[clone.ID] = clone
-		result.CreatedNotes = append(result.CreatedNotes, clone)
+		if i == 0 {
+			root = clone
+		}
 	}
-	return result, nil
+	return root, nil
+}
+
+func (f *FakeDatabase) GetNoteContent(userID, id uuid.UUID) (model.NoteContent, error) {
+	if err := f.Errs["GetNoteContent"]; err != nil {
+		return model.NoteContent{}, err
+	}
+	it, ok := f.owned(userID, id)
+	if !ok {
+		return model.NoteContent{}, pkg.NewNotFoundError("item")
+	}
+	if it.Type != model.ItemTypeNote {
+		return model.NoteContent{}, database.ErrNotANote
+	}
+	return f.Contents[id], nil
+}
+
+func (f *FakeDatabase) PutNoteContent(userID, id uuid.UUID, content string) (model.NoteContent, error) {
+	if err := f.Errs["PutNoteContent"]; err != nil {
+		return model.NoteContent{}, err
+	}
+	it, ok := f.owned(userID, id)
+	if !ok {
+		return model.NoteContent{}, pkg.NewNotFoundError("item")
+	}
+	if it.Type != model.ItemTypeNote {
+		return model.NoteContent{}, database.ErrNotANote
+	}
+	now := time.Now()
+	nc := model.NoteContent{ItemID: id, Content: content, UpdatedAt: now}
+	f.Contents[id] = nc
+	it.UpdatedAt = now
+	f.Items[id] = it
+	return nc, nil
 }
 
 // FakeHasher is a trivial hash.Hasher: Hash prefixes the password with

@@ -15,8 +15,8 @@ import { Route as SignupIndexRouteImport } from './routes/signup/index'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
-import { Route as AuthenticatedNotesIndexRouteImport } from './routes/_authenticated/notes/index'
-import { Route as AuthenticatedNotesNoteIdRouteImport } from './routes/_authenticated/notes/$noteId'
+import { Route as AuthenticatedItemsIndexRouteImport } from './routes/_authenticated/items/index'
+import { Route as AuthenticatedItemsItemIdRouteImport } from './routes/_authenticated/items/$itemId'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
@@ -47,15 +47,15 @@ const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedNotesIndexRoute = AuthenticatedNotesIndexRouteImport.update({
-  id: '/notes/',
-  path: '/notes/',
+const AuthenticatedItemsIndexRoute = AuthenticatedItemsIndexRouteImport.update({
+  id: '/items/',
+  path: '/items/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedNotesNoteIdRoute =
-  AuthenticatedNotesNoteIdRouteImport.update({
-    id: '/notes/$noteId',
-    path: '/notes/$noteId',
+const AuthenticatedItemsItemIdRoute =
+  AuthenticatedItemsItemIdRouteImport.update({
+    id: '/items/$itemId',
+    path: '/items/$itemId',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 
@@ -65,8 +65,8 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/login/': typeof LoginIndexRoute
   '/signup/': typeof SignupIndexRoute
-  '/notes/$noteId': typeof AuthenticatedNotesNoteIdRoute
-  '/notes/': typeof AuthenticatedNotesIndexRoute
+  '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
+  '/items/': typeof AuthenticatedItemsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -74,8 +74,8 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/login': typeof LoginIndexRoute
   '/signup': typeof SignupIndexRoute
-  '/notes/$noteId': typeof AuthenticatedNotesNoteIdRoute
-  '/notes': typeof AuthenticatedNotesIndexRoute
+  '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
+  '/items': typeof AuthenticatedItemsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -85,8 +85,8 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/login/': typeof LoginIndexRoute
   '/signup/': typeof SignupIndexRoute
-  '/_authenticated/notes/$noteId': typeof AuthenticatedNotesNoteIdRoute
-  '/_authenticated/notes/': typeof AuthenticatedNotesIndexRoute
+  '/_authenticated/items/$itemId': typeof AuthenticatedItemsItemIdRoute
+  '/_authenticated/items/': typeof AuthenticatedItemsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -96,8 +96,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/login/'
     | '/signup/'
-    | '/notes/$noteId'
-    | '/notes/'
+    | '/items/$itemId'
+    | '/items/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -105,8 +105,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/login'
     | '/signup'
-    | '/notes/$noteId'
-    | '/notes'
+    | '/items/$itemId'
+    | '/items'
   id:
     | '__root__'
     | '/'
@@ -115,8 +115,8 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/login/'
     | '/signup/'
-    | '/_authenticated/notes/$noteId'
-    | '/_authenticated/notes/'
+    | '/_authenticated/items/$itemId'
+    | '/_authenticated/items/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -170,18 +170,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/notes/': {
-      id: '/_authenticated/notes/'
-      path: '/notes'
-      fullPath: '/notes/'
-      preLoaderRoute: typeof AuthenticatedNotesIndexRouteImport
+    '/_authenticated/items/': {
+      id: '/_authenticated/items/'
+      path: '/items'
+      fullPath: '/items/'
+      preLoaderRoute: typeof AuthenticatedItemsIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/notes/$noteId': {
-      id: '/_authenticated/notes/$noteId'
-      path: '/notes/$noteId'
-      fullPath: '/notes/$noteId'
-      preLoaderRoute: typeof AuthenticatedNotesNoteIdRouteImport
+    '/_authenticated/items/$itemId': {
+      id: '/_authenticated/items/$itemId'
+      path: '/items/$itemId'
+      fullPath: '/items/$itemId'
+      preLoaderRoute: typeof AuthenticatedItemsItemIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
   }
@@ -190,15 +190,15 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedNotesNoteIdRoute: typeof AuthenticatedNotesNoteIdRoute
-  AuthenticatedNotesIndexRoute: typeof AuthenticatedNotesIndexRoute
+  AuthenticatedItemsItemIdRoute: typeof AuthenticatedItemsItemIdRoute
+  AuthenticatedItemsIndexRoute: typeof AuthenticatedItemsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedNotesNoteIdRoute: AuthenticatedNotesNoteIdRoute,
-  AuthenticatedNotesIndexRoute: AuthenticatedNotesIndexRoute,
+  AuthenticatedItemsItemIdRoute: AuthenticatedItemsItemIdRoute,
+  AuthenticatedItemsIndexRoute: AuthenticatedItemsIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

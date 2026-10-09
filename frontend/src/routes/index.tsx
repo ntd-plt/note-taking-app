@@ -63,7 +63,7 @@ function App() {
                 Create your first note and start organizing your thoughts.
               </p>
               <Button asChild>
-                <a href="/notes">Create Note</a>
+                <a href="/items">Create Note</a>
               </Button>
             </div>
 
@@ -73,7 +73,7 @@ function App() {
                 View and manage all your notes in one place.
               </p>
               <Button variant="outline" asChild>
-                <a href="/notes">View All Notes</a>
+                <a href="/items">View All Notes</a>
               </Button>
             </div>
           </div>

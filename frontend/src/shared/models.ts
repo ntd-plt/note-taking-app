@@ -27,24 +27,26 @@ export interface AuthResponse {
   user: User
 }
 
-export interface Folder {
+export type ItemType = 'note' | 'folder'
+
+export interface Item {
   id: string
+  type: ItemType
   name: string
-  parentId: string | null // Points to another Folder's id, or null for root
-  icon?: string // e.g., "📁", "🚀"
-  isExpanded?: boolean // Local state for sidebar visibility
+  parentId: string | null
+  icon: string
+  isFavorite: boolean
   createdAt?: string // RFC3339 timestamp from the backend
   updatedAt?: string // RFC3339 timestamp from the backend
 }
 
-export interface Note {
-  id: string
-  title: string
+export interface NoteContent {
+  itemId: string
   content: string
-  parentId: string | null // Points to a Folder's id, or null for root
-  isFavorite?: boolean
-  icon?: string // e.g., "📄"
-  path?: string[]
-  createdAt?: string // RFC3339 timestamp from the backend
-  updatedAt?: string // RFC3339 timestamp from the backend
+  updatedAt?: string
+}
+
+export const DEFAULT_ICONS: Record<ItemType, string> = {
+  note: '📄',
+  folder: '📁',
 }

@@ -1,16 +1,15 @@
-export { useNotesStore } from './hooks/useNotesStore'
-export { type Note, type Folder, type SidebarItem } from './model'
+export { useItemsStore } from './hooks/useItemsStore'
+export { type Item, type ItemType, type SidebarItem } from './model'
 export { Editor } from './ui/Editor'
+export { ItemBreadcrumb } from './ui/ItemBreadcrumb'
 export {
-  useNotesQuery,
-  useFoldersQuery,
-  useCreateNote,
-  useDeleteNote,
-  useDuplicateNote,
-  useDuplicateFolder,
-  useCreateFolder,
-  useDeleteFolder,
-  useUpdateFolder,
-  useUpdateNote,
-  useResolveFullPath,
-} from './hooks/useNotesQuery'
+  ITEMS_KEY,
+  useItemsQuery,
+  useNoteContentQuery,
+  useCreateItem,
+  useDeleteItem,
+  useDuplicateItem,
+  useMoveItems,
+  useUpdateItem,
+  useSaveNoteContent,
+} from './hooks/useItems'

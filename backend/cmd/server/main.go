@@ -10,8 +10,8 @@ import (
 
 // @title           Note Taking App API
 // @version         1.0
-// @description     API for managing users, notes, and folders.
-// @BasePath        /
+// @description     API for managing users and their items (notes and folders).
+// @BasePath        /api/v1
 
 // @securityDefinitions.apikey  BearerAuth
 // @in                          header
@@ -31,9 +31,7 @@ func main() {
 	defer pool.Close()
 
 	userDataSource := database.NewPostgreUserDataSource(pool)
-	notesDataSource := database.NewPostgreNotesDataSource(pool)
-	foldersDataSource := database.NewPostgreFoldersDataSource(pool)
-	hierarchyDataSource := database.NewPostgreHierarchyDataSource(pool)
+	itemsDataSource := database.NewPostgreItemsDataSource(pool)
 
 	hasher := hash.NewBcryptHasher()
 	tokenService := services.NewJWTService()
@@ -48,11 +46,9 @@ func main() {
 
 	userService := services.NewUserService(userDataSource)
 	authService := services.NewAuthService(userService, hasher, tokenService, emailValidator)
-	notesService := services.NewNotesService(notesDataSource, foldersDataSource)
-	foldersService := services.NewFoldersService(foldersDataSource)
-	hierarchyService := services.NewHierarchyService(hierarchyDataSource)
+	itemsService := services.NewItemsService(itemsDataSource)
 
-	router := NewRouter(authService, userService, notesService, foldersService, hierarchyService, tokenService, !cfg.IsProduction())
+	router := NewRouter(authService, userService, itemsService, tokenService, cfg.IsDevelopment())
 	if err := router.Run(":8080"); err != nil {
 		panic(err)
 	}

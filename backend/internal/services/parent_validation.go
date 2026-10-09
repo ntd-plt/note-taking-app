@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"net/http"
 
 	"backend/internal/model"
@@ -8,32 +9,36 @@ import (
 	"github.com/google/uuid"
 )
 
-type folderLookup interface {
-	GetFoldersByIDs(ids []uuid.UUID) ([]model.Folder, error)
+const (
+	MaxNameLength    = 255
+	MaxIconLength    = 32
+	MaxContentBytes  = 1 << 20
+	MaxMoveItems     = 200
+	MaxDuplicateRows = 1000
+
+	defaultNoteIcon   = "📄"
+	defaultFolderIcon = "📁"
+)
+
+func defaultIcon(t model.ItemType) string {
+	if t == model.ItemTypeFolder {
+		return defaultFolderIcon
+	}
+	return defaultNoteIcon
 }
 
-// checkParentFolder verifies that a destination folder exists and belongs to userID.
-// A nil id (the top level) is always valid. It returns 0 when the destination is
-// acceptable, otherwise the HTTP status to answer with and an error message.
-func checkParentFolder(db folderLookup, userID uuid.UUID, id *uuid.UUID) (int, string) {
-	if id == nil {
-		return 0, ""
-	}
-	folders, err := db.GetFoldersByIDs([]uuid.UUID{*id})
-	if err != nil {
-		return http.StatusInternalServerError, err.Error()
-	}
-	if len(folders) == 0 {
-		return http.StatusNotFound, "destination folder not found"
-	}
-	if folders[0].UserID != userID {
-		return http.StatusForbidden, "not authorized to use this destination folder"
-	}
-	return 0, ""
+type RequestError struct {
+	Status  int
+	Message string
+}
+
+func (e *RequestError) Error() string { return e.Message }
+
+func requestErr(status int, format string, args ...any) *RequestError {
+	return &RequestError{Status: status, Message: fmt.Sprintf(format, args...)}
 }
 
 // wouldCreateCycle reports whether giving folderID the parent newParent makes it its
-// own ancestor, using parents as the current folder-to-parent map.
 func wouldCreateCycle(parents map[uuid.UUID]*uuid.UUID, folderID uuid.UUID, newParent *uuid.UUID) bool {
 	visited := map[uuid.UUID]bool{}
 	for cur := newParent; cur != nil && !visited[*cur]; cur = parents[*cur] {
@@ -43,4 +48,21 @@ func wouldCreateCycle(parents map[uuid.UUID]*uuid.UUID, folderID uuid.UUID, newP
 		visited[*cur] = true
 	}
 	return false
+}
+
+func (s *ItemsService) checkParent(userID uuid.UUID, parentID *uuid.UUID) *RequestError {
+	if parentID == nil {
+		return nil
+	}
+	parent, err := s.db.GetItem(userID, *parentID)
+	if err != nil {
+		if isNotFound(err) {
+			return requestErr(http.StatusNotFound, "parent folder not found")
+		}
+		return internalErr(err)
+	}
+	if parent.Type != model.ItemTypeFolder {
+		return requestErr(http.StatusBadRequest, "parent must be a folder")
+	}
+	return nil
 }

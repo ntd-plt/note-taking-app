@@ -78,18 +78,18 @@ describe('RegisterPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('registers successfully and navigates to /notes', async () => {
+  it('registers successfully and navigates to /items', async () => {
     renderRegisterPage()
     submitRegisterForm()
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/notes' })
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/items' })
     })
   })
 
   it('shows a duplicate-email message on a 409 response', async () => {
     server.use(
-      http.post('/auth/signup', () =>
+      http.post('/api/v1/auth/signup', () =>
         HttpResponse.json(
           { error: 'the email already exists' },
           { status: 409 },
@@ -109,7 +109,7 @@ describe('RegisterPage', () => {
 
   it('shows an invalid-email message on a 422 response', async () => {
     server.use(
-      http.post('/auth/signup', () =>
+      http.post('/api/v1/auth/signup', () =>
         HttpResponse.json(
           { error: 'the email address appears to be invalid or undeliverable' },
           { status: 422 },
@@ -129,7 +129,7 @@ describe('RegisterPage', () => {
 
   it('shows a generic message on a 500 response', async () => {
     server.use(
-      http.post('/auth/signup', () =>
+      http.post('/api/v1/auth/signup', () =>
         HttpResponse.json({ error: 'internal server error' }, { status: 500 }),
       ),
     )

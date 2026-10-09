@@ -4,5 +4,5 @@ import "errors"
 
 var (
 	ErrMissingAuthHeader   = errors.New("missing %s header")
-	ErrInvalidBearerFormat = errors.New("invalid %s bearer format")
+	ErrInvalidBearerFormat = errors.New("invalid bearer format")
 )
