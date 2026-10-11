@@ -1,14 +1,6 @@
 // src/mocks/handler.ts
 import { userHandlers } from '#/entities/user/api/user.handlers'
 import { authHandlers } from '#/features/auth/api/auth.handlers'
-import { foldersHandlers } from './folders.handlers'
-import { hierarchyHandlers } from './hierarchy.handlers'
-import { notesHandlers } from './notes.handlers'
+import { itemsHandlers } from './items.handlers'
 
-export const handlers = [
-  ...userHandlers,
-  ...authHandlers,
-  ...foldersHandlers,
-  ...notesHandlers,
-  ...hierarchyHandlers,
-]
+export const handlers = [...userHandlers, ...authHandlers, ...itemsHandlers]

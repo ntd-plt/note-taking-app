@@ -75,7 +75,7 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
                   <li>
                     <NavigationMenuLink asChild>
                       <Link
-                        to="/notes"
+                        to="/items"
                         className="block select-none rounded-md p-3 hover:bg-muted"
                       >
                         <div className="text-sm font-medium">All Notes</div>
@@ -88,7 +88,7 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
                   <li>
                     <NavigationMenuLink asChild>
                       <Link
-                        to="/notes"
+                        to="/items"
                         className="block select-none rounded-md p-3 hover:bg-muted"
                       >
                         <div className="text-sm font-medium">Create Note</div>
@@ -198,7 +198,7 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
               Home
             </Link>
             <Link
-              to="/notes"
+              to="/items"
               className="flex flex-col items-center p-2 text-xs font-medium text-muted-foreground hover:text-foreground"
               activeProps={{
                 className: 'text-foreground',

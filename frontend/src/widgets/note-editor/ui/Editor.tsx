@@ -11,12 +11,14 @@ import { FileText, PlusCircle } from 'lucide-react'
 import { BlockEditMenu } from './BlockEditMenu'
 import { BlockHandle } from './BlockHandle'
 import { Card, CardContent } from '#/components/ui/card'
+import { useItemsStore } from '../hooks/useItemsStore'
 import {
-  useNotesStore,
-  useNotesQuery,
-  useUpdateNote,
-  useCreateNote,
-} from '../index'
+  useItemsQuery,
+  useNoteContentQuery,
+  useUpdateItem,
+  useSaveNoteContent,
+  useCreateItem,
+} from '../hooks/useItems'
 import { EditorHeader } from './EditorHeader'
 import {
   NodeHoverExtension,
@@ -40,19 +42,26 @@ function EditorWithSlash() {
   const { renderSlashMenu } = useSlashMenu()
 
   // TanStack Query & Zustand Bindings
-  const { data: notesData } = useNotesQuery()
-  const notes = notesData ?? []
-  const { activeNoteId } = useNotesStore()
-  const { updateNote } = useUpdateNote()
-  const createNoteMutation = useCreateNote()
+  const { data: itemsData } = useItemsQuery()
+  const items = itemsData ?? []
+  const { activeItemId } = useItemsStore()
+  const { updateItem } = useUpdateItem()
+  const { saveContent } = useSaveNoteContent()
+  const createItemMutation = useCreateItem()
 
-  const currentNote = notes.find((n) => n.id === activeNoteId)
+  const currentNote = items.find(
+    (i) => i.id === activeItemId && i.type === 'note',
+  )
+  const { data: contentData } = useNoteContentQuery(currentNote?.id)
 
   // Use a Ref to store currentNote state so Tiptap callback closures don't get stale
   const currentNoteRef = React.useRef(currentNote)
   React.useEffect(() => {
     currentNoteRef.current = currentNote
   }, [currentNote])
+
+  const loadedNoteIdRef = React.useRef<string | null>(null)
+  const syncedHtmlRef = React.useRef<string | null>(null)
 
   const editor = useEditor({
     extensions: [
@@ -93,7 +102,7 @@ function EditorWithSlash() {
       }),
       NodeHoverExtension,
     ],
-    content: currentNote?.content || '',
+    content: '',
     editorProps: {
       attributes: {
         class:
@@ -103,10 +112,12 @@ function EditorWithSlash() {
     // Triggers when content changes inside the editor
     onUpdate: ({ editor: innerEditor }) => {
       const activeId = currentNoteRef.current?.id
-      if (activeId) {
-        const html = editor.getHTML()
+      if (activeId && loadedNoteIdRef.current === activeId) {
+        const html = innerEditor.getHTML()
+        if (html === syncedHtmlRef.current) return
+        syncedHtmlRef.current = html
         // Save to server (debounced)
-        updateNote(activeId, { content: html })
+        saveContent(activeId, html)
       }
     },
   })
@@ -140,30 +151,39 @@ function EditorWithSlash() {
       setAdjustedRect(null)
     }
   }, [rect, isList])
-  // Sync editor content when the active note changes
+  const currentNoteId = currentNote?.id
   React.useEffect(() => {
-    if (currentNote) {
-      const editorHTML = editor.getHTML()
-      if (editorHTML !== currentNote.content) {
-        // Set content and preserve historical cursor state if needed
-        editor.commands.setContent(currentNote.content, {})
-      }
+    if (!currentNoteId) {
+      loadedNoteIdRef.current = null
+      syncedHtmlRef.current = null
+      return
     }
-  }, [currentNote?.id, editor])
+    if (loadedNoteIdRef.current === currentNoteId) return
+    if (contentData?.itemId === currentNoteId) {
+      editor.commands.setContent(contentData.content, { emitUpdate: false })
+      syncedHtmlRef.current = editor.getHTML()
+      loadedNoteIdRef.current = currentNoteId
+      editor.setEditable(true, false)
+    } else {
+      editor.commands.clearContent(false)
+      syncedHtmlRef.current = null
+      editor.setEditable(false, false)
+    }
+  }, [currentNoteId, contentData, editor])
 
   // Handle adding a default note when all are deleted
   const handleCreateFirstPage = () => {
-    createNoteMutation.mutate(
+    createItemMutation.mutate(
       {
+        type: 'note',
         parentId: null,
-        title: 'Welcome to my new page',
+        name: 'Welcome to my new page',
       },
       {
         onSuccess: (newNote) => {
-          console.log('New note created', newNote)
           navigate({
-            to: '/notes/$noteId',
-            params: { noteId: newNote.id },
+            to: '/items/$itemId',
+            params: { itemId: newNote.id },
           })
         },
       },
@@ -220,14 +240,14 @@ function EditorWithSlash() {
           {/* Editor Page Header / Meta Block */}
           <EditorHeader
             note={currentNote}
-            onNoteTitleChange={(newTitle: string) => {
-              updateNote(currentNote.id, { title: newTitle })
+            onNoteTitleChange={(newName: string) => {
+              updateItem(currentNote.id, { name: newName })
             }}
             onIconChange={(newIcon) => {
-              updateNote(currentNote.id, { icon: newIcon })
+              updateItem(currentNote.id, { icon: newIcon })
             }}
             onFavoriteStateChange={(isFav) => {
-              updateNote(currentNote.id, { isFavorite: isFav })
+              updateItem(currentNote.id, { isFavorite: isFav })
             }}
           ></EditorHeader>
 

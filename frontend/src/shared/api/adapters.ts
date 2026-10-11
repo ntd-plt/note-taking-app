@@ -1,76 +1,66 @@
-import type { Note, Folder } from '../models'
-import type { ItemRef } from '../lib/hierarchy'
+import { DEFAULT_ICONS } from '../models'
+import type { Item, ItemType, NoteContent } from '../models'
 
-export function mapBackendFolder(f: any): Folder {
+export function mapBackendItem(i: any): Item {
+  const type: ItemType = i.type === 'folder' ? 'folder' : 'note'
   return {
-    id: f.id,
-    name: f.name,
-    parentId: f.parent_folder_id || null,
-    icon: f.icon || '📁',
-    isExpanded: f.isExpanded || false,
-    createdAt: f.created_at,
-    updatedAt: f.updated_at,
+    id: i.id,
+    type,
+    name: i.name,
+    parentId: i.parent_id || null,
+    icon: i.icon || DEFAULT_ICONS[type],
+    isFavorite: i.is_favorite ?? false,
+    createdAt: i.created_at,
+    updatedAt: i.updated_at,
   }
 }
 
-export function mapBackendNote(n: any): Note {
+export function mapBackendNoteContent(c: any): NoteContent {
   return {
-    id: n.id,
-    title: n.title,
-    content: n.content,
-    parentId: n.folder_id || null,
-    isFavorite: n.is_favorite ?? false,
-    icon: n.icon || '📄',
-    createdAt: n.created_at,
-    updatedAt: n.updated_at,
+    itemId: c.item_id,
+    content: c.content ?? '',
+    updatedAt: c.updated_at,
   }
 }
 
-export function toBackendFolder(f: Partial<Folder>): any {
-  const payload: any = {}
-  if (f.name !== undefined) payload.name = f.name
-  if (f.parentId !== undefined) payload.parent_folder_id = f.parentId
+export interface CreateItemInput {
+  id?: string
+  type: ItemType
+  name: string
+  parentId?: string | null
+  icon?: string
+  isFavorite?: boolean
+  content?: string
+}
+
+export type ItemPatch = Partial<Pick<Item, 'name' | 'icon' | 'isFavorite'>>
+
+export interface ItemMove {
+  id: string
+  parentId: string | null
+}
+
+export function toBackendCreateItem(i: CreateItemInput): any {
+  const payload: any = {
+    type: i.type,
+    name: i.name,
+    parent_id: i.parentId ?? null,
+  }
+  if (i.id !== undefined) payload.id = i.id
+  if (i.icon !== undefined) payload.icon = i.icon
+  if (i.isFavorite !== undefined) payload.is_favorite = i.isFavorite
+  if (i.content !== undefined) payload.content = i.content
   return payload
 }
 
-export function toBackendNote(n: Partial<Note>): any {
+export function toBackendItemPatch(p: ItemPatch): any {
   const payload: any = {}
-  if (n.title !== undefined) payload.title = n.title
-  if (n.content !== undefined) payload.content = n.content
-  if (n.parentId !== undefined) payload.folder_id = n.parentId
-  if (n.isFavorite !== undefined) payload.is_favorite = n.isFavorite
-  if (n.icon !== undefined) payload.icon = n.icon
+  if (p.name !== undefined) payload.name = p.name
+  if (p.icon !== undefined) payload.icon = p.icon
+  if (p.isFavorite !== undefined) payload.is_favorite = p.isFavorite
   return payload
 }
 
-export interface MoveResult {
-  moved: { folders: Folder[]; notes: Note[] }
-  created: { folders: Folder[]; notes: Note[] }
-}
-
-export function toBackendMoveRequest(
-  items: ItemRef[],
-  destinationId: string | null,
-): any {
-  return {
-    items: items.map(({ id, type }) => ({ id, type })),
-    destination_folder_id: destinationId,
-  }
-}
-
-export function toBackendDuplicateRequest(items: ItemRef[]): any {
-  return { items: items.map(({ id, type }) => ({ id, type })) }
-}
-
-export function mapBackendMoveResult(r: any): MoveResult {
-  return {
-    moved: {
-      folders: (r.moved?.folders ?? []).map(mapBackendFolder),
-      notes: (r.moved?.notes ?? []).map(mapBackendNote),
-    },
-    created: {
-      folders: (r.created?.folders ?? []).map(mapBackendFolder),
-      notes: (r.created?.notes ?? []).map(mapBackendNote),
-    },
-  }
+export function toBackendMoves(moves: ItemMove[]): any {
+  return { items: moves.map((m) => ({ id: m.id, parent_id: m.parentId })) }
 }

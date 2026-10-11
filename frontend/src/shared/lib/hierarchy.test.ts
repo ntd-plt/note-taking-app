@@ -1,121 +1,165 @@
 import { describe, expect, it } from 'vitest'
-import type { Folder, Note } from '../models'
+import type { Item } from '../models'
 import {
+  buildChildrenMap,
+  buildParentMap,
+  compareItems,
+  getAncestorIds,
   getInvalidDropTargetIds,
+  getItemPath,
+  getSubtreeIds,
+  getTopLevelMembers,
   isNoopMove,
-  nextCloneName,
-  splitSelection,
+  sortItems,
 } from './hierarchy'
-import type { ItemRef } from './hierarchy'
 
-const folder = (id: string, parentId: string | null = null): Folder => ({
+const folder = (id: string, parentId: string | null = null): Item => ({
   id,
+  type: 'folder',
   name: id,
   parentId,
+  icon: '📁',
+  isFavorite: false,
 })
-const note = (id: string, parentId: string | null = null): Note => ({
+const note = (id: string, parentId: string | null = null): Item => ({
   id,
-  title: id,
-  content: '',
+  type: 'note',
+  name: id,
   parentId,
+  icon: '📄',
+  isFavorite: false,
 })
-const f = (id: string): ItemRef => ({ id, type: 'folder' })
-const n = (id: string): ItemRef => ({ id, type: 'note' })
 
-// root
-// ├── A
-// │   ├── B (folder)
-// │   │   └── note-deep
-// │   └── note-in-a
-// └── D
-const folders = [folder('A'), folder('B', 'A'), folder('D')]
-const notes = [note('note-in-a', 'A'), note('note-deep', 'B'), note('loose')]
+const items: Item[] = [
+  folder('dest'),
+  folder('A'),
+  folder('B', 'A'),
+  note('in-a', 'A'),
+  note('deep', 'B'),
+  note('loose'),
+]
 
-describe('splitSelection', () => {
-  it('moves items that have no selected ancestor', () => {
-    const split = splitSelection([f('A'), n('loose')], folders, notes)
-    expect(split.moved).toEqual([f('A'), n('loose')])
-    expect(split.cloned).toEqual([])
+describe('sortItems', () => {
+  it('lists folders first, then orders by name', () => {
+    const sorted = sortItems([
+      note('b'),
+      folder('z'),
+      note('a'),
+      folder('m'),
+    ]).map((i) => i.id)
+    expect(sorted).toEqual(['m', 'z', 'a', 'b'])
   })
 
-  it('clones items inside another selected folder, at any depth', () => {
-    const split = splitSelection(
-      [f('A'), f('B'), n('note-in-a'), n('note-deep')],
-      folders,
-      notes,
-    )
-    expect(split.moved).toEqual([f('A')])
-    expect(split.cloned).toEqual([f('B'), n('note-in-a'), n('note-deep')])
+  it('does not change the input array', () => {
+    const input = [note('b'), note('a')]
+    sortItems(input)
+    expect(input.map((i) => i.id)).toEqual(['b', 'a'])
+    expect(compareItems(input[0], input[1])).toBeGreaterThan(0)
+  })
+})
+
+describe('getSubtreeIds', () => {
+  it('returns the roots and everything below them', () => {
+    const subtree = getSubtreeIds(['A'], buildChildrenMap(items))
+    expect([...subtree].sort()).toEqual(['A', 'B', 'deep', 'in-a'])
   })
 
-  it('moves a nested item on its own when its parent is not selected', () => {
-    const split = splitSelection([n('note-deep')], folders, notes)
-    expect(split.moved).toEqual([n('note-deep')])
+  it('merges several roots and ignores overlap', () => {
+    const subtree = getSubtreeIds(['A', 'B', 'loose'], buildChildrenMap(items))
+    expect([...subtree].sort()).toEqual(['A', 'B', 'deep', 'in-a', 'loose'])
   })
 
-  it('ignores duplicate entries', () => {
-    expect(
-      splitSelection([n('loose'), n('loose')], folders, notes).moved,
-    ).toHaveLength(1)
+  it('terminates on cyclic data', () => {
+    const cyclic = [folder('x', 'y'), folder('y', 'x')]
+    expect([...getSubtreeIds(['x'], buildChildrenMap(cyclic))].sort()).toEqual([
+      'x',
+      'y',
+    ])
+  })
+})
+
+describe('getAncestorIds', () => {
+  it('lists the folders above an item, nearest first', () => {
+    expect(getAncestorIds('deep', buildParentMap(items))).toEqual(['B', 'A'])
+    expect(getAncestorIds('loose', buildParentMap(items))).toEqual([])
   })
 
-  it('terminates on cyclic folder data', () => {
-    const cyclic = [folder('X', 'Y'), folder('Y', 'X')]
-    expect(() => splitSelection([f('X')], cyclic, [])).not.toThrow()
+  it('terminates on cyclic data', () => {
+    const cyclic = [folder('x', 'y'), folder('y', 'x')]
+    expect(getAncestorIds('x', buildParentMap(cyclic))).toEqual(['y'])
+  })
+})
+
+describe('getTopLevelMembers', () => {
+  const ids = (selected: string[]) =>
+    getTopLevelMembers(new Set(selected), items).map((i) => i.id)
+
+  it('keeps only the selected items whose parent is not selected', () => {
+    expect(ids(['A', 'B', 'deep', 'in-a', 'loose'])).toEqual(['A', 'loose'])
+  })
+
+  it('promotes the rest of a folder once the folder itself is deselected', () => {
+    expect(ids(['B', 'deep', 'in-a'])).toEqual(['B', 'in-a'])
+  })
+
+  it('returns a lone nested item', () => {
+    expect(ids(['deep'])).toEqual(['deep'])
+  })
+
+  it('returns nothing for an empty selection', () => {
+    expect(ids([])).toEqual([])
   })
 })
 
 describe('getInvalidDropTargetIds', () => {
-  it('covers selected folders and all their descendants', () => {
-    const invalid = getInvalidDropTargetIds([f('A')], folders)
-    expect([...invalid].sort()).toEqual(['A', 'B'])
+  it('covers moved folders and all their descendants', () => {
+    expect([...getInvalidDropTargetIds(['A'], items)].sort()).toEqual([
+      'A',
+      'B',
+      'deep',
+      'in-a',
+    ])
   })
 
-  it('leaves unrelated folders and the ancestors of a selection valid', () => {
-    const invalid = getInvalidDropTargetIds([f('B')], folders)
-    expect(invalid.has('A')).toBe(false)
-    expect(invalid.has('D')).toBe(false)
+  it('ignores moved notes', () => {
+    expect(getInvalidDropTargetIds(['loose', 'in-a'], items).size).toBe(0)
   })
 
-  it('does not treat selected notes as invalid targets', () => {
-    expect(getInvalidDropTargetIds([n('loose')], folders).size).toBe(0)
+  it('terminates on cyclic folder data', () => {
+    const cyclic = [folder('x', 'y'), folder('y', 'x')]
+    expect([...getInvalidDropTargetIds(['x'], cyclic)].sort()).toEqual([
+      'x',
+      'y',
+    ])
   })
 })
 
 describe('isNoopMove', () => {
   it('is a no-op when everything already lives in the destination', () => {
-    expect(isNoopMove([n('note-in-a'), f('B')], 'A', folders, notes)).toBe(true)
-    expect(isNoopMove([n('loose'), f('D')], null, folders, notes)).toBe(true)
+    expect(isNoopMove(['B', 'in-a'], 'A', items)).toBe(true)
+    expect(isNoopMove(['dest', 'loose'], null, items)).toBe(true)
   })
 
-  it('is not a no-op when something changes parent', () => {
-    expect(isNoopMove([n('loose')], 'A', folders, notes)).toBe(false)
-  })
-
-  it('is never a no-op when a clone would be created', () => {
-    expect(isNoopMove([f('A'), n('note-in-a')], null, folders, notes)).toBe(
-      false,
-    )
+  it('is not a no-op when any item would change parent', () => {
+    expect(isNoopMove(['B', 'loose'], 'A', items)).toBe(false)
+    expect(isNoopMove(['loose'], 'dest', items)).toBe(false)
   })
 })
 
-describe('nextCloneName', () => {
-  it('takes the smallest unused number', () => {
-    const taken = new Set(['Report (Copy 1)', 'Report (Copy 3)'])
-    expect(nextCloneName('Report', taken)).toBe('Report (Copy 2)')
-    expect(nextCloneName('Report', taken)).toBe('Report (Copy 4)')
+describe('getItemPath', () => {
+  it('lists the folders above an item from the top level down', () => {
+    const deep = items.find((i) => i.id === 'deep')!
+    expect(getItemPath(deep, items).map((i) => i.id)).toEqual(['A', 'B'])
   })
 
-  it('replaces an existing suffix instead of stacking', () => {
-    expect(nextCloneName('Report (Copy 1)', new Set())).toBe('Report (Copy 1)')
-    expect(nextCloneName('Report (Copy 7)', new Set(['Report (Copy 1)']))).toBe(
-      'Report (Copy 2)',
-    )
+  it('is empty for a top-level item', () => {
+    expect(getItemPath(items[5], items)).toEqual([])
   })
 
-  it('truncates the base so the name fits 255 characters', () => {
-    const name = nextCloneName('é'.repeat(255), new Set())
-    expect([...name]).toHaveLength(255)
-    expect(name.endsWith(' (Copy 1)')).toBe(true)
+  it('stops at a missing parent and on a cycle', () => {
+    const orphan = note('orphan', 'gone')
+    expect(getItemPath(orphan, [orphan])).toEqual([])
+    const cyclic = [folder('x', 'y'), folder('y', 'x')]
+    expect(getItemPath(cyclic[0], cyclic).map((i) => i.id)).toEqual(['y'])
   })
 })
