@@ -1,17 +1,15 @@
-import type { Folder, Note } from './model'
+import type { Item, NoteContent } from '#/shared/models'
 import {
-  mapBackendFolder,
-  mapBackendNote,
-  mapBackendMoveResult,
-  toBackendDuplicateRequest,
-  toBackendFolder,
-  toBackendMoveRequest,
-  toBackendNote,
+  mapBackendItem,
+  mapBackendNoteContent,
+  toBackendCreateItem,
+  toBackendItemPatch,
+  toBackendMoves,
 } from '#/shared/api'
-import type { MoveResult } from '#/shared/api'
-import type { ItemRef } from '#/shared/lib/hierarchy'
+import type { CreateItemInput, ItemMove, ItemPatch } from '#/shared/api'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
+const API = '/api/v1'
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${BASE_URL}${path}`
@@ -50,120 +48,69 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return response.json()
 }
 
-// Folders API
-export const fetchFolders = async (): Promise<Folder[]> => {
-  const data = await request<any[]>('/api/folders', { method: 'GET' })
-  return data.map(mapBackendFolder)
+export const fetchItems = async (): Promise<Item[]> => {
+  const data = await request<any[]>(`${API}/items`, { method: 'GET' })
+  return data.map(mapBackendItem)
 }
 
-export const fetchFolder = async (id: string): Promise<Folder> => {
-  const data = await request<any>(`/api/folders/${id}`, { method: 'GET' })
-  return mapBackendFolder(data)
+export const fetchItem = async (id: string): Promise<Item> => {
+  const data = await request<any>(`${API}/items/${id}`, { method: 'GET' })
+  return mapBackendItem(data)
 }
 
-export const createFolder = async (
-  folder: Partial<Folder>,
-): Promise<Folder> => {
-  const body = toBackendFolder(folder)
-  const data = await request<any>('/api/folders', {
+export const createItem = async (input: CreateItemInput): Promise<Item> => {
+  const data = await request<any>(`${API}/items`, {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(toBackendCreateItem(input)),
   })
-  return mapBackendFolder(data)
+  return mapBackendItem(data)
 }
 
-export const updateFolder = async (
+export const updateItem = async (
   id: string,
-  updates: Partial<Folder>,
-): Promise<Folder> => {
-  const body = {
-    folders: [
-      {
-        id,
-        ...toBackendFolder(updates),
-      },
-    ],
-  }
-  const data = await request<any[]>('/api/folders', {
-    method: 'PUT',
-    body: JSON.stringify(body),
+  updates: ItemPatch,
+): Promise<Item> => {
+  const data = await request<any>(`${API}/items/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(toBackendItemPatch(updates)),
   })
-  return mapBackendFolder(data[0])
+  return mapBackendItem(data)
 }
 
-export const deleteFolder = async (id: string): Promise<void> => {
-  const payload = { ids: [id] }
-  await request<void>('/api/folders', {
-    method: 'DELETE',
-    body: JSON.stringify(payload),
+export const deleteItem = async (id: string): Promise<void> => {
+  await request<void>(`${API}/items/${id}`, { method: 'DELETE' })
+}
+
+export const moveItems = async (moves: ItemMove[]): Promise<Item[]> => {
+  const data = await request<any[]>(`${API}/items`, {
+    method: 'PATCH',
+    body: JSON.stringify(toBackendMoves(moves)),
   })
+  return data.map(mapBackendItem)
 }
 
-// Notes API
-export const fetchNotes = async (): Promise<Note[]> => {
-  const data = await request<any[]>('/api/notes', { method: 'GET' })
-  return data.map(mapBackendNote)
+export const duplicateItem = async (id: string): Promise<Item> => {
+  const data = await request<any>(
+    `${API}/items?cloneFromId=${encodeURIComponent(id)}`,
+    { method: 'POST' },
+  )
+  return mapBackendItem(data)
 }
 
-export const fetchNote = async (id: string): Promise<Note> => {
-  const data = await request<any>(`/api/notes/${id}`, { method: 'GET' })
-  return mapBackendNote(data)
-}
-
-export const createNote = async (note: Partial<Note>): Promise<Note> => {
-  const body = toBackendNote(note)
-  const data = await request<any>('/api/notes', {
-    method: 'POST',
-    body: JSON.stringify(body),
+export const fetchNoteContent = async (id: string): Promise<NoteContent> => {
+  const data = await request<any>(`${API}/items/${id}/content`, {
+    method: 'GET',
   })
-  return mapBackendNote(data)
+  return mapBackendNoteContent(data)
 }
 
-export const updateNote = async (
+export const saveNoteContent = async (
   id: string,
-  updates: Partial<Note>,
-): Promise<Note> => {
-  const body = {
-    notes: [
-      {
-        id,
-        ...toBackendNote(updates),
-      },
-    ],
-  }
-  const data = await request<any[]>('/api/notes', {
+  content: string,
+): Promise<NoteContent> => {
+  const data = await request<any>(`${API}/items/${id}/content`, {
     method: 'PUT',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ content }),
   })
-  return mapBackendNote(data[0])
-}
-
-export const deleteNote = async (id: string): Promise<void> => {
-  const payload = { ids: [id] }
-  await request<void>('/api/notes', {
-    method: 'DELETE',
-    body: JSON.stringify(payload),
-  })
-}
-
-// Hierarchy API
-export const moveItems = async (
-  items: ItemRef[],
-  destinationId: string | null,
-): Promise<MoveResult> => {
-  const data = await request<any>('/api/hierarchy/move', {
-    method: 'POST',
-    body: JSON.stringify(toBackendMoveRequest(items, destinationId)),
-  })
-  return mapBackendMoveResult(data)
-}
-
-// Copies the items next to the originals with "(Copy N)" names; folders are copied
-// recursively. The same server-side clone logic that moves use.
-export const duplicateItems = async (items: ItemRef[]): Promise<MoveResult> => {
-  const data = await request<any>('/api/hierarchy/duplicate', {
-    method: 'POST',
-    body: JSON.stringify(toBackendDuplicateRequest(items)),
-  })
-  return mapBackendMoveResult(data)
+  return mapBackendNoteContent(data)
 }

@@ -29,7 +29,7 @@ export function LoginPage() {
         },
         {
           onSuccess: () => {
-            navigate({ to: '/notes' })
+            navigate({ to: '/items' })
           },
         },
       )

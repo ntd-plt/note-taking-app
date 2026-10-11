@@ -7,7 +7,6 @@ import type {
   User,
 } from '../models'
 
-// Shape returned by the backend GET /api/user/:id endpoint, after the api
 // client has camelized the snake_case keys.
 interface UserApiResponse {
   id: string
@@ -21,8 +20,8 @@ interface UserApiResponse {
  * Fetches the authenticated user's profile from the backend and maps it onto
  * the frontend User shape (backend `name` -> `username`).
  */
-export async function fetchUserById(id: string): Promise<User> {
-  const data = await apiClient.get<UserApiResponse>(`/api/user/${id}`)
+export async function fetchCurrentUser(): Promise<User> {
+  const data = await apiClient.get<UserApiResponse>('/api/v1/users/me')
   return {
     id: data.id,
     username: data.name,
@@ -106,7 +105,7 @@ export async function login(
   const data = await apiClient.post<{
     accessToken: string
     refreshToken: string
-  }>('/auth/login', credentials)
+  }>('/api/v1/auth/login', credentials)
   if (data.accessToken) {
     localStorage.setItem('auth_token', data.accessToken)
     if (data.refreshToken) {
@@ -125,7 +124,7 @@ export async function login(
       email: credentials.email,
     }
     try {
-      user = await fetchUserById(userId)
+      user = await fetchCurrentUser()
     } catch (error) {
       console.error('Failed to load user profile after login:', error)
     }
@@ -150,7 +149,7 @@ export async function register(
   const data = await apiClient.post<{
     accessToken: string
     refreshToken: string
-  }>('/auth/signup', payload)
+  }>('/api/v1/auth/signup', payload)
   if (data.accessToken) {
     localStorage.setItem('auth_token', data.accessToken)
     if (data.refreshToken) {

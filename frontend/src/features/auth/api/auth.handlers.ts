@@ -20,7 +20,7 @@ export const authHandlers = [
     return HttpResponse.json(response)
   }),
 
-  http.post('/auth/login', async ({ request }) => {
+  http.post('/api/v1/auth/login', async ({ request }) => {
     const { email } = (await request.json()) as { email: string }
     if (email.includes('error')) {
       return HttpResponse.json(
@@ -40,7 +40,7 @@ export const authHandlers = [
     })
   }),
 
-  http.post('/auth/signup', async () => {
+  http.post('/api/v1/auth/signup', async () => {
     return HttpResponse.json({
       access_token: 'mock-access-token',
       refresh_token: 'mock-refresh-token',
