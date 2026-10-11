@@ -56,35 +56,19 @@ func (s *UserService) CreateUser(name, email string, passwordHash []byte) (model
 }
 
 // GetUser godoc
-// @Summary      Get a user
+// @Summary      Get the current user
 // @Description  Returns the authenticated user's profile (never includes the password hash)
 // @Tags         users
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id   path      string  true  "User ID"
 // @Success      200  {object}  UserResponse
-// @Failure      400  {object}  map[string]string
 // @Failure      401  {object}  map[string]string
-// @Failure      403  {object}  map[string]string
 // @Failure      404  {object}  map[string]string
 // @Failure      500  {object}  map[string]string
-// @Router       /api/user/{id} [get]
+// @Router       /users/me [get]
 func (s *UserService) GetUser(c *gin.Context) {
-	authID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
-
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
-		return
-	}
-
-	// A user may only read their own record.
-	if id != authID.(uuid.UUID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to access this user"})
+	id, ok := currentUser(c)
+	if !ok {
 		return
 	}
 
@@ -110,38 +94,23 @@ type UpdateUserRequest struct {
 }
 
 // UpdateUser godoc
-// @Summary      Update a user
+// @Summary      Update the current user
 // @Description  Updates the authenticated user's own profile (name and/or email). Partial update: omitted fields are left unchanged.
 // @Tags         users
 // @Accept       json
 // @Produce      json
 // @Security     BearerAuth
-// @Param        id       path      string             true  "User ID"
 // @Param        request  body      UpdateUserRequest  true  "Fields to update"
 // @Success      200      {object}  UserResponse
 // @Failure      400      {object}  map[string]string
 // @Failure      401      {object}  map[string]string
-// @Failure      403      {object}  map[string]string
 // @Failure      404      {object}  map[string]string
 // @Failure      409      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
-// @Router       /api/user/{id} [put]
+// @Router       /users/me [put]
 func (s *UserService) UpdateUser(c *gin.Context) {
-	authID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
-
-	id, err := uuid.Parse(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
-		return
-	}
-
-	// A user may only update their own record.
-	if id != authID.(uuid.UUID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not authorized to update this user"})
+	id, ok := currentUser(c)
+	if !ok {
 		return
 	}
 

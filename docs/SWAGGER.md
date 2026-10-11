@@ -11,12 +11,12 @@ The backend uses [`swaggo/swag`](https://github.com/swaggo/swag) to generate an 
 ```
 backend/
 ├── cmd/server/
-│   ├── main.go          # @title/@version/@BasePath + BearerAuth security scheme
+│   ├── main.go          # @title/@version/@BasePath (/api/v1) + BearerAuth security scheme
 │   └── router.go        # mounts GET /swagger/*any
-├── internal/handlers/
-│   ├── auth_handler.go     # @Router annotations for /auth/*
-│   ├── notes_handler.go    # @Router annotations for /api/notes*, named request DTOs
-│   └── folders_handler.go  # @Router annotations for /api/folders*, named request DTOs
+├── internal/services/
+│   ├── auth_service.go     # @Router annotations for /auth/*
+│   ├── user_service.go     # @Router annotations for /users/me
+│   └── items_service.go    # @Router annotations for /items*, named request DTOs
 └── docs/                 # generated — do not edit by hand
     ├── docs.go           # embeds the spec, imported for side effects in router.go
     ├── swagger.json
@@ -41,17 +41,17 @@ Then open **http://localhost:8080/swagger/index.html**. Requires a running Postg
 `router.NewRouter` takes an `enableSwagger bool` and only registers `GET /swagger/*any` when it's `true`. `main.go` derives this from config:
 
 ```go
-router := NewRouter(authHandler, notesHandler, foldersHandler, tokenService, !cfg.IsProduction())
+router := NewRouter(authService, userService, itemsService, tokenService, cfg.IsDevelopment())
 ```
 
 This is driven by the `APP_ENV` env var (`internal/configs/config.go`):
 
 | `APP_ENV` value | Swagger UI |
 |---|---|
-| unset, or anything other than `production` | served |
-| `production` | not registered — `/swagger/*` 404s |
+| unset, or `development` | served |
+| anything else (`staging`, `production`, ...) | not registered — `/swagger/*` 404s |
 
-Set `APP_ENV=production` in your production `.env`/deployment env to disable it. The default (unset) is dev-safe, i.e. Swagger stays on unless explicitly turned off.
+Only `development` serves the UI, so a staging or production deployment never exposes the API docs. An unset `APP_ENV` counts as `development`.
 
 Note this only stops the route from being *registered* — `docs/docs.go` (the embedded spec) still compiles into the production binary either way. If you also want it excluded from the binary itself, that would require a Go build tag around the `_ "backend/docs"` import and the `swag`-generated file, which isn't set up here.
 
@@ -93,7 +93,7 @@ _ "backend/docs"
    // @Success      201      {object}  model.Widget
    // @Failure      400      {object}  map[string]string
    // @Failure      500      {object}  map[string]string
-   // @Router       /api/widgets [post]
+   // @Router       /widgets [post]
    func (h *WidgetsHandler) CreateWidget(c *gin.Context) { ... }
    ```
 
@@ -105,5 +105,6 @@ _ "backend/docs"
 ## Notes / gotchas
 
 - **`swag` CLI vs. `swaggo/swag` library version must match.** The generated `docs.go` uses fields (`LeftDelim`/`RightDelim` on `swag.Spec`) that only exist in newer `swaggo/swag` releases. `make tools` keeps the CLI binary current, but not the library dependency recorded in `go.mod` — if `go build`/`make build` fails on `docs/docs.go` with "unknown field" errors, run `go get github.com/swaggo/swag@latest github.com/swaggo/gin-swagger@latest` once to bring the library dependency in line with the CLI version, then `make tidy`.
-- **Only routed endpoints are annotated.** `NotesHandler.GetNotes` exists but isn't wired into `router.go`, so it intentionally has no `@Router` annotation — annotating it would document a route that doesn't exist.
+- **`@Router` paths are relative to the base path.** `main.go` sets `@BasePath /api/v1`, so annotate `/items`, not `/api/v1/items`.
+- **Only routed endpoints are annotated.** Don't annotate a handler that isn't wired into `router.go` — it would document a route that doesn't exist.
 - **Auth scheme**: JWT is passed as `Authorization: Bearer <token>`, declared once in `main.go` via `@securityDefinitions.apikey BearerAuth`, and referenced per-route with `@Security BearerAuth`.

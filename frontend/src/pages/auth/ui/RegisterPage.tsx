@@ -32,7 +32,7 @@ export function RegisterPage() {
         },
         {
           onSuccess: () => {
-            navigate({ to: '/notes' })
+            navigate({ to: '/items' })
           },
         },
       )

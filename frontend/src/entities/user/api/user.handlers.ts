@@ -15,16 +15,15 @@ export const userHandlers = [
     return HttpResponse.json(mockState.currentUser)
   }),
 
-  // Mirrors the backend GET /api/user/:id (returns the profile without the
   // password hash, in snake_case like the real API).
-  http.get('/api/user/:id', ({ params }) => {
+  http.get('/api/v1/users/me', () => {
     const user = mockState.currentUser
     if (!user) {
       return HttpResponse.json({ error: 'user not found' }, { status: 404 })
     }
     const now = new Date().toISOString()
     return HttpResponse.json({
-      id: (params.id as string) || user.id,
+      id: user.id,
       name: user.username,
       email: user.email,
       created_at: now,

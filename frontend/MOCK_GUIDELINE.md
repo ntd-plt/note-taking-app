@@ -39,7 +39,7 @@ src/
 └── features/
     └── auth/
         └── api/
-            └── auth.handlers.ts   # Mocks for POST /api/auth/login, logout, etc.
+            └── auth.handlers.ts   # Mocks for POST /api/v1/auth/login, logout, etc.
 ```
 
 ---
@@ -50,16 +50,14 @@ src/
 
 Create a file named `<slice-name>.handlers.ts` in the `api` segment of your slice.
 
-Example: `src/entities/note/api/note.handlers.ts`
+Example: `src/entities/tag/api/tag.handlers.ts`
 
 ```typescript
 import { http, HttpResponse } from 'msw'
 
-export const noteHandlers = [
-  http.get('/api/notes', () => {
-    return HttpResponse.json([
-      { id: '1', title: 'My First Note', content: 'Hello World!' },
-    ])
+export const tagHandlers = [
+  http.get('/api/v1/tags', () => {
+    return HttpResponse.json([{ id: '1', name: 'Work' }])
   }),
 ]
 ```
@@ -88,12 +86,12 @@ Import your new handlers and spread them into the `handlers` array inside [src/m
   // src/mocks/handler.ts
   import { userHandlers } from '#/entities/user/api/user.handlers'
   import { authHandlers } from '#/features/auth/api/auth.handlers'
-+ import { noteHandlers } from '#/entities/note/api/note.handlers'
++ import { tagHandlers } from '#/entities/tag/api/tag.handlers'
 
   export const handlers = [
     ...userHandlers,
     ...authHandlers,
-+   ...noteHandlers,
++   ...tagHandlers,
   ]
 ```
 
