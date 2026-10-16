@@ -38,6 +38,27 @@ definitions:
       updated_at:
         type: string
     type: object
+  backend_internal_model.TrashItem:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      icon:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      parent_id:
+        type: string
+      type:
+        $ref: '#/definitions/backend_internal_model.ItemType'
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
   backend_internal_pkg.AuthResponse:
     properties:
       access_token:
@@ -99,6 +120,13 @@ definitions:
         enum:
         - note
         - folder
+    type: object
+  internal_services.IDsRequest:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
     type: object
   internal_services.MoveItemEntry:
     properties:
@@ -695,6 +723,223 @@ paths:
       summary: Replace a note's content
       tags:
       - items
+  /items/restore:
+    post:
+      consumes:
+      - application/json
+      description: Puts trashed items back. A folder comes back with the items trashed
+        together with it. An item whose original folder is not in the tree any more
+        goes to the top level. Restored items are not favorites. Returns every restored
+        item.
+      parameters:
+      - description: Trashed items to restore
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_services.IDsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/backend_internal_model.Item'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "413":
+          description: Request Entity Too Large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Restore items from the trash
+      tags:
+      - trash
+  /items/trash:
+    post:
+      consumes:
+      - application/json
+      description: Moves items, and everything inside any folder among them, to the
+        trash in one atomic step. Trashed items leave the item tree and lose their
+        favorite flag. Returns every row that moved.
+      parameters:
+      - description: Items to trash
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_services.IDsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/backend_internal_model.TrashItem'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "413":
+          description: Request Entity Too Large
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Move items to the trash
+      tags:
+      - trash
+  /trash:
+    delete:
+      description: Permanently deletes everything in the authenticated user's trash.
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Empty the trash
+      tags:
+      - trash
+    get:
+      description: Returns the authenticated user's trashed items, newest first, as
+        a flat list. Items past the retention period are not listed.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/backend_internal_model.TrashItem'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List the trash
+      tags:
+      - trash
+  /trash/{id}:
+    delete:
+      description: Permanently deletes one trashed item and the trashed items inside
+        it. Use DELETE /items/{id} for items that are not in the trash.
+      parameters:
+      - description: Trashed item ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a trashed item permanently
+      tags:
+      - trash
   /users/me:
     get:
       description: Returns the authenticated user's profile (never includes the password

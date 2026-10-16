@@ -15,7 +15,9 @@ import { Route as SignupIndexRouteImport } from './routes/signup/index'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedTrashIndexRouteImport } from './routes/_authenticated/trash/index'
 import { Route as AuthenticatedItemsIndexRouteImport } from './routes/_authenticated/items/index'
+import { Route as AuthenticatedTrashItemIdRouteImport } from './routes/_authenticated/trash/$itemId'
 import { Route as AuthenticatedItemsItemIdRouteImport } from './routes/_authenticated/items/$itemId'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -47,11 +49,22 @@ const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedTrashIndexRoute = AuthenticatedTrashIndexRouteImport.update({
+  id: '/trash/',
+  path: '/trash/',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedItemsIndexRoute = AuthenticatedItemsIndexRouteImport.update({
   id: '/items/',
   path: '/items/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedTrashItemIdRoute =
+  AuthenticatedTrashItemIdRouteImport.update({
+    id: '/trash/$itemId',
+    path: '/trash/$itemId',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedItemsItemIdRoute =
   AuthenticatedItemsItemIdRouteImport.update({
     id: '/items/$itemId',
@@ -66,7 +79,9 @@ export interface FileRoutesByFullPath {
   '/login/': typeof LoginIndexRoute
   '/signup/': typeof SignupIndexRoute
   '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
+  '/trash/$itemId': typeof AuthenticatedTrashItemIdRoute
   '/items/': typeof AuthenticatedItemsIndexRoute
+  '/trash/': typeof AuthenticatedTrashIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -75,7 +90,9 @@ export interface FileRoutesByTo {
   '/login': typeof LoginIndexRoute
   '/signup': typeof SignupIndexRoute
   '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
+  '/trash/$itemId': typeof AuthenticatedTrashItemIdRoute
   '/items': typeof AuthenticatedItemsIndexRoute
+  '/trash': typeof AuthenticatedTrashIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -86,7 +103,9 @@ export interface FileRoutesById {
   '/login/': typeof LoginIndexRoute
   '/signup/': typeof SignupIndexRoute
   '/_authenticated/items/$itemId': typeof AuthenticatedItemsItemIdRoute
+  '/_authenticated/trash/$itemId': typeof AuthenticatedTrashItemIdRoute
   '/_authenticated/items/': typeof AuthenticatedItemsIndexRoute
+  '/_authenticated/trash/': typeof AuthenticatedTrashIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -97,7 +116,9 @@ export interface FileRouteTypes {
     | '/login/'
     | '/signup/'
     | '/items/$itemId'
+    | '/trash/$itemId'
     | '/items/'
+    | '/trash/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -106,7 +127,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/items/$itemId'
+    | '/trash/$itemId'
     | '/items'
+    | '/trash'
   id:
     | '__root__'
     | '/'
@@ -116,7 +139,9 @@ export interface FileRouteTypes {
     | '/login/'
     | '/signup/'
     | '/_authenticated/items/$itemId'
+    | '/_authenticated/trash/$itemId'
     | '/_authenticated/items/'
+    | '/_authenticated/trash/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -170,11 +195,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProfileRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/trash/': {
+      id: '/_authenticated/trash/'
+      path: '/trash'
+      fullPath: '/trash/'
+      preLoaderRoute: typeof AuthenticatedTrashIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/items/': {
       id: '/_authenticated/items/'
       path: '/items'
       fullPath: '/items/'
       preLoaderRoute: typeof AuthenticatedItemsIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/trash/$itemId': {
+      id: '/_authenticated/trash/$itemId'
+      path: '/trash/$itemId'
+      fullPath: '/trash/$itemId'
+      preLoaderRoute: typeof AuthenticatedTrashItemIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/items/$itemId': {
@@ -191,14 +230,18 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedItemsItemIdRoute: typeof AuthenticatedItemsItemIdRoute
+  AuthenticatedTrashItemIdRoute: typeof AuthenticatedTrashItemIdRoute
   AuthenticatedItemsIndexRoute: typeof AuthenticatedItemsIndexRoute
+  AuthenticatedTrashIndexRoute: typeof AuthenticatedTrashIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedItemsItemIdRoute: AuthenticatedItemsItemIdRoute,
+  AuthenticatedTrashItemIdRoute: AuthenticatedTrashItemIdRoute,
   AuthenticatedItemsIndexRoute: AuthenticatedItemsIndexRoute,
+  AuthenticatedTrashIndexRoute: AuthenticatedTrashIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

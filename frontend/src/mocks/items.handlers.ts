@@ -14,9 +14,18 @@ const API = '/api/v1'
 let mockItems: Item[] = []
 let mockContents = new Map<string, { content: string; updatedAt: string }>()
 
+interface MockTrashed {
+  item: Item
+  content?: { content: string; updatedAt: string }
+  deletedAt: string
+  batchId: string
+}
+let mockTrash: MockTrashed[] = []
+
 export function resetMockItems({ empty = false } = {}) {
   mockItems = []
   mockContents = new Map()
+  mockTrash = []
   if (empty) return
   for (const seed of initialItems) {
     const { content, ...item }: SeedItem = seed
@@ -65,6 +74,45 @@ const error = (status: number, message: string) =>
   HttpResponse.json({ error: message }, { status })
 
 const find = (id: string) => mockItems.find((i) => i.id === id)
+
+const toBackendTrashShape = (t: MockTrashed) => ({
+  id: t.item.id,
+  user_id: 'mock-user',
+  parent_id: t.item.parentId,
+  type: t.item.type,
+  name: t.item.name,
+  icon: t.item.icon,
+  created_at: t.item.createdAt,
+  updated_at: t.item.updatedAt,
+  deleted_at: t.deletedAt,
+})
+
+const MAX_TRASH_IDS = 200
+
+function checkIds(ids: unknown): string | null {
+  if (!Array.isArray(ids) || ids.length === 0) return 'no items given'
+  if (ids.length > MAX_TRASH_IDS) {
+    return `too many items: at most ${MAX_TRASH_IDS} per request`
+  }
+  if (new Set(ids).size !== ids.length)
+    return 'an item is listed more than once'
+  return null
+}
+
+function trashDescendants(rootId: string): MockTrashed[] {
+  const out: MockTrashed[] = []
+  const queue = [rootId]
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    for (const t of mockTrash) {
+      if (t.item.parentId === id && !out.includes(t)) {
+        out.push(t)
+        queue.push(t.item.id)
+      }
+    }
+  }
+  return out
+}
 
 function checkParent(
   parentId: string | null,
@@ -141,6 +189,92 @@ export const itemsHandlers = [
     return HttpResponse.json(items.sort(compareItems).map(toBackendShape))
   }),
 
+  http.post(`${API}/items/trash`, async ({ request }) => {
+    const body = (await request.json()) as { ids?: string[] }
+    const invalid = checkIds(body.ids)
+    if (invalid) return error(400, invalid)
+    const ids = body.ids!
+    if (ids.some((id) => !find(id))) return error(404, 'item not found')
+
+    const doomed = getSubtreeIds(ids, buildChildrenMap(mockItems))
+    const deletedAt = new Date().toISOString()
+    const batchId = crypto.randomUUID()
+    const moved: MockTrashed[] = []
+    for (const item of mockItems.filter((i) => doomed.has(i.id))) {
+      moved.push({
+        item: { ...item, isFavorite: false },
+        content: mockContents.get(item.id),
+        deletedAt,
+        batchId,
+      })
+      mockContents.delete(item.id)
+    }
+    mockItems = mockItems.filter((i) => !doomed.has(i.id))
+    mockTrash.push(...moved)
+    return HttpResponse.json(moved.map(toBackendTrashShape))
+  }),
+
+  http.post(`${API}/items/restore`, async ({ request }) => {
+    const body = (await request.json()) as { ids?: string[] }
+    const invalid = checkIds(body.ids)
+    if (invalid) return error(400, invalid)
+    const roots = body.ids!.map((id) => mockTrash.find((t) => t.item.id === id))
+    if (roots.some((t) => !t)) return error(404, 'item not found')
+
+    const set = new Set<MockTrashed>(roots as MockTrashed[])
+    for (const root of [...set]) {
+      const stack = [root]
+      while (stack.length > 0) {
+        const cur = stack.pop()!
+        for (const t of mockTrash) {
+          if (
+            t.item.parentId === cur.item.id &&
+            t.batchId === cur.batchId &&
+            !set.has(t)
+          ) {
+            set.add(t)
+            stack.push(t)
+          }
+        }
+      }
+    }
+
+    const inSet = new Set([...set].map((t) => t.item.id))
+    const restored: Item[] = []
+    for (const t of set) {
+      const parentId = t.item.parentId
+      const keep =
+        parentId !== null &&
+        (inSet.has(parentId) || find(parentId)?.type === 'folder')
+      const item: Item = { ...t.item, parentId: keep ? parentId : null }
+      mockItems.push(item)
+      if (t.content) mockContents.set(item.id, t.content)
+      restored.push(item)
+    }
+    mockTrash = mockTrash.filter((t) => !set.has(t))
+    return HttpResponse.json(restored.map(toBackendShape))
+  }),
+
+  http.get(`${API}/trash`, () => {
+    const sorted = [...mockTrash].sort((a, b) =>
+      b.deletedAt.localeCompare(a.deletedAt),
+    )
+    return HttpResponse.json(sorted.map(toBackendTrashShape))
+  }),
+
+  http.delete(`${API}/trash`, () => {
+    mockTrash = []
+    return new HttpResponse(null, { status: 204 })
+  }),
+
+  http.delete(`${API}/trash/:id`, ({ params }) => {
+    const root = mockTrash.find((t) => t.item.id === params.id)
+    if (!root) return error(404, 'item not found')
+    const doomed = new Set([root, ...trashDescendants(root.item.id)])
+    mockTrash = mockTrash.filter((t) => !doomed.has(t))
+    return new HttpResponse(null, { status: 204 })
+  }),
+
   http.get(`${API}/items/:id`, ({ params }) => {
     const item = find(params.id as string)
     if (!item) return error(404, 'item not found')
@@ -159,7 +293,12 @@ export const itemsHandlers = [
     if (name === '') return error(400, 'name is required')
     const missing = checkParent(body.parent_id ?? null)
     if (missing) return missing
-    if (body.id && find(body.id)) return error(409, 'item already exists')
+    if (
+      body.id &&
+      (find(body.id) || mockTrash.some((t) => t.item.id === body.id))
+    ) {
+      return error(409, 'item already exists')
+    }
 
     const now = new Date().toISOString()
     const item: Item = {

@@ -40,6 +40,15 @@ export interface Item {
   updatedAt?: string // RFC3339 timestamp from the backend
 }
 
+export interface TrashItem {
+  id: string
+  type: ItemType
+  name: string
+  parentId: string | null // the folder it was in when it was trashed
+  icon: string
+  deletedAt: string // RFC3339 timestamp from the backend
+}
+
 export interface NoteContent {
   itemId: string
   content: string

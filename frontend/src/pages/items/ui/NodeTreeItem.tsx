@@ -41,7 +41,7 @@ interface NodeTreeItemProps {
   currentItemId: string | null
   depth: number
   onOpen: (id: string) => void
-  onDelete: (item: SidebarItem, e: React.MouseEvent) => void
+  onTrash: (item: SidebarItem, e: React.MouseEvent) => void
   onDuplicate: (id: string, e: React.MouseEvent) => void
   onToggleFolderExpand: (id: string) => void
   onUpdateIcon: (id: string, icon: string) => void
@@ -103,7 +103,7 @@ export default function NodeTreeItem({
   currentItemId,
   depth,
   onOpen,
-  onDelete,
+  onTrash,
   onDuplicate,
   onToggleFolderExpand,
   onUpdateIcon,
@@ -143,6 +143,7 @@ export default function NodeTreeItem({
           role={undefined}
           data-tree-row
           data-selected={isSelected || undefined}
+          data-active={isActive || undefined}
           onClick={(e) => onRowClick(item.id, e, () => onOpen(item.id))}
           style={{ paddingLeft: `${depth * 12 + 10}px` }}
           className={cn(
@@ -188,11 +189,11 @@ export default function NodeTreeItem({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={(e) => onDelete(item, e)}
+                  onClick={(e) => onTrash(item, e)}
                   className="cursor-pointer text-destructive hover:text-destructive focus:bg-destructive/10 text-xs"
                 >
                   <Trash2 className="mr-2 h-3.5 w-3.5 opacity-60 text-destructive" />
-                  <span>Delete Note</span>
+                  <span>Move to Trash</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -227,6 +228,7 @@ export default function NodeTreeItem({
         role={undefined}
         data-tree-row
         data-selected={isSelected || undefined}
+        data-active={isActive || undefined}
         data-drop-target={dropFolderId === folder.id || undefined}
         onClick={(e) => onRowClick(item.id, e, () => onOpen(item.id))}
         style={{ paddingLeft: `${depth * 12 + 10}px` }}
@@ -300,11 +302,11 @@ export default function NodeTreeItem({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={(e) => onDelete(item, e)}
+                onClick={(e) => onTrash(item, e)}
                 className="cursor-pointer text-destructive hover:text-destructive focus:bg-destructive/10 text-xs"
               >
                 <Trash2 className="mr-2 h-3.5 w-3.5 opacity-60 text-destructive" />
-                <span>Delete Folder</span>
+                <span>Move to Trash</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -321,7 +323,7 @@ export default function NodeTreeItem({
               currentItemId={currentItemId}
               depth={depth + 1}
               onOpen={onOpen}
-              onDelete={onDelete}
+              onTrash={onTrash}
               onDuplicate={onDuplicate}
               onToggleFolderExpand={onToggleFolderExpand}
               onUpdateIcon={onUpdateIcon}

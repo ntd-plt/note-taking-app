@@ -28,12 +28,14 @@ type FakeDatabase struct {
 	Users    map[uuid.UUID]model.User
 	Items    map[uuid.UUID]model.Item
 	Contents map[uuid.UUID]model.NoteContent
+	Trash    map[uuid.UUID]model.TrashItem
 	Errs     map[string]error
 }
 
 var (
 	_ database.UserDataSource  = (*FakeDatabase)(nil)
 	_ database.ItemsDataSource = (*FakeDatabase)(nil)
+	_ database.TrashDataSource = (*FakeDatabase)(nil)
 )
 
 func NewFakeDatabase() *FakeDatabase {
@@ -41,6 +43,7 @@ func NewFakeDatabase() *FakeDatabase {
 		Users:    make(map[uuid.UUID]model.User),
 		Items:    make(map[uuid.UUID]model.Item),
 		Contents: make(map[uuid.UUID]model.NoteContent),
+		Trash:    make(map[uuid.UUID]model.TrashItem),
 		Errs:     make(map[string]error),
 	}
 }
@@ -119,6 +122,9 @@ func (f *FakeDatabase) CreateItem(item model.Item, content string) (model.Item, 
 		item.ID = uuid.New()
 	}
 	if _, taken := f.Items[item.ID]; taken {
+		return model.Item{}, pkg.NewAlreadyExistsError("item")
+	}
+	if _, trashed := f.Trash[item.ID]; trashed {
 		return model.Item{}, pkg.NewAlreadyExistsError("item")
 	}
 	if item.ParentID != nil {

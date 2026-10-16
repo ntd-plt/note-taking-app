@@ -1,7 +1,8 @@
-import type { Item, NoteContent } from '#/shared/models'
+import type { Item, NoteContent, TrashItem } from '#/shared/models'
 import {
   mapBackendItem,
   mapBackendNoteContent,
+  mapBackendTrashItem,
   toBackendCreateItem,
   toBackendItemPatch,
   toBackendMoves,
@@ -79,6 +80,35 @@ export const updateItem = async (
 
 export const deleteItem = async (id: string): Promise<void> => {
   await request<void>(`${API}/items/${id}`, { method: 'DELETE' })
+}
+
+export const trashItems = async (ids: string[]): Promise<TrashItem[]> => {
+  const data = await request<any[]>(`${API}/items/trash`, {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  })
+  return data.map(mapBackendTrashItem)
+}
+
+export const restoreItems = async (ids: string[]): Promise<Item[]> => {
+  const data = await request<any[]>(`${API}/items/restore`, {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  })
+  return data.map(mapBackendItem)
+}
+
+export const fetchTrash = async (): Promise<TrashItem[]> => {
+  const data = await request<any[]>(`${API}/trash`, { method: 'GET' })
+  return data.map(mapBackendTrashItem)
+}
+
+export const deleteTrashedItem = async (id: string): Promise<void> => {
+  await request<void>(`${API}/trash/${id}`, { method: 'DELETE' })
+}
+
+export const emptyTrash = async (): Promise<void> => {
+  await request<void>(`${API}/trash`, { method: 'DELETE' })
 }
 
 export const moveItems = async (moves: ItemMove[]): Promise<Item[]> => {

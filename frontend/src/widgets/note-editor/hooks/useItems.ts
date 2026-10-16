@@ -1,14 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Item, ItemType, NoteContent } from '#/shared/models'
+import { toast } from 'sonner'
+import type { Item, ItemType, NoteContent, TrashItem } from '#/shared/models'
 import { DEFAULT_ICONS } from '#/shared/models'
 import type { CreateItemInput, ItemPatch } from '#/shared/api'
 import { debounce } from '#/shared/lib/debounce'
 import { buildChildrenMap, getSubtreeIds } from '#/shared/lib/hierarchy'
 import { useItemsStore } from './useItemsStore'
+import { showUndoToast } from '../ui/UndoToast'
 import * as React from 'react'
 import * as api from '../api'
 
 export const ITEMS_KEY = ['items'] as const
+export const TRASH_KEY = ['trash'] as const
 export const contentKey = (id: string) => ['item-content', id] as const
 
 // Queries
@@ -17,6 +20,14 @@ export function useItemsQuery() {
   return useQuery({
     queryKey: ITEMS_KEY,
     queryFn: () => api.fetchItems(),
+  })
+}
+
+export function useTrashQuery(enabled = true) {
+  return useQuery({
+    queryKey: TRASH_KEY,
+    queryFn: () => api.fetchTrash(),
+    enabled,
   })
 }
 
@@ -302,6 +313,137 @@ export function useDeleteItem() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ITEMS_KEY })
+    },
+  })
+}
+
+export function useRestoreItems() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (ids: string[]) => api.restoreItems(ids),
+    onSuccess: (restored) => {
+      // Trashing removes the whole subtree from the cache, so a restore (which may bring
+      // back more than was asked for) is simplest to resync from the server.
+      queryClient.setQueryData<TrashItem[]>(TRASH_KEY, (old) =>
+        old?.filter((t) => !restored.some((r) => r.id === t.id)),
+      )
+      queryClient.invalidateQueries({ queryKey: ITEMS_KEY })
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: TRASH_KEY })
+    },
+  })
+}
+
+export function useTrashItems() {
+  const queryClient = useQueryClient()
+  const setActiveItemId = useItemsStore((state) => state.setActiveItemId)
+  const restore = useRestoreItems()
+
+  return useMutation({
+    mutationFn: (ids: string[]) => api.trashItems(ids),
+    onMutate: async (ids) => {
+      await queryClient.cancelQueries({ queryKey: ITEMS_KEY })
+      const previousItems = queryClient.getQueryData<Item[]>(ITEMS_KEY)
+
+      const doomed = getSubtreeIds(ids, buildChildrenMap(previousItems || []))
+      const remaining = (previousItems || []).filter((i) => !doomed.has(i.id))
+      queryClient.setQueryData<Item[]>(ITEMS_KEY, remaining)
+
+      const previousActiveItemId = useItemsStore.getState().activeItemId
+      if (previousActiveItemId && doomed.has(previousActiveItemId)) {
+        setActiveItemId(remaining.find((i) => i.type === 'note')?.id ?? null)
+      }
+      for (const doomedId of doomed) {
+        queryClient.removeQueries({ queryKey: contentKey(doomedId) })
+      }
+
+      return { previousItems, previousActiveItemId }
+    },
+    onSuccess: (_trashed, ids, context) => {
+      const label =
+        ids.length === 1
+          ? 'Moved to trash'
+          : `Moved ${ids.length} items to trash`
+      showUndoToast(label, () =>
+        restore.mutate(ids, {
+          onSuccess: (restored) => {
+            const previous = context.previousActiveItemId
+            if (previous && restored.some((i) => i.id === previous)) {
+              setActiveItemId(previous)
+            }
+          },
+          onError: (err) => toast.error(`Could not undo: ${err.message}`),
+        }),
+      )
+    },
+    onError: (err, _ids, context) => {
+      if (context?.previousItems) {
+        queryClient.setQueryData(ITEMS_KEY, context.previousItems)
+      }
+      toast.error(`Could not move to trash: ${err.message}`)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ITEMS_KEY })
+      queryClient.invalidateQueries({ queryKey: TRASH_KEY })
+    },
+  })
+}
+
+export function useDeleteTrashedItem() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) => api.deleteTrashedItem(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: TRASH_KEY })
+      const previous = queryClient.getQueryData<TrashItem[]>(TRASH_KEY)
+      // The server also deletes the trashed items that were inside the item.
+      const doomed = new Set([id])
+      for (let grew = true; grew; ) {
+        grew = false
+        for (const t of previous ?? []) {
+          if (t.parentId && doomed.has(t.parentId) && !doomed.has(t.id)) {
+            doomed.add(t.id)
+            grew = true
+          }
+        }
+      }
+      queryClient.setQueryData<TrashItem[]>(TRASH_KEY, (old) =>
+        old?.filter((t) => !doomed.has(t.id)),
+      )
+      return { previous }
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(TRASH_KEY, context.previous)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: TRASH_KEY })
+    },
+  })
+}
+
+export function useEmptyTrash() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => api.emptyTrash(),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: TRASH_KEY })
+      const previous = queryClient.getQueryData<TrashItem[]>(TRASH_KEY)
+      queryClient.setQueryData<TrashItem[]>(TRASH_KEY, [])
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(TRASH_KEY, context.previous)
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: TRASH_KEY })
     },
   })
 }

@@ -1,5 +1,5 @@
 import { DEFAULT_ICONS } from '../models'
-import type { Item, ItemType, NoteContent } from '../models'
+import type { Item, ItemType, NoteContent, TrashItem } from '../models'
 
 export function mapBackendItem(i: any): Item {
   const type: ItemType = i.type === 'folder' ? 'folder' : 'note'
@@ -12,6 +12,18 @@ export function mapBackendItem(i: any): Item {
     isFavorite: i.is_favorite ?? false,
     createdAt: i.created_at,
     updatedAt: i.updated_at,
+  }
+}
+
+export function mapBackendTrashItem(i: any): TrashItem {
+  const type: ItemType = i.type === 'folder' ? 'folder' : 'note'
+  return {
+    id: i.id,
+    type,
+    name: i.name,
+    parentId: i.parent_id || null,
+    icon: i.icon || DEFAULT_ICONS[type],
+    deletedAt: i.deleted_at,
   }
 }
 

@@ -96,6 +96,14 @@ func (db *PostgreItemsDataSource) CreateItem(item model.Item, content string) (m
 	if item.ID == uuid.Nil {
 		item.ID = uuid.New()
 	}
+	// A trashed item still owns its id, so a new item cannot reuse it.
+	var trashed bool
+	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM trash_items WHERE id = $1)", item.ID).Scan(&trashed); err != nil {
+		return model.Item{}, err
+	}
+	if trashed {
+		return model.Item{}, pkg.NewAlreadyExistsError("item")
+	}
 	created, err := scanItem(tx.QueryRow(ctx, `
 		INSERT INTO items (id, user_id, parent_id, type, name, icon, is_favorite)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)

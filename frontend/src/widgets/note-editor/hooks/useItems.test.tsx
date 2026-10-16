@@ -1,15 +1,19 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '#/mocks/server'
 import { resetMockItems } from '#/mocks/items.handlers'
-import type { Item, NoteContent } from '#/shared/models'
+import type { Item, NoteContent, TrashItem } from '#/shared/models'
 import * as api from '../api'
 import {
   useCreateItem,
   useDeleteItem,
+  useDeleteTrashedItem,
+  useEmptyTrash,
+  useRestoreItems,
+  useTrashItems,
   useDuplicateItem,
   useItemsQuery,
   useNoteContentQuery,
@@ -17,6 +21,17 @@ import {
   useUpdateItem,
 } from './useItems'
 import { useItemsStore } from './useItemsStore'
+
+const toast = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn() }))
+vi.mock('sonner', () => ({ toast }))
+const showUndoToast = vi.hoisted(() => vi.fn())
+vi.mock('../ui/UndoToast', () => ({ showUndoToast }))
+
+beforeEach(() => {
+  toast.mockClear()
+  toast.error.mockClear()
+  showUndoToast.mockClear()
+})
 
 afterEach(() => {
   cleanup()
@@ -566,5 +581,178 @@ describe('duplicating items', () => {
     })
 
     expect(names).toEqual(['Plan (Copy 1)', 'Plan (Copy 2)', 'Plan (Copy 3)'])
+  })
+})
+
+describe('useTrashItems', () => {
+  async function tree() {
+    const folder = await api.createItem({ type: 'folder', name: 'Folder' })
+    const deep = await api.createItem({
+      type: 'note',
+      name: 'Deep',
+      parentId: folder.id,
+    })
+    const outside = await api.createItem({ type: 'note', name: 'Outside' })
+    return { folder, deep, outside }
+  }
+
+  it('takes a folder and everything inside it out of the tree, and into the trash', async () => {
+    const { client, wrapper } = setup()
+    const { folder, deep, outside } = await tree()
+    client.setQueryData(['items'], await api.fetchItems())
+    const { result } = renderHook(() => useTrashItems(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync([folder.id])
+    })
+
+    expect(client.getQueryData<Item[]>(['items'])?.map((i) => i.id)).toEqual([
+      outside.id,
+    ])
+    await expect(api.fetchItem(deep.id)).rejects.toThrow('item not found')
+    expect((await api.fetchTrash()).map((t) => t.id).sort()).toEqual(
+      [folder.id, deep.id].sort(),
+    )
+  })
+
+  it('offers Undo, which puts the items back and reopens the open note', async () => {
+    const { client, wrapper } = setup()
+    const { folder, deep } = await tree()
+    client.setQueryData(['items'], await api.fetchItems())
+    useItemsStore.getState().setActiveItemId(deep.id)
+    const { result } = renderHook(
+      () => ({ trash: useTrashItems(), items: useItemsQuery() }),
+      { wrapper },
+    )
+
+    await act(async () => {
+      await result.current.trash.mutateAsync([folder.id])
+    })
+    expect(useItemsStore.getState().activeItemId).not.toBe(deep.id)
+    expect(showUndoToast).toHaveBeenCalledWith(
+      'Moved to trash',
+      expect.any(Function),
+    )
+
+    await act(async () => {
+      showUndoToast.mock.calls[0][1]()
+    })
+
+    await waitFor(() =>
+      expect(useItemsStore.getState().activeItemId).toBe(deep.id),
+    )
+    expect((await api.fetchItem(deep.id)).parentId).toBe(folder.id)
+    expect(await api.fetchTrash()).toEqual([])
+  })
+
+  it('names the count when several items are trashed at once', async () => {
+    const { client, wrapper } = setup()
+    const a = await api.createItem({ type: 'note', name: 'A' })
+    const b = await api.createItem({ type: 'note', name: 'B' })
+    client.setQueryData(['items'], await api.fetchItems())
+    const { result } = renderHook(() => useTrashItems(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync([a.id, b.id])
+    })
+
+    expect(showUndoToast.mock.calls[0][0]).toBe('Moved 2 items to trash')
+    expect(await api.fetchTrash()).toHaveLength(2)
+  })
+
+  it('restores the tree and reports the failure when the server refuses', async () => {
+    server.use(
+      http.post('/api/v1/items/trash', () =>
+        HttpResponse.json({ error: 'nope' }, { status: 500 }),
+      ),
+    )
+    const { client, wrapper } = setup()
+    const { folder } = await tree()
+    const before = await api.fetchItems()
+    client.setQueryData(['items'], before)
+    const { result } = renderHook(() => useTrashItems(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync([folder.id]).catch(() => {})
+    })
+
+    expect(client.getQueryData<Item[]>(['items'])).toEqual(before)
+    expect(toast.error).toHaveBeenCalledWith('Could not move to trash: nope')
+    expect(showUndoToast).not.toHaveBeenCalled()
+  })
+})
+
+describe('useRestoreItems', () => {
+  it('drops the restored items from the cached trash and reloads the tree', async () => {
+    const { client, wrapper } = setup()
+    const note = await api.createItem({ type: 'note', name: 'Note' })
+    await api.trashItems([note.id])
+    client.setQueryData<TrashItem[]>(['trash'], await api.fetchTrash())
+    const { result } = renderHook(() => useRestoreItems(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync([note.id])
+    })
+
+    expect(client.getQueryData<TrashItem[]>(['trash'])).toEqual([])
+    expect((await api.fetchItem(note.id)).name).toBe('Note')
+  })
+})
+
+describe('useDeleteTrashedItem and useEmptyTrash', () => {
+  it('removes a trashed folder and what was trashed inside it from the cached trash', async () => {
+    const { client, wrapper } = setup()
+    const folder = await api.createItem({ type: 'folder', name: 'F' })
+    await api.createItem({ type: 'note', name: 'N', parentId: folder.id })
+    const other = await api.createItem({ type: 'note', name: 'Other' })
+    await api.trashItems([folder.id, other.id])
+    client.setQueryData<TrashItem[]>(['trash'], await api.fetchTrash())
+    const { result } = renderHook(() => useDeleteTrashedItem(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync(folder.id)
+    })
+
+    expect(
+      client.getQueryData<TrashItem[]>(['trash'])?.map((t) => t.id),
+    ).toEqual([other.id])
+    expect((await api.fetchTrash()).map((t) => t.id)).toEqual([other.id])
+  })
+
+  it('puts the trash back when the server refuses to delete', async () => {
+    server.use(
+      http.delete('/api/v1/trash/:id', () =>
+        HttpResponse.json({ error: 'nope' }, { status: 500 }),
+      ),
+    )
+    const { client, wrapper } = setup()
+    const note = await api.createItem({ type: 'note', name: 'Note' })
+    await api.trashItems([note.id])
+    const trash = await api.fetchTrash()
+    client.setQueryData<TrashItem[]>(['trash'], trash)
+    const { result } = renderHook(() => useDeleteTrashedItem(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync(note.id).catch(() => {})
+    })
+
+    await waitFor(() =>
+      expect(client.getQueryData<TrashItem[]>(['trash'])).toEqual(trash),
+    )
+  })
+
+  it('empties the trash', async () => {
+    const { client, wrapper } = setup()
+    const note = await api.createItem({ type: 'note', name: 'Note' })
+    await api.trashItems([note.id])
+    client.setQueryData<TrashItem[]>(['trash'], await api.fetchTrash())
+    const { result } = renderHook(() => useEmptyTrash(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync()
+    })
+
+    expect(client.getQueryData<TrashItem[]>(['trash'])).toEqual([])
+    expect(await api.fetchTrash()).toEqual([])
   })
 })
