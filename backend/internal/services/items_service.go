@@ -74,6 +74,8 @@ func respondError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": database.ErrInvalidParent.Error()})
 	case stderrors.Is(err, database.ErrTooDeep):
 		c.JSON(http.StatusBadRequest, gin.H{"error": database.ErrTooDeep.Error()})
+	case stderrors.Is(err, database.ErrTrashTooLarge):
+		c.JSON(http.StatusBadRequest, gin.H{"error": database.ErrTrashTooLarge.Error()})
 	case stderrors.Is(err, database.ErrNotANote):
 		c.JSON(http.StatusBadRequest, gin.H{"error": database.ErrNotANote.Error()})
 	case stderrors.Is(err, database.ErrMoveConflict):

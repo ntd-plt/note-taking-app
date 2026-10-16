@@ -541,7 +541,7 @@ describe('Sidebar header and creating items', () => {
       expect(screen.queryByText('Create Folder')).toBeNull()
     })
 
-    it('offers only Rename, Duplicate and Delete in the folder menu', async () => {
+    it('offers only Rename, Duplicate and Move to Trash in the folder menu', async () => {
       await renderLoaded()
       const row = rowOf('Work')
       expect(row.querySelector('button[title="Create Note inside"]')).toBeNull()
@@ -557,7 +557,7 @@ describe('Sidebar header and creating items', () => {
 
       expect(
         screen.getAllByRole('menuitem').map((item) => item.textContent),
-      ).toEqual(['Rename Folder', 'Duplicate', 'Delete Folder'])
+      ).toEqual(['Rename Folder', 'Duplicate', 'Move to Trash'])
     })
 
     it('still renames a folder through the dialog', async () => {

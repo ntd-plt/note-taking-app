@@ -12,7 +12,7 @@ BINARY         := bin/server
 MIGRATIONS_DIR := migrations
 
 .PHONY: help setup env tools tidy db-create db-drop \
-        migrate-up migrate-down migrate-create \
+        migrate-up migrate-down migrate-create seed-user db-reset \
         swagger build run test vet fmt clean
 
 help: ## Show this help
@@ -20,7 +20,7 @@ help: ## Show this help
 
 ## --- Setup -----------------------------------------------------------------
 
-setup: env tools tidy db-create migrate-up ## One-shot setup: env file (secret auto-generated), tools, deps, database, migrations — no manual steps required
+setup: env tools tidy db-create migrate-up seed-user ## One-shot setup: env file (secret auto-generated), tools, deps, database, migrations, dev user — no manual steps required
 	@echo "Setup complete. Run 'make run' to start the server."
 
 env: ## Create .env from .env.example if missing, auto-generating a JWT secret
@@ -57,6 +57,11 @@ migrate-down: env ## Roll back the most recent migration
 migrate-create: ## Create a new migration pair: make migrate-create name=add_something
 	@test -n "$(name)" || (echo "usage: make migrate-create name=<migration_name>"; exit 1)
 	$(GOBIN)/migrate create -ext sql -dir $(MIGRATIONS_DIR) -seq $(name)
+
+seed-user: env ## Create the dev user from SEED_USER_EMAIL / SEED_USER_PASSWORD / SEED_USER_NAME in .env (skips if unset or already there)
+	go run ./cmd/seeduser
+
+db-reset: db-drop db-create migrate-up seed-user ## Drop and recreate the database, apply migrations, then create the dev user again
 
 ## --- Docs ---------------------------------------------------------------
 

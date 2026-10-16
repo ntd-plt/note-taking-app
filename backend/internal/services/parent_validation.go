@@ -38,9 +38,9 @@ func requestErr(status int, format string, args ...any) *RequestError {
 	return &RequestError{Status: status, Message: fmt.Sprintf(format, args...)}
 }
 
-// wouldCreateCycle reports whether giving folderID the parent newParent makes it its
+// IsCreateCycle reports whether giving folderID the parent newParent makes it its
 // own ancestor, using parents as the current folder-to-parent map.
-func wouldCreateCycle(parents map[uuid.UUID]*uuid.UUID, folderID uuid.UUID, newParent *uuid.UUID) bool {
+func IsCreateCycle(parents map[uuid.UUID]*uuid.UUID, folderID uuid.UUID, newParent *uuid.UUID) bool {
 	visited := map[uuid.UUID]bool{}
 	for cur := newParent; cur != nil && !visited[*cur]; cur = parents[*cur] {
 		if *cur == folderID {

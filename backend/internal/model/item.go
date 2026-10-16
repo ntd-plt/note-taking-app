@@ -82,3 +82,19 @@ func SortItems(items []Item) {
 		return a.ID.String() < b.ID.String()
 	})
 }
+
+// TrashItem is an item that was moved to the trash. Content holds a trashed note's
+// body so it can be put back on restore; it is never serialized.
+type TrashItem struct {
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	ParentID  *uuid.UUID `json:"parent_id"`
+	Type      ItemType   `json:"type"`
+	Name      string     `json:"name"`
+	Icon      string     `json:"icon"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
+	DeletedAt time.Time  `json:"deleted_at"`
+	BatchID   uuid.UUID  `json:"-"`
+	Content   *string    `json:"-"`
+}

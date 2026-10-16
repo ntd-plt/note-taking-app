@@ -10,6 +10,8 @@ import {
 } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
+import { Toaster } from '@/components/ui/sonner'
+
 import appCss from '../styles.css?url'
 
 export const Route = createRootRoute({
@@ -66,6 +68,7 @@ function App() {
     <>
       <HeadContent />
       <Outlet />
+      <Toaster />
       <TanStackDevtools
         config={{
           position: 'bottom-right',

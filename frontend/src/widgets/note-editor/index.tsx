@@ -4,6 +4,12 @@ export { Editor } from './ui/Editor'
 export { ItemBreadcrumb } from './ui/ItemBreadcrumb'
 export {
   ITEMS_KEY,
+  TRASH_KEY,
+  useTrashQuery,
+  useTrashItems,
+  useRestoreItems,
+  useDeleteTrashedItem,
+  useEmptyTrash,
   useItemsQuery,
   useNoteContentQuery,
   useCreateItem,

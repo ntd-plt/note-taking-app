@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -52,12 +54,19 @@ func newItemsDB(t *testing.T) (*database.PostgreItemsDataSource, *pgxpool.Pool) 
 		admin.Close()
 	})
 
-	migration, err := os.ReadFile("../../migrations/001_create_users.up.sql")
-	if err != nil {
-		t.Fatalf("reading migration: %v", err)
+	files, err := filepath.Glob("../../migrations/*.up.sql")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("finding migrations: %v (%d files)", err, len(files))
 	}
-	if _, err := pool.Exec(ctx, string(migration)); err != nil {
-		t.Fatalf("applying migration: %v", err)
+	sort.Strings(files)
+	for _, file := range files {
+		migration, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("reading migration: %v", err)
+		}
+		if _, err := pool.Exec(ctx, string(migration)); err != nil {
+			t.Fatalf("applying %s: %v", file, err)
+		}
 	}
 	return database.NewPostgreItemsDataSource(pool), pool
 }

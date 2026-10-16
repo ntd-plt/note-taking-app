@@ -6,7 +6,7 @@ import {
   useItemsStore,
   useItemsQuery,
   useCreateItem,
-  useDeleteItem,
+  useTrashItems,
   useDuplicateItem,
   useUpdateItem,
 } from '@/widgets/note-editor'
@@ -62,7 +62,6 @@ import {
   LogOut,
   User,
   HelpCircle,
-  Undo,
   FolderPlus,
   PanelLeftClose,
   PanelLeft,
@@ -143,7 +142,11 @@ function TreeDropZone({
   )
 }
 
-export function AppSidebar() {
+/**
+ * `inTrash` is set on the trash pages: the tree then shows no open item or selection, the
+ * same as after clicking the "Private" bar, because nothing in it is being viewed.
+ */
+export function AppSidebar({ inTrash = false }: { inTrash?: boolean }) {
   const navigate = useNavigate()
   const { toggleSidebar } = useSidebar()
   const [user, setUser] = React.useState<{
@@ -175,17 +178,18 @@ export function AppSidebar() {
     useItemsStore()
 
   const params = useParams({ strict: false })
-  const currentItemId = params.itemId || activeItemId
+  const currentItemId = inTrash ? null : params.itemId || activeItemId
 
   // Mutation hooks
   const createItemMutation = useCreateItem()
-  const deleteItemMutation = useDeleteItem()
+  const trashItemsMutation = useTrashItems()
   const duplicateItemMutation = useDuplicateItem()
   const { updateItemNow } = useUpdateItem()
 
   React.useEffect(() => {
-    if (params.itemId) setActiveItemId(params.itemId)
-  }, [params.itemId, setActiveItemId])
+    // On the trash pages the id in the address is a trashed item, not an open one.
+    if (params.itemId && !inTrash) setActiveItemId(params.itemId)
+  }, [params.itemId, inTrash, setActiveItemId])
 
   // Search dialog state
   const [searchOpen, setSearchOpen] = React.useState(false)
@@ -201,20 +205,6 @@ export function AppSidebar() {
     null,
   )
   const [folderNameInput, setFolderNameInput] = React.useState('')
-
-  const [confirmDialogOpen, setConfirmDialogOpen] = React.useState(false)
-  const [confirmDialogData, setConfirmDialogData] = React.useState<{
-    title: string
-    description: string
-    confirmLabel: string
-    isDestructive?: boolean
-    onConfirm: () => void
-  }>({
-    title: '',
-    description: '',
-    confirmLabel: '',
-    onConfirm: () => {},
-  })
 
   const openRenameDialog = (folderId: string, currentName: string) => {
     setFolderNameInput(currentName)
@@ -256,6 +246,13 @@ export function AppSidebar() {
     [sidebarTree],
   )
   const treeSelection = useTreeSelection(items, visibleIds)
+  const clearSelection = treeSelection.clear
+  React.useEffect(() => {
+    if (!inTrash) return
+    clearSelection()
+    setActiveItemId(null)
+  }, [inTrash, clearSelection, setActiveItemId])
+
   const dnd = useTreeDragAndDrop({
     items,
     selectedIds: treeSelection.selectedIds,
@@ -347,34 +344,34 @@ export function AppSidebar() {
     )
   }
 
-  const handleDelete = (item: SidebarItem, e: React.MouseEvent) => {
+  const handleTrash = (item: SidebarItem, e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    const isFolder = item.type === 'folder'
-    setConfirmDialogData({
-      title: isFolder ? 'Delete Folder' : 'Delete Note',
-      description: isFolder
-        ? 'Are you sure you want to delete this folder and all its contents?'
-        : 'Are you sure you want to delete this note permanently?',
-      confirmLabel: 'Delete',
-      isDestructive: true,
-      onConfirm: () => {
-        deleteItemMutation.mutate(item.id, {
-          onSuccess: () => {
-            const nextActiveId = useItemsStore.getState().activeItemId
-            if (nextActiveId) {
-              navigate({
-                to: '/items/$itemId',
-                params: { itemId: nextActiveId },
-              })
-            } else {
-              navigate({ to: '/items' })
-            }
-          },
-        })
+    // Trashing a row that is part of a multi-selection trashes the whole selection.
+    const selected = treeSelection.selectedIds
+    const ids = selected.has(item.id)
+      ? items
+          .filter(
+            (i) =>
+              selected.has(i.id) &&
+              (i.parentId === null || !selected.has(i.parentId)),
+          )
+          .map((i) => i.id)
+      : [item.id]
+    treeSelection.clear()
+    trashItemsMutation.mutate(ids, {
+      onSuccess: () => {
+        const nextActiveId = useItemsStore.getState().activeItemId
+        if (nextActiveId) {
+          navigate({
+            to: '/items/$itemId',
+            params: { itemId: nextActiveId },
+          })
+        } else {
+          navigate({ to: '/items' })
+        }
       },
     })
-    setConfirmDialogOpen(true)
   }
 
   const handleDuplicate = (id: string, e: React.MouseEvent) => {
@@ -567,7 +564,7 @@ export function AppSidebar() {
                             currentItemId={currentItemId}
                             depth={0}
                             onOpen={handleOpen}
-                            onDelete={handleDelete}
+                            onTrash={handleTrash}
                             onDuplicate={handleDuplicate}
                             onToggleFolderExpand={(id) => {
                               setExpandedFolders((prev) => ({
@@ -602,51 +599,15 @@ export function AppSidebar() {
         {/* Sidebar Footer */}
         <SidebarFooter className="border-t border-sidebar-border/20 px-3 py-2">
           <SidebarMenu>
-            {/* Trash Action */}
+            {/* Trash */}
             <SidebarMenuItem>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton className="w-full text-muted-foreground/80 hover:bg-destructive/10 hover:text-destructive transition-all">
-                    <Trash2 className="mr-2 h-4 w-4 opacity-75" />
-                    <span className="text-xs">Archive / Trash</span>
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="w-64 p-2 text-xs"
-                  align="start"
-                  side="top"
-                >
-                  <div className="flex flex-col gap-1 p-1">
-                    <span className="font-semibold text-foreground">
-                      Trash Can
-                    </span>
-                    <span className="text-[10px] text-muted-foreground mb-1">
-                      No deleted pages. Deleting pages is permanent in this
-                      mock.
-                    </span>
-                    <DropdownMenuSeparator />
-                    <button
-                      onClick={() => {
-                        setConfirmDialogData({
-                          title: 'Reset Workspace',
-                          description:
-                            'Are you sure you want to reset all notes to the initial state? This will clear all your custom notes.',
-                          confirmLabel: 'Restore Default',
-                          isDestructive: true,
-                          onConfirm: () => {
-                            localStorage.removeItem('items-workspace-storage')
-                            window.location.reload()
-                          },
-                        })
-                        setConfirmDialogOpen(true)
-                      }}
-                      className="flex w-full items-center gap-1.5 justify-center py-1.5 px-2 text-[10px] text-destructive bg-destructive/5 hover:bg-destructive/15 rounded border border-destructive/20 font-medium transition-all"
-                    >
-                      <Undo className="h-3 w-3" /> Restore Default Workspace
-                    </button>
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <SidebarMenuButton
+                onClick={() => navigate({ to: '/trash' })}
+                className="w-full text-muted-foreground/80 hover:bg-destructive/10 hover:text-destructive transition-all"
+              >
+                <Trash2 className="mr-2 h-4 w-4 opacity-75" />
+                <span className="text-xs">Trash</span>
+              </SidebarMenuButton>
             </SidebarMenuItem>
 
             {/* Help & Support */}
@@ -769,39 +730,6 @@ export function AppSidebar() {
               <Button type="submit">Save</Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirmation Dialog */}
-      <Dialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{confirmDialogData.title}</DialogTitle>
-            <DialogDescription>
-              {confirmDialogData.description}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant={
-                confirmDialogData.isDestructive ? 'destructive' : 'default'
-              }
-              onClick={() => {
-                confirmDialogData.onConfirm()
-                setConfirmDialogOpen(false)
-              }}
-            >
-              {confirmDialogData.confirmLabel}
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

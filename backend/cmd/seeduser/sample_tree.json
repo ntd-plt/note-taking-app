@@ -1,0 +1,117 @@
+[
+  {
+    "type": "folder",
+    "icon": "🚀",
+    "name": "Getting Started",
+    "children": [
+      {
+        "type": "note",
+        "icon": "👋",
+        "name": "Welcome",
+        "favorite": true,
+        "content": "<h1>Welcome</h1><p>This is a sample workspace. Edit, move or delete anything here.</p>"
+      },
+      {
+        "type": "note",
+        "icon": "🧭",
+        "name": "How this app works",
+        "content": "<h1>How this app works</h1><p>Notes live in folders. Drag items in the sidebar to move them, and deleted items go to the Trash.</p>"
+      }
+    ]
+  },
+  {
+    "type": "folder",
+    "icon": "💼",
+    "name": "Work",
+    "children": [
+      {
+        "type": "folder",
+        "icon": "🗂️",
+        "name": "Projects",
+        "children": [
+          {
+            "type": "folder",
+            "icon": "🎨",
+            "name": "Website Redesign",
+            "children": [
+              {
+                "type": "note",
+                "icon": "📝",
+                "name": "Kickoff notes",
+                "content": "<h1>Kickoff notes</h1><p>Goals, scope and who does what.</p>"
+              },
+              {
+                "type": "note",
+                "icon": "✅",
+                "name": "Design checklist",
+                "content": "<h1>Design checklist</h1><p>Colours, typography, spacing, accessibility.</p>"
+              }
+            ]
+          },
+          {
+            "type": "note",
+            "icon": "🗺️",
+            "name": "Q4 roadmap",
+            "content": "<h1>Q4 roadmap</h1><p>Three things we want to ship this quarter.</p>"
+          }
+        ]
+      },
+      {
+        "type": "folder",
+        "icon": "📅",
+        "name": "Meetings",
+        "children": [
+          {
+            "type": "note",
+            "icon": "🔁",
+            "name": "Weekly sync",
+            "content": "<h1>Weekly sync</h1><p>Agenda, decisions and action items.</p>"
+          },
+          {
+            "type": "note",
+            "icon": "🤝",
+            "name": "1:1 notes",
+            "content": "<h1>1:1 notes</h1><p>Topics to talk through next time.</p>"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "folder",
+    "icon": "🏡",
+    "name": "Personal",
+    "children": [
+      {
+        "type": "note",
+        "icon": "📚",
+        "name": "Reading list",
+        "content": "<h1>Reading list</h1><p>Books and articles to get to.</p>"
+      },
+      {
+        "type": "note",
+        "icon": "🍝",
+        "name": "Recipes",
+        "content": "<h1>Recipes</h1><p>Things worth cooking again.</p>"
+      },
+      {
+        "type": "note",
+        "icon": "✈️",
+        "name": "Travel ideas",
+        "content": "<h1>Travel ideas</h1><p>Places to visit and what to see there.</p>"
+      }
+    ]
+  },
+  {
+    "type": "note",
+    "icon": "🗒️",
+    "name": "Scratchpad",
+    "content": "<h1>Scratchpad</h1><p>Quick thoughts go here.</p>"
+  },
+  {
+    "type": "note",
+    "icon": "💡",
+    "name": "Ideas inbox",
+    "content": "<h1>Ideas inbox</h1><p>Half-formed ideas to sort out later.</p>"
+  }
+]

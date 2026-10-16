@@ -1,7 +1,9 @@
 package configs
 
 import (
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -23,7 +25,13 @@ type Config struct {
 	// DisableEmailVerification skips signup email verification (fails open)
 	// when set via the DISABLE_EMAIL_VERIFICATION env var.
 	DisableEmailVerification bool
+
+	// TrashRetention is how long trashed items are kept before they are purged,
+	// set via the TRASH_RETENTION env var as a Go duration (e.g. "720h", "30s").
+	TrashRetention time.Duration
 }
+
+const DefaultTrashRetention = 30 * 24 * time.Hour
 
 func Default() *Config {
 	return &Config{
@@ -35,6 +43,8 @@ func Default() *Config {
 		ServerPort: "8080",
 		JWTSecret:  "default_secret",
 		AppEnv:     "development",
+
+		TrashRetention: DefaultTrashRetention,
 	}
 }
 
@@ -45,6 +55,15 @@ func Load() (*Config, error) {
 	appEnv := os.Getenv("APP_ENV")
 	if appEnv == "" {
 		appEnv = "development"
+	}
+
+	retention := DefaultTrashRetention
+	if raw := os.Getenv("TRASH_RETENTION"); raw != "" {
+		d, err := time.ParseDuration(raw)
+		if err != nil || d <= 0 {
+			return nil, fmt.Errorf("TRASH_RETENTION must be a positive duration such as 720h, got %q", raw)
+		}
+		retention = d
 	}
 
 	return &Config{
@@ -58,6 +77,8 @@ func Load() (*Config, error) {
 		AppEnv:     appEnv,
 
 		DisableEmailVerification: os.Getenv("DISABLE_EMAIL_VERIFICATION") == "true",
+
+		TrashRetention: retention,
 	}, nil
 }
 
