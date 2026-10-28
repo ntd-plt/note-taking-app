@@ -67,8 +67,17 @@ func (db *PostgreUserDataSource) UpdateUser(u user.User) error {
 	return nil
 }
 
+// AddUser creates the user together with their workspace, the hidden root item
+// that holds their top-level pages.
 func (db *PostgreUserDataSource) AddUser(u user.User) error {
-	_, err := db.conn.Exec(context.Background(), "INSERT INTO users (id, name, email, password_hash, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)", u.ID, u.Name, u.Email, u.PasswordHash, u.CreatedAt, u.UpdatedAt)
+	ctx := context.Background()
+	tx, err := db.conn.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	_, err = tx.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)", u.ID, u.Name, u.Email, u.PasswordHash, u.CreatedAt, u.UpdatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if stderrors.As(err, &pgErr) && pgErr.Code == postgresUniqueViolationCode {
@@ -76,5 +85,8 @@ func (db *PostgreUserDataSource) AddUser(u user.User) error {
 		}
 		return err
 	}
-	return nil
+	if _, err := tx.Exec(ctx, "INSERT INTO items (id, user_id, type) VALUES ($1, $2, 'workspace')", uuid.New(), u.ID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }

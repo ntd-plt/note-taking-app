@@ -13,7 +13,7 @@ import (
 
 const maxRequestBodyBytes = 2 << 20
 
-func NewRouter(authService *services.AuthService, userService *services.UserService, itemsService *services.ItemsService, trashService *services.TrashService, tokenService *services.JWTService, enableSwagger bool) *gin.Engine {
+func NewRouter(authService *services.AuthService, userService *services.UserService, itemsService *services.ItemsService, tokenService *services.JWTService, enableSwagger bool) *gin.Engine {
 	router := gin.Default()
 
 	router.Use(middleware.CORS())
@@ -38,20 +38,8 @@ func NewRouter(authService *services.AuthService, userService *services.UserServ
 		protected.GET("/users/me", userService.GetUser)
 		protected.PUT("/users/me", userService.UpdateUser)
 
-		protected.POST("/items", itemsService.CreateItem)
-		protected.POST("/items/trash", trashService.TrashItems)
-		protected.POST("/items/restore", trashService.RestoreItems)
-		protected.GET("/items", itemsService.ListItems)
-		protected.PATCH("/items", itemsService.MoveItems)
 		protected.GET("/items/:id", itemsService.GetItem)
-		protected.PATCH("/items/:id", itemsService.UpdateItem)
-		protected.DELETE("/items/:id", itemsService.DeleteItem)
-		protected.GET("/items/:id/content", itemsService.GetNoteContent)
-		protected.PUT("/items/:id/content", itemsService.PutNoteContent)
-
-		protected.GET("/trash", trashService.ListTrash)
-		protected.DELETE("/trash", trashService.EmptyTrash)
-		protected.DELETE("/trash/:id", trashService.DeleteTrashed)
+		protected.GET("/pages", itemsService.ListPages)
 	}
 	return router
 }

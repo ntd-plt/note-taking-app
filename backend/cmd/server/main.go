@@ -5,13 +5,12 @@ import (
 	"backend/internal/database"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
-	"context"
 	"log"
 )
 
 // @title           Note Taking App API
 // @version         1.0
-// @description     API for managing users and their items (notes and folders).
+// @description     API for managing users and their pages and blocks.
 // @BasePath        /api/v1
 
 // @securityDefinitions.apikey  BearerAuth
@@ -33,7 +32,6 @@ func main() {
 
 	userDataSource := database.NewPostgreUserDataSource(pool)
 	itemsDataSource := database.NewPostgreItemsDataSource(pool)
-	trashDataSource := database.NewPostgreTrashDataSource(pool)
 
 	hasher := hash.NewBcryptHasher()
 	tokenService := services.NewJWTService()
@@ -49,13 +47,8 @@ func main() {
 	userService := services.NewUserService(userDataSource)
 	authService := services.NewAuthService(userService, hasher, tokenService, emailValidator)
 	itemsService := services.NewItemsService(itemsDataSource)
-	trashService := services.NewTrashService(trashDataSource, cfg.TrashRetention)
 
-	purgeCtx, stopPurge := context.WithCancel(context.Background())
-	defer stopPurge()
-	go trashService.RunPurger(purgeCtx)
-
-	router := NewRouter(authService, userService, itemsService, trashService, tokenService, cfg.IsDevelopment())
+	router := NewRouter(authService, userService, itemsService, tokenService, cfg.IsDevelopment())
 	if err := router.Run(":8080"); err != nil {
 		panic(err)
 	}

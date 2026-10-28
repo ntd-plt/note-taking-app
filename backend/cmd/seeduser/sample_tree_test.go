@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,60 +11,146 @@ import (
 	"github.com/google/uuid"
 )
 
-func countNodes(nodes []node) int {
-	n := len(nodes)
-	for _, c := range nodes {
-		n += countNodes(c.Children)
-	}
-	return n
-}
-
-func TestEmbeddedSampleTreeIsValidAndSized(t *testing.T) {
-	nodes, err := parseTree(sampleTreeJSON)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n := countNodes(nodes); n < 10 || n > 20 {
-		t.Errorf("the sample tree has %d items, want 10 to 20", n)
-	}
-}
-
-func TestInsertTreeCreatesParentsBeforeChildren(t *testing.T) {
-	nodes, err := parseTree(sampleTreeJSON)
-	if err != nil {
-		t.Fatal(err)
-	}
+func seedFake(t *testing.T, nodes []node) (*testutil.FakeDatabase, uuid.UUID, []model.Item) {
+	t.Helper()
 	db := testutil.NewFakeDatabase()
-	user := uuid.New()
+	user := model.New()
+	if err := db.AddUser(*user); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := buildItems(db.Workspace(user.ID).ID, nodes)
+	if err := db.InsertItems(user.ID, rows); err != nil {
+		t.Fatal(err)
+	}
+	return db, user.ID, rows
+}
 
-	made, err := insertTree(db, user, nil, nodes)
+func TestEmbeddedSampleTreeUsesEveryTypeAndNestsPages(t *testing.T) {
+	nodes, err := parseTree(sampleTreeJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := countNodes(nodes); made != want || len(db.Items) != want {
-		t.Fatalf("created %d, stored %d; want %d", made, len(db.Items), want)
+	db, userID, rows := seedFake(t, nodes)
+
+	used := map[model.ItemType]bool{}
+	for _, it := range rows {
+		used[it.Type] = true
 	}
-	for _, it := range db.Items {
-		if it.UserID != user || it.Icon == "" {
-			t.Errorf("item %q = %+v", it.Name, it)
+	for _, typ := range append([]model.ItemType{model.ItemTypePage}, model.BlockTypes...) {
+		if !used[typ] {
+			t.Errorf("the sample tree has no %s", typ)
 		}
-		if it.Type == model.ItemTypeNote && db.Contents[it.ID].Content == "" {
-			t.Errorf("note %q has no content", it.Name)
+	}
+
+	var underBlock, underPage, deep bool
+	for _, it := range rows {
+		if it.Type != model.ItemTypePage {
+			continue
 		}
+		switch db.Items[*it.ParentID].Type {
+		case model.ItemTypePage:
+			underPage = true
+		case model.ItemTypeWorkspace:
+		default:
+			underBlock = true
+		}
+		if crumbs, _ := db.Ancestors(userID, it.ID); len(crumbs) >= 2 {
+			deep = true
+		}
+	}
+	if !underBlock || !underPage || !deep {
+		t.Errorf("want child pages under a block (%v), directly under a page (%v), and two levels deep (%v)",
+			underBlock, underPage, deep)
+	}
+}
+
+func TestBuildItemsKeepsChildIDsInStep(t *testing.T) {
+	nodes, err := parseTree(sampleTreeJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, userID, rows := seedFake(t, nodes)
+
+	if len(db.Items) != len(rows)+1 {
+		t.Fatalf("stored %d items, want %d plus the workspace", len(db.Items), len(rows))
+	}
+	seen := map[uuid.UUID]bool{}
+	for _, it := range rows {
+		if it.ParentID == nil || (!seen[*it.ParentID] && db.Items[*it.ParentID].Type != model.ItemTypeWorkspace) {
+			t.Fatalf("%s %s comes before its parent", it.Type, it.ID)
+		}
+		seen[it.ID] = true
+	}
+	for _, parent := range db.Items {
+		var kids []uuid.UUID
+		for _, it := range rows {
+			if *it.ParentID == parent.ID {
+				kids = append(kids, it.ID)
+			}
+		}
+		if len(kids) != len(parent.ChildIDs) || !slices.Equal(kids, parent.ChildIDs) {
+			t.Errorf("%s %s: child_ids = %v, want its children in order %v", parent.Type, parent.ID, parent.ChildIDs, kids)
+		}
+	}
+
+	for _, it := range rows {
+		if owner := db.Items[it.ID].UserID; owner != userID {
+			t.Errorf("item %s belongs to %s", it.ID, owner)
+		}
+		if it.Type != model.ItemTypePage {
+			continue
+		}
+		if it.Icon == nil || *it.Icon == "" {
+			t.Errorf("page %q has no icon", *it.Name)
+		}
+		last := db.Items[it.ChildIDs[len(it.ChildIDs)-1]]
+		if last.Type != model.ItemTypeParagraph || string(last.Content) != "[]" {
+			t.Errorf("page %q does not end with an empty paragraph: %+v", *it.Name, last)
+		}
+	}
+}
+
+func TestSeededPagesListInDocumentOrder(t *testing.T) {
+	nodes, err := parseTree(sampleTreeJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, userID, _ := seedFake(t, nodes)
+
+	pages, err := db.ListPages(userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, p := range pages {
+		got = append(got, p.Name)
+	}
+	want := []string{
+		"Getting Started", "How this app works",
+		"Work", "Website Redesign", "Design checklist", "Q4 roadmap", "Weekly sync",
+		"Personal", "Reading list", "Travel ideas",
+		"Ideas inbox", "Scratchpad",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("pages = %v\nwant    %v", got, want)
 	}
 }
 
 func TestParseTreeRejectsBadFiles(t *testing.T) {
 	cases := map[string]string{
-		"not json":           `nope`,
-		"not a list":         `{"type":"note","name":"x"}`,
-		"unknown field":      `[{"type":"note","name":"x","colour":"red"}]`,
-		"missing type":       `[{"name":"x"}]`,
-		"bad type":           `[{"type":"page","name":"x"}]`,
-		"missing name":       `[{"type":"note","name":""}]`,
-		"note with children": `[{"type":"note","name":"x","children":[{"type":"note","name":"y"}]}]`,
-		"folder with body":   `[{"type":"folder","name":"x","content":"<p>hi</p>"}]`,
-		"bad nested entry":   `[{"type":"folder","name":"x","children":[{"type":"note"}]}]`,
+		"not json":               `nope`,
+		"not a list":             `{"type":"page","name":"x"}`,
+		"unknown field":          `[{"type":"page","name":"x","colour":"red"}]`,
+		"block at top level":     `[{"type":"paragraph","text":"x"}]`,
+		"workspace":              `[{"type":"page","name":"x","children":[{"type":"workspace"}]}]`,
+		"unknown type":           `[{"type":"page","name":"x","children":[{"type":"codeBlock"}]}]`,
+		"page without name":      `[{"type":"page"}]`,
+		"page with text":         `[{"type":"page","name":"x","text":"hi"}]`,
+		"block with name":        `[{"type":"page","name":"x","children":[{"type":"quote","name":"y"}]}]`,
+		"text and content":       `[{"type":"page","name":"x","children":[{"type":"quote","text":"a","content":[]}]}]`,
+		"content not a list":     `[{"type":"page","name":"x","children":[{"type":"quote","content":"a"}]}]`,
+		"heading without level":  `[{"type":"page","name":"x","children":[{"type":"heading","text":"a"}]}]`,
+		"heading with bad level": `[{"type":"page","name":"x","children":[{"type":"heading","props":{"level":4}}]}]`,
 	}
 	for name, data := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -72,26 +159,25 @@ func TestParseTreeRejectsBadFiles(t *testing.T) {
 			}
 		})
 	}
-	_, err := parseTree([]byte(`[{"type":"folder","name":"x","children":[{"type":"note"}]}]`))
+	_, err := parseTree([]byte(`[{"type":"page","name":"x","children":[{"type":"page"}]}]`))
 	if err == nil || !strings.Contains(err.Error(), "[0].children[0]") {
 		t.Errorf("the error should point at the bad entry, got %v", err)
 	}
 }
 
-func TestParseTreeAllowsEmptyFolderAndDefaultIcons(t *testing.T) {
-	nodes, err := parseTree([]byte(`[{"type":"folder","name":"Empty"},{"type":"note","name":"Bare"}]`))
+func TestBuildItemsDefaultsAndText(t *testing.T) {
+	nodes, err := parseTree([]byte(`[{"type":"page","name":"Bare","children":[{"type":"paragraph","text":"hi"}]}]`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	db := testutil.NewFakeDatabase()
-	if _, err := insertTree(db, uuid.New(), nil, nodes); err != nil {
-		t.Fatal(err)
+	rows, ids := buildItems(uuid.New(), nodes)
+	if len(rows) != 3 || len(ids) != 1 || rows[0].ID != ids[0] {
+		t.Fatalf("rows = %+v, ids = %v; want the page, its paragraph and the trailing paragraph", rows, ids)
 	}
-	icons := map[string]string{}
-	for _, it := range db.Items {
-		icons[it.Name] = it.Icon
+	if *rows[0].Icon != defaultPageIcon {
+		t.Errorf("icon = %q, want the default", *rows[0].Icon)
 	}
-	if icons["Empty"] != "📁" || icons["Bare"] != "📄" {
-		t.Errorf("icons = %v, want the defaults", icons)
+	if got := string(rows[1].Content); got != `[{"styles":{},"text":"hi","type":"text"}]` {
+		t.Errorf("content = %s", got)
 	}
 }
