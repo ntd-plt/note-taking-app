@@ -2,7 +2,6 @@ package database
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -19,7 +18,7 @@ const (
 	pgForeignKeyViolation = "23503"
 	pgUniqueViolation     = "23505"
 
-	itemColumns = "i.id, i.user_id, i.parent_id, i.type, i.child_ids, i.props, i.content, i.name, i.icon, i.is_favorite, i.trashed_at, i.created_at, i.updated_at"
+	itemColumns = "i.id, i.user_id, i.parent_id, i.type, i.child_ids, i.props, i.trashed_at, i.created_at, i.updated_at"
 
 	// unlisted sorts a child its parent's child_ids does not mention after the listed ones.
 	unlisted = 2147483647
@@ -37,8 +36,7 @@ func NewPostgreItemsDataSource(conn *pgxpool.Pool) *PostgreItemsDataSource {
 
 func scanItem(row pgx.Row) (model.Item, error) {
 	var it model.Item
-	err := row.Scan(&it.ID, &it.UserID, &it.ParentID, &it.Type, &it.ChildIDs, &it.Props, &it.Content,
-		&it.Name, &it.Icon, &it.IsFavorite, &it.TrashedAt, &it.CreatedAt, &it.UpdatedAt)
+	err := row.Scan(&it.ID, &it.UserID, &it.ParentID, &it.Type, &it.ChildIDs, &it.Props, &it.TrashedAt, &it.CreatedAt, &it.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Item{}, pkg.NewNotFoundError("item")
 	}
@@ -94,18 +92,16 @@ func (db *PostgreItemsDataSource) ResolveItem(userID, id uuid.UUID) (model.ItemL
 	return loc, nil
 }
 
-func (db *PostgreItemsDataSource) GetPageTree(userID, pageID uuid.UUID) (model.PageTree, error) {
+func (db *PostgreItemsDataSource) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, error) {
 	ctx := context.Background()
-	tree := model.PageTree{Blocks: []model.Item{}, ChildPages: []model.PageStub{}}
-
 	page, err := db.GetItem(userID, pageID)
 	if err != nil {
-		return tree, err
+		return nil, err
 	}
 	if page.Type != model.ItemTypePage {
-		return tree, pkg.NewNotFoundError("page")
+		return nil, pkg.NewNotFoundError("page")
 	}
-	tree.Page = page
+	items := []model.Item{page}
 
 	// Walk down in child_ids order, without going into child pages.
 	rows, err := db.conn.Query(ctx, `
@@ -122,35 +118,29 @@ func (db *PostgreItemsDataSource) GetPageTree(userID, pageID uuid.UUID) (model.P
 		ORDER BY d.path, i.created_at, i.id`,
 		pageID, userID, unlisted, MaxTreeDepth)
 	if err != nil {
-		return tree, err
+		return nil, err
 	}
+	below, err := collectItems(rows)
+	if err != nil {
+		return nil, err
+	}
+	return append(items, below...), nil
+}
+
+func collectItems(rows pgx.Rows) ([]model.Item, error) {
 	defer rows.Close()
+	items := []model.Item{}
 	for rows.Next() {
 		it, err := scanItem(rows)
 		if err != nil {
-			return tree, err
+			return nil, err
 		}
-		if it.Type == model.ItemTypePage {
-			tree.ChildPages = append(tree.ChildPages, pageStub(it))
-		} else {
-			tree.Blocks = append(tree.Blocks, it)
-		}
+		items = append(items, it)
 	}
-	return tree, rows.Err()
+	return items, rows.Err()
 }
 
-func pageStub(it model.Item) model.PageStub {
-	s := model.PageStub{ID: it.ID, ParentID: it.ParentID}
-	if it.Name != nil {
-		s.Name = *it.Name
-	}
-	if it.Icon != nil {
-		s.Icon = *it.Icon
-	}
-	return s
-}
-
-func (db *PostgreItemsDataSource) Ancestors(userID, id uuid.UUID) ([]model.PageStub, error) {
+func (db *PostgreItemsDataSource) Ancestors(userID, id uuid.UUID) ([]model.Item, error) {
 	rows, err := db.conn.Query(context.Background(), `
 		WITH RECURSIVE up(id, depth) AS (
 			SELECT parent_id, 1 FROM items WHERE id = $1 AND user_id = $2 AND parent_id IS NOT NULL
@@ -158,26 +148,17 @@ func (db *PostgreItemsDataSource) Ancestors(userID, id uuid.UUID) ([]model.PageS
 			SELECT i.parent_id, u.depth + 1 FROM items i JOIN up u ON i.id = u.id
 			WHERE i.parent_id IS NOT NULL AND u.depth < $3
 		)
-		SELECT i.id, i.parent_id, i.name, i.icon
+		SELECT `+itemColumns+`
 		FROM up JOIN items i ON i.id = up.id
 		WHERE i.type = 'page'
 		ORDER BY up.depth DESC`, id, userID, MaxTreeDepth)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	stubs := []model.PageStub{}
-	for rows.Next() {
-		var s model.PageStub
-		if err := rows.Scan(&s.ID, &s.ParentID, &s.Name, &s.Icon); err != nil {
-			return nil, err
-		}
-		stubs = append(stubs, s)
-	}
-	return stubs, rows.Err()
+	return collectItems(rows)
 }
 
-func (db *PostgreItemsDataSource) ListPages(userID uuid.UUID) ([]model.PageSummary, error) {
+func (db *PostgreItemsDataSource) ListPages(userID uuid.UUID) ([]model.Item, error) {
 	// Trashed pages hang directly off the workspace, so skipping them at the first
 	// level hides everything inside them too.
 	rows, err := db.conn.Query(context.Background(), `
@@ -192,7 +173,7 @@ func (db *PostgreItemsDataSource) ListPages(userID uuid.UUID) ([]model.PageSumma
 			FROM down d JOIN items p ON p.id = d.id JOIN items c ON c.parent_id = p.id
 			WHERE cardinality(d.path) < $3
 		)
-		SELECT i.id, i.parent_id, d.parent_page_id, i.name, i.icon, i.is_favorite, i.created_at, i.updated_at
+		SELECT `+itemColumns+`, d.parent_page_id
 		FROM down d JOIN items i ON i.id = d.id
 		WHERE i.type = 'page'
 		ORDER BY d.path, i.created_at, i.id`, userID, unlisted, MaxTreeDepth)
@@ -200,22 +181,16 @@ func (db *PostgreItemsDataSource) ListPages(userID uuid.UUID) ([]model.PageSumma
 		return nil, err
 	}
 	defer rows.Close()
-	pages := []model.PageSummary{}
+	pages := []model.Item{}
 	for rows.Next() {
-		var p model.PageSummary
-		if err := rows.Scan(&p.ID, &p.ParentID, &p.ParentPageID, &p.Name, &p.Icon, &p.IsFavorite, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		var it model.Item
+		if err := rows.Scan(&it.ID, &it.UserID, &it.ParentID, &it.Type, &it.ChildIDs, &it.Props, &it.TrashedAt,
+			&it.CreatedAt, &it.UpdatedAt, &it.ParentPageID); err != nil {
 			return nil, err
 		}
-		pages = append(pages, p)
+		pages = append(pages, it)
 	}
 	return pages, rows.Err()
-}
-
-func orDefault(raw json.RawMessage, def string) json.RawMessage {
-	if len(raw) == 0 {
-		return json.RawMessage(def)
-	}
-	return raw
 }
 
 func (db *PostgreItemsDataSource) InsertItems(userID uuid.UUID, items []model.Item) error {
@@ -259,11 +234,14 @@ func (db *PostgreItemsDataSource) InsertItems(userID uuid.UUID, items []model.It
 		if childIDs == nil {
 			childIDs = []uuid.UUID{}
 		}
+		props := it.Props
+		if props == nil {
+			props = model.Props{}
+		}
 		_, err := tx.Exec(ctx, `
-			INSERT INTO items (id, user_id, parent_id, type, child_ids, props, content, name, icon, is_favorite)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			it.ID, userID, it.ParentID, it.Type, childIDs, orDefault(it.Props, "{}"), orDefault(it.Content, "[]"),
-			it.Name, it.Icon, it.IsFavorite)
+			INSERT INTO items (id, user_id, parent_id, type, child_ids, props)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
+			it.ID, userID, it.ParentID, it.Type, childIDs, props)
 		if err != nil {
 			return translateErr(err)
 		}

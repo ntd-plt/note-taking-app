@@ -1,7 +1,6 @@
 package testutil
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -21,7 +20,7 @@ func (f *FakeDatabase) addWorkspace(userID uuid.UUID) model.Item {
 	now := time.Now()
 	ws := model.Item{
 		ID: uuid.New(), UserID: userID, Type: model.ItemTypeWorkspace, ChildIDs: []uuid.UUID{},
-		Props: json.RawMessage("{}"), Content: json.RawMessage("[]"), CreatedAt: now, UpdatedAt: now,
+		Props: model.Props{}, CreatedAt: now, UpdatedAt: now,
 	}
 	f.Items[ws.ID] = ws
 	return ws
@@ -128,68 +127,54 @@ func (f *FakeDatabase) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, er
 	return loc, nil
 }
 
-func (f *FakeDatabase) GetPageTree(userID, pageID uuid.UUID) (model.PageTree, error) {
-	tree := model.PageTree{Blocks: []model.Item{}, ChildPages: []model.PageStub{}}
+func (f *FakeDatabase) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, error) {
 	if err := f.Errs["GetPageTree"]; err != nil {
-		return tree, err
+		return nil, err
 	}
 	page, ok := f.owned(userID, pageID)
 	if !ok || page.Type != model.ItemTypePage {
-		return tree, pkg.NewNotFoundError("page")
+		return nil, pkg.NewNotFoundError("page")
 	}
-	tree.Page = page
+	items := []model.Item{page}
 	var walk func(parent model.Item, depth int)
 	walk = func(parent model.Item, depth int) {
 		if depth >= database.MaxTreeDepth {
 			return
 		}
 		for _, c := range f.children(parent) {
-			if c.Type == model.ItemTypePage {
-				tree.ChildPages = append(tree.ChildPages, stub(c))
-				continue
+			items = append(items, c)
+			if c.Type != model.ItemTypePage {
+				walk(c, depth+1)
 			}
-			tree.Blocks = append(tree.Blocks, c)
-			walk(c, depth+1)
 		}
 	}
 	walk(page, 0)
-	return tree, nil
+	return items, nil
 }
 
-func stub(it model.Item) model.PageStub {
-	s := model.PageStub{ID: it.ID, ParentID: it.ParentID}
-	if it.Name != nil {
-		s.Name = *it.Name
-	}
-	if it.Icon != nil {
-		s.Icon = *it.Icon
-	}
-	return s
-}
-
-func (f *FakeDatabase) Ancestors(userID, id uuid.UUID) ([]model.PageStub, error) {
+func (f *FakeDatabase) Ancestors(userID, id uuid.UUID) ([]model.Item, error) {
 	if err := f.Errs["Ancestors"]; err != nil {
 		return nil, err
 	}
-	stubs := []model.PageStub{}
+	pages := []model.Item{}
 	it, ok := f.owned(userID, id)
 	if !ok {
-		return stubs, nil
+		return pages, nil
 	}
 	for depth := 0; it.ParentID != nil && depth < database.MaxTreeDepth; depth++ {
 		it = f.Items[*it.ParentID]
 		if it.Type == model.ItemTypePage {
-			stubs = append([]model.PageStub{stub(it)}, stubs...)
+			pages = append([]model.Item{it}, pages...)
 		}
 	}
-	return stubs, nil
+	return pages, nil
 }
 
-func (f *FakeDatabase) ListPages(userID uuid.UUID) ([]model.PageSummary, error) {
+func (f *FakeDatabase) ListPages(userID uuid.UUID) ([]model.Item, error) {
 	if err := f.Errs["ListPages"]; err != nil {
 		return nil, err
 	}
-	pages := []model.PageSummary{}
+	pages := []model.Item{}
 	ws, err := f.GetWorkspace(userID)
 	if err != nil {
 		return pages, nil
@@ -205,11 +190,8 @@ func (f *FakeDatabase) ListPages(userID uuid.UUID) ([]model.PageSummary, error) 
 			}
 			next := parentPage
 			if c.Type == model.ItemTypePage {
-				s := stub(c)
-				pages = append(pages, model.PageSummary{
-					ID: c.ID, ParentID: *c.ParentID, ParentPageID: parentPage, Name: s.Name, Icon: s.Icon,
-					IsFavorite: c.IsFavorite, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
-				})
+				c.ParentPageID = parentPage
+				pages = append(pages, c)
 				id := c.ID
 				next = &id
 			}
@@ -252,11 +234,8 @@ func (f *FakeDatabase) InsertItems(userID uuid.UUID, items []model.Item) error {
 		if it.ChildIDs == nil {
 			it.ChildIDs = []uuid.UUID{}
 		}
-		if len(it.Props) == 0 {
-			it.Props = json.RawMessage("{}")
-		}
-		if len(it.Content) == 0 {
-			it.Content = json.RawMessage("[]")
+		if it.Props == nil {
+			it.Props = model.Props{}
 		}
 		it.CreatedAt, it.UpdatedAt = now, now
 		f.Items[it.ID] = it

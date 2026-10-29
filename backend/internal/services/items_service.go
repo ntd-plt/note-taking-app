@@ -22,18 +22,16 @@ func NewItemsService(db database.ItemsDataSource) *ItemsService {
 	return &ItemsService{db: db}
 }
 
-// ItemResponse is a page ready to open in the editor. Blocks are every block under
-// the page in document order, each with its child_ids; the walk stops at child
-// pages, which are listed in ChildPages with their name and icon only. Ancestors are
-// the pages above it, top-level first. FocusID is set when the requested id was a
-// block, so the editor can scroll to it.
+// ItemResponse is a page ready to open in the editor. Items is the page itself
+// followed by everything under it in document order, each with its child_ids; child
+// pages are included but not what is inside them. Ancestors are the pages above it,
+// top-level first. FocusID is set when the requested id was a block, so the editor
+// can scroll to it.
 type ItemResponse struct {
-	Page       model.Item       `json:"page"`
-	Ancestors  []model.PageStub `json:"ancestors"`
-	Blocks     []model.Item     `json:"blocks"`
-	ChildPages []model.PageStub `json:"child_pages"`
-	FocusID    *uuid.UUID       `json:"focus_id"`
-	InTrash    bool             `json:"in_trash"`
+	Items     []model.Item `json:"items"`
+	Ancestors []model.Item `json:"ancestors"`
+	FocusID   *uuid.UUID   `json:"focus_id"`
+	InTrash   bool         `json:"in_trash"`
 }
 
 type RequestError struct {
@@ -90,7 +88,7 @@ func itemIDParam(c *gin.Context) (uuid.UUID, bool) {
 
 // GetItem godoc
 // @Summary      Open a page or block
-// @Description  For a page id, returns the page, its ancestor pages, and every block under it down to its child pages. For a block id, returns the page that contains the block, with focus_id set to the block. The workspace root cannot be opened.
+// @Description  For a page id, returns the page and everything under it as one flat list in document order (child pages included, not their content), plus its ancestor pages. For a block id, returns the page that contains the block, with focus_id set to the block. The workspace root cannot be opened.
 // @Tags         items
 // @Produce      json
 // @Security     BearerAuth
@@ -116,7 +114,7 @@ func (s *ItemsService) GetItem(c *gin.Context) {
 		respondError(c, err)
 		return
 	}
-	tree, err := s.db.GetPageTree(userID, loc.PageID)
+	items, err := s.db.GetPageTree(userID, loc.PageID)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -127,13 +125,7 @@ func (s *ItemsService) GetItem(c *gin.Context) {
 		return
 	}
 
-	resp := ItemResponse{
-		Page:       tree.Page,
-		Ancestors:  ancestors,
-		Blocks:     tree.Blocks,
-		ChildPages: tree.ChildPages,
-		InTrash:    loc.InTrash,
-	}
+	resp := ItemResponse{Items: items, Ancestors: ancestors, InTrash: loc.InTrash}
 	if loc.Type != model.ItemTypePage {
 		resp.FocusID = &id
 	}
@@ -142,11 +134,11 @@ func (s *ItemsService) GetItem(c *gin.Context) {
 
 // ListPages godoc
 // @Summary      List pages for the sidebar
-// @Description  Returns every page that is not in the trash, in document order. parent_id is the direct parent (a block, a page or the workspace); parent_page_id is the nearest page above, or null for a top-level page.
+// @Description  Returns every page that is not in the trash, in document order. parent_id is the direct parent (a block, a page or the workspace); parent_page_id is the nearest page above, left out for a top-level page.
 // @Tags         items
 // @Produce      json
 // @Security     BearerAuth
-// @Success      200  {array}   model.PageSummary
+// @Success      200  {array}   model.Item
 // @Failure      401  {object}  map[string]string
 // @Failure      500  {object}  map[string]string
 // @Router       /pages [get]

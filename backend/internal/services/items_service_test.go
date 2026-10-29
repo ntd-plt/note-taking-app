@@ -55,13 +55,13 @@ func (tr *tree) add(it model.Item) uuid.UUID {
 }
 
 func (tr *tree) page(parent uuid.UUID, name string) uuid.UUID {
-	icon := "📄"
-	return tr.add(model.Item{ParentID: &parent, Type: model.ItemTypePage, Name: &name, Icon: &icon})
+	props, _ := model.CompleteProps(model.ItemTypePage, model.Props{"name": name})
+	return tr.add(model.Item{ParentID: &parent, Type: model.ItemTypePage, Props: props})
 }
 
 func (tr *tree) block(parent uuid.UUID, typ model.ItemType, text string) uuid.UUID {
-	content, _ := json.Marshal([]map[string]any{{"type": "text", "text": text, "styles": map[string]any{}}})
-	return tr.add(model.Item{ParentID: &parent, Type: typ, Content: content})
+	content := []any{map[string]any{"type": "text", "text": text, "styles": map[string]any{}}}
+	return tr.add(model.Item{ParentID: &parent, Type: typ, Props: model.Props{"content": content}})
 }
 
 func (tr *tree) trash(id uuid.UUID) {
@@ -92,7 +92,7 @@ func decode[T any](t *testing.T, w *httptest.ResponseRecorder) T {
 
 func itemPath(id uuid.UUID) string { return "/api/v1/items/" + id.String() }
 
-func blockIDs(items []model.Item) []uuid.UUID {
+func ids(items []model.Item) []uuid.UUID {
 	out := make([]uuid.UUID, len(items))
 	for i, it := range items {
 		out[i] = it.ID
@@ -100,10 +100,10 @@ func blockIDs(items []model.Item) []uuid.UUID {
 	return out
 }
 
-func stubNames(stubs []model.PageStub) []string {
-	out := make([]string, len(stubs))
-	for i, s := range stubs {
-		out[i] = s.Name
+func pageNames(items []model.Item) []string {
+	out := make([]string, len(items))
+	for i, it := range items {
+		out[i] = it.Name()
 	}
 	return out
 }
@@ -123,20 +123,20 @@ func TestGetItemReturnsPageBlocksInOrderAndStopsAtChildPages(t *testing.T) {
 	wantStatus(t, w, http.StatusOK)
 	resp := decode[services.ItemResponse](t, w)
 
-	if resp.Page.ID != page || *resp.Page.Name != "Page" {
-		t.Errorf("page = %+v", resp.Page)
+	if got, want := ids(resp.Items), []uuid.UUID{page, h, bullet, nested, child, last}; !slices.Equal(got, want) {
+		t.Fatalf("items = %v, want %v (the page, then document order, not into the child page)", got, want)
 	}
-	if !slices.Equal(resp.Page.ChildIDs, []uuid.UUID{h, bullet, last}) {
-		t.Errorf("page child_ids = %v", resp.Page.ChildIDs)
+	if p := resp.Items[0]; p.Name() != "Page" || !slices.Equal(p.ChildIDs, []uuid.UUID{h, bullet, last}) {
+		t.Errorf("page = %+v", p)
 	}
-	if got, want := blockIDs(resp.Blocks), []uuid.UUID{h, bullet, nested, last}; !slices.Equal(got, want) {
-		t.Errorf("blocks = %v, want %v (document order, no child page content)", got, want)
+	if b := resp.Items[2]; !slices.Equal(b.ChildIDs, []uuid.UUID{nested, child}) {
+		t.Errorf("bullet child_ids = %v, want the nested bullet then the child page", b.ChildIDs)
 	}
-	if len(resp.ChildPages) != 1 || resp.ChildPages[0].ID != child || resp.ChildPages[0].Name != "Child" {
-		t.Errorf("child pages = %+v", resp.ChildPages)
+	if c := resp.Items[4]; c.Type != model.ItemTypePage || c.Name() != "Child" || c.Props["icon"] != "📄" {
+		t.Errorf("child page = %+v, want a full item", c)
 	}
-	if resp.Blocks[1].ChildIDs == nil || !slices.Equal(resp.Blocks[1].ChildIDs, []uuid.UUID{nested, child}) {
-		t.Errorf("bullet child_ids = %v, want the nested bullet then the child page", resp.Blocks[1].ChildIDs)
+	if content, _ := resp.Items[1].Props["content"].([]any); len(content) != 1 {
+		t.Errorf("heading props = %v, want its text in props.content", resp.Items[1].Props)
 	}
 	if resp.FocusID != nil || resp.InTrash || len(resp.Ancestors) != 0 {
 		t.Errorf("focus = %v, in_trash = %v, ancestors = %v", resp.FocusID, resp.InTrash, resp.Ancestors)
@@ -157,13 +157,13 @@ func TestGetItemForBlockOpensItsPageWithFocus(t *testing.T) {
 	wantStatus(t, w, http.StatusOK)
 	resp := decode[services.ItemResponse](t, w)
 
-	if resp.Page.ID != page {
-		t.Errorf("page = %v, want the block's page %v", resp.Page.ID, page)
+	if resp.Items[0].ID != page {
+		t.Errorf("page = %v, want the block's page %v", resp.Items[0].ID, page)
 	}
 	if resp.FocusID == nil || *resp.FocusID != deep {
 		t.Errorf("focus = %v, want %v", resp.FocusID, deep)
 	}
-	if got := stubNames(resp.Ancestors); !slices.Equal(got, []string{"Top", "Middle"}) {
+	if got := pageNames(resp.Ancestors); !slices.Equal(got, []string{"Top", "Middle"}) {
 		t.Errorf("ancestors = %v, want top-level first", got)
 	}
 }
@@ -234,22 +234,18 @@ func TestListPagesInDocumentOrderWithParents(t *testing.T) {
 
 	w := doJSON(t, newItemsRouter(db, &tr.userID), http.MethodGet, "/api/v1/pages", nil)
 	wantStatus(t, w, http.StatusOK)
-	pages := decode[[]model.PageSummary](t, w)
+	pages := decode[[]model.Item](t, w)
 
-	var ids []uuid.UUID
-	for _, p := range pages {
-		ids = append(ids, p.ID)
-	}
-	if !slices.Equal(ids, []uuid.UUID{a, a1, a2, b}) {
+	if !slices.Equal(ids(pages), []uuid.UUID{a, a1, a2, b}) {
 		t.Fatalf("pages = %+v", pages)
 	}
-	if pages[0].ParentID != tr.root || pages[0].ParentPageID != nil {
+	if *pages[0].ParentID != tr.root || pages[0].ParentPageID != nil || pages[0].Name() != "A" {
 		t.Errorf("A: parent = %v, parent page = %v", pages[0].ParentID, pages[0].ParentPageID)
 	}
-	if pages[1].ParentID != bullet || pages[1].ParentPageID == nil || *pages[1].ParentPageID != a {
+	if *pages[1].ParentID != bullet || pages[1].ParentPageID == nil || *pages[1].ParentPageID != a {
 		t.Errorf("A1: parent = %v, parent page = %v; want the bullet and A", pages[1].ParentID, pages[1].ParentPageID)
 	}
-	if pages[2].ParentID != a || *pages[2].ParentPageID != a {
+	if *pages[2].ParentID != a || *pages[2].ParentPageID != a {
 		t.Errorf("A2: parent = %v, parent page = %v", pages[2].ParentID, pages[2].ParentPageID)
 	}
 }

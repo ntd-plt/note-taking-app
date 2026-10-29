@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,23 +40,31 @@ func (t ItemType) Valid() bool {
 	return t == ItemTypeWorkspace || t == ItemTypePage || t.IsBlock()
 }
 
+// Props are an item's key-value properties. Which keys matter depends on the
+// type; see PropRules. Any other key is stored as given.
+type Props map[string]any
+
 // Item is one node of a user's tree: the hidden workspace root, a page, or a block.
-// ChildIDs lists the children that are not in the trash, in order. Name, Icon,
-// IsFavorite and TrashedAt are only ever set on pages.
+// ChildIDs lists the children that are not in the trash, in order. TrashedAt is
+// only ever set on pages. ParentPageID is not stored: it is filled in where a
+// response needs it (the sidebar) and is the nearest page above the item.
 type Item struct {
-	ID         uuid.UUID       `json:"id"`
-	UserID     uuid.UUID       `json:"user_id"`
-	ParentID   *uuid.UUID      `json:"parent_id"`
-	Type       ItemType        `json:"type"`
-	ChildIDs   []uuid.UUID     `json:"child_ids"`
-	Props      json.RawMessage `json:"props" swaggertype:"object"`
-	Content    json.RawMessage `json:"content" swaggertype:"array,object"`
-	Name       *string         `json:"name,omitempty"`
-	Icon       *string         `json:"icon,omitempty"`
-	IsFavorite bool            `json:"is_favorite"`
-	TrashedAt  *time.Time      `json:"trashed_at,omitempty"`
-	CreatedAt  time.Time       `json:"created_at"`
-	UpdatedAt  time.Time       `json:"updated_at"`
+	ID           uuid.UUID   `json:"id"`
+	UserID       uuid.UUID   `json:"user_id"`
+	ParentID     *uuid.UUID  `json:"parent_id"`
+	ParentPageID *uuid.UUID  `json:"parent_page_id,omitempty"`
+	Type         ItemType    `json:"type"`
+	ChildIDs     []uuid.UUID `json:"child_ids"`
+	Props        Props       `json:"props"`
+	TrashedAt    *time.Time  `json:"trashed_at,omitempty"`
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
+}
+
+// Name returns a page's name, or "" for any other item.
+func (it Item) Name() string {
+	s, _ := it.Props[PropName].(string)
+	return s
 }
 
 // ItemLocation is where an item lives: the page it belongs to (itself, for a page)
@@ -67,35 +74,4 @@ type ItemLocation struct {
 	Type    ItemType
 	PageID  uuid.UUID
 	InTrash bool
-}
-
-// PageStub is a page seen from outside its own content: as a child page inside
-// another page, or as a breadcrumb entry.
-type PageStub struct {
-	ID       uuid.UUID  `json:"id"`
-	ParentID *uuid.UUID `json:"parent_id"`
-	Name     string     `json:"name"`
-	Icon     string     `json:"icon"`
-}
-
-// PageTree is a page and everything under it, down to (not into) its child pages.
-// Blocks are in document order; child pages appear only in ChildPages.
-type PageTree struct {
-	Page       Item       `json:"page"`
-	Blocks     []Item     `json:"blocks"`
-	ChildPages []PageStub `json:"child_pages"`
-}
-
-// PageSummary is one row of the sidebar. ParentID is the direct parent, which may
-// be a block or the workspace; ParentPageID is the nearest page above it, or nil for
-// a top-level page.
-type PageSummary struct {
-	ID           uuid.UUID  `json:"id"`
-	ParentID     uuid.UUID  `json:"parent_id"`
-	ParentPageID *uuid.UUID `json:"parent_page_id"`
-	Name         string     `json:"name"`
-	Icon         string     `json:"icon"`
-	IsFavorite   bool       `json:"is_favorite"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
 }

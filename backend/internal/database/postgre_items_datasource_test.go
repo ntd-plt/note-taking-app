@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -113,13 +112,18 @@ type builder struct {
 func newBuilder() *builder { return &builder{index: map[uuid.UUID]int{}} }
 
 func (b *builder) add(parent uuid.UUID, typ model.ItemType, name string) uuid.UUID {
-	it := model.Item{ID: uuid.New(), ParentID: &parent, Type: typ, ChildIDs: []uuid.UUID{}}
-	if typ == model.ItemTypePage {
-		icon := "📄"
-		it.Name, it.Icon = &name, &icon
-	} else {
-		it.Content, _ = json.Marshal([]map[string]any{{"type": "text", "text": name, "styles": map[string]any{}}})
+	props := model.Props{"name": name}
+	if typ != model.ItemTypePage {
+		props = model.Props{"content": []any{map[string]any{"type": "text", "text": name, "styles": map[string]any{}}}}
 	}
+	if typ == model.ItemTypeHeading {
+		props["level"] = 2
+	}
+	props, err := model.CompleteProps(typ, props)
+	if err != nil {
+		panic(err)
+	}
+	it := model.Item{ID: uuid.New(), ParentID: &parent, Type: typ, ChildIDs: []uuid.UUID{}, Props: props}
 	if i, ok := b.index[parent]; ok {
 		b.items[i].ChildIDs = append(b.items[i].ChildIDs, it.ID)
 	}
@@ -165,14 +169,14 @@ func TestPostgresSchemaChecks(t *testing.T) {
 	theirs := workspaceOf(t, db, other).ID
 
 	cases := map[string]string{
-		"block with a name":    "INSERT INTO items (id, user_id, parent_id, type, name) VALUES ($1, $2, $3, 'paragraph', 'x')",
-		"page without a name":  "INSERT INTO items (id, user_id, parent_id, type, icon) VALUES ($1, $2, $3, 'page', 'x')",
-		"page without an icon": "INSERT INTO items (id, user_id, parent_id, type, name) VALUES ($1, $2, $3, 'page', 'x')",
-		"favourite block":      "INSERT INTO items (id, user_id, parent_id, type, is_favorite) VALUES ($1, $2, $3, 'quote', TRUE)",
+		"page without a name":  `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', '{"icon": "x"}')`,
+		"page without an icon": `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', '{"name": "x"}')`,
+		"blank page name":      `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', '{"name": "  ", "icon": "x"}')`,
+		"name not a string":    `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', '{"name": 1, "icon": "x"}')`,
+		"props not an object":  `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'quote', '[]')`,
 		"trashed block":        "INSERT INTO items (id, user_id, parent_id, type, trashed_at) VALUES ($1, $2, $3, 'quote', NOW())",
 		"unknown type":         "INSERT INTO items (id, user_id, parent_id, type) VALUES ($1, $2, $3, 'codeBlock')",
 		"block without parent": "INSERT INTO items (id, user_id, type) SELECT $1, $2, 'paragraph' WHERE $3::uuid IS NOT NULL",
-		"blank page name":      "INSERT INTO items (id, user_id, parent_id, type, name, icon) VALUES ($1, $2, $3, 'page', '  ', 'x')",
 	}
 	for name, query := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -205,28 +209,28 @@ func TestPostgresPageTreeFollowsChildIDsAndStopsAtChildPages(t *testing.T) {
 	last := b.add(page, model.ItemTypeHeading, "last")
 	// Put the heading first: order must come from child_ids, not insertion order.
 	b.items[b.index[page]].ChildIDs = []uuid.UUID{last, first, bullet}
-	b.items[b.index[last]].Props = json.RawMessage(`{"level": 2}`)
+	b.items[b.index[last]].Props["level"] = 3
 	mustInsert(t, db, me, b)
 
-	tree, err := db.GetPageTree(me, page)
+	items, err := db.GetPageTree(me, page)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var ids []uuid.UUID
-	for _, it := range tree.Blocks {
+	for _, it := range items {
 		ids = append(ids, it.ID)
 	}
-	if want := []uuid.UUID{last, first, bullet, nested}; !slices.Equal(ids, want) {
-		t.Errorf("blocks = %v, want %v", ids, want)
+	if want := []uuid.UUID{page, last, first, bullet, nested, child}; !slices.Equal(ids, want) {
+		t.Fatalf("items = %v, want %v", ids, want)
 	}
-	if len(tree.ChildPages) != 1 || tree.ChildPages[0].ID != child || tree.ChildPages[0].Name != "Child" {
-		t.Errorf("child pages = %+v", tree.ChildPages)
+	if items[1].Props["level"] != float64(3) || items[2].Props["content"] == nil {
+		t.Errorf("props = %v, %v", items[1].Props, items[2].Props)
 	}
-	if string(tree.Blocks[0].Props) != `{"level": 2}` || tree.Blocks[1].Content == nil {
-		t.Errorf("props = %s, content = %s", tree.Blocks[0].Props, tree.Blocks[1].Content)
+	if c := items[5]; c.Name() != "Child" || c.Props["icon"] != model.DefaultPageIcon || c.Props["is_favorite"] != false {
+		t.Errorf("child page = %+v", c)
 	}
-	if !slices.Equal(tree.Blocks[2].ChildIDs, []uuid.UUID{nested, child}) {
-		t.Errorf("bullet child_ids = %v", tree.Blocks[2].ChildIDs)
+	if !slices.Equal(items[3].ChildIDs, []uuid.UUID{nested, child}) {
+		t.Errorf("bullet child_ids = %v", items[3].ChildIDs)
 	}
 	if got := workspaceOf(t, db, me).ChildIDs; !slices.Equal(got, []uuid.UUID{page}) {
 		t.Errorf("workspace child_ids = %v, want the new page appended", got)
@@ -277,7 +281,7 @@ func TestPostgresResolveItemAndAncestors(t *testing.T) {
 	}
 	var names []string
 	for _, c := range crumbs {
-		names = append(names, c.Name)
+		names = append(names, c.Name())
 	}
 	if !slices.Equal(names, []string{"Top", "Mid"}) {
 		t.Errorf("ancestors = %v", names)
@@ -339,13 +343,13 @@ func TestPostgresListPagesInDocumentOrder(t *testing.T) {
 	if !slices.Equal(ids, []uuid.UUID{z, a, a1, a2}) {
 		t.Fatalf("pages = %+v", pages)
 	}
-	if pages[0].ParentID != ws || pages[0].ParentPageID != nil {
+	if *pages[0].ParentID != ws || pages[0].ParentPageID != nil || pages[0].Name() != "Z" {
 		t.Errorf("Z = %+v", pages[0])
 	}
-	if pages[2].ParentID != bullet || pages[2].ParentPageID == nil || *pages[2].ParentPageID != a {
+	if *pages[2].ParentID != bullet || pages[2].ParentPageID == nil || *pages[2].ParentPageID != a {
 		t.Errorf("A1 = %+v, want parent the bullet and parent page A", pages[2])
 	}
-	if pages[3].ParentID != a || *pages[3].ParentPageID != a {
+	if *pages[3].ParentID != a || *pages[3].ParentPageID != a {
 		t.Errorf("A2 = %+v", pages[3])
 	}
 }
