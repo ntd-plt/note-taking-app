@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"time"
 
@@ -165,7 +166,9 @@ func (e *engine) detach(parentID, id uuid.UUID) error {
 }
 
 // attach puts id at index position of the parent's child_ids, counted without id
-// itself, or at the end when position is nil.
+// itself, or at the end when position is nil. A page added at the end of another
+// page goes before that page's trailing empty paragraph, which the editor keeps
+// last; callers like the sidebar cannot see the parent's blocks to count it.
 func (e *engine) attach(parentID, id uuid.UUID, position *int) error {
 	parent, err := e.getAny(parentID, "parent")
 	if err != nil {
@@ -178,10 +181,32 @@ func (e *engine) attach(parentID, id uuid.UUID, position *int) error {
 			return e.fail(Conflict, "position %d is out of range: the parent has %d other children", *position, len(ids))
 		}
 		at = *position
+	} else if parent.Type == model.ItemTypePage && len(ids) > 0 {
+		child, err := e.getAny(id, "item")
+		if err != nil {
+			return err
+		}
+		if child.Type == model.ItemTypePage {
+			last, err := e.getAny(ids[len(ids)-1], "child")
+			if err != nil {
+				return err
+			}
+			if isEmptyParagraph(last) {
+				at--
+			}
+		}
 	}
 	parent.ChildIDs = slices.Insert(ids, at, id)
 	e.touched[parentID] = true
 	return e.save(parent)
+}
+
+func isEmptyParagraph(it model.Item) bool {
+	if it.Type != model.ItemTypeParagraph || len(it.ChildIDs) > 0 {
+		return false
+	}
+	content, ok := it.Props[model.PropContent]
+	return !ok || content == nil || reflect.ValueOf(content).Kind() == reflect.Slice && reflect.ValueOf(content).Len() == 0
 }
 
 // parentFor loads a new parent for an item of type typ and checks it can hold it.

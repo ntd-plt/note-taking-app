@@ -15,7 +15,11 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  convertKeys = true,
+): Promise<T> {
   const url = `${BASE_URL}${path}`
   const headers = new Headers(options.headers)
 
@@ -39,9 +43,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     } catch {
       errorData = null
     }
+    // The Go backend reports failures as {"error": "..."}; other callers use "message".
     throw new ApiError(
       response.status,
-      errorData?.message || `HTTP error! Status: ${response.status}`,
+      errorData?.message ||
+        errorData?.error ||
+        `HTTP error! Status: ${response.status}`,
       errorData,
     )
   }
@@ -51,7 +58,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   const json = await response.json()
-  return humps.camelizeKeys(json) as T
+  return (convertKeys ? humps.camelizeKeys(json) : json) as T
 }
 
 export const apiClient = {
@@ -77,4 +84,22 @@ export const apiClient = {
     }),
   delete: <T>(path: string, options?: RequestInit) =>
     request<T>(path, { ...options, method: 'DELETE' }),
+}
+
+// rawApiClient sends and returns JSON exactly as given, without converting keys
+// between camelCase and snake_case. Use it where payloads hold keys the client must
+// not rename, such as item props (`is_favorite`, BlockNote's `textColor`).
+export const rawApiClient = {
+  get: <T>(path: string, options?: RequestInit) =>
+    request<T>(path, { ...options, method: 'GET' }, false),
+  post: <T>(path: string, body?: unknown, options?: RequestInit) =>
+    request<T>(
+      path,
+      {
+        ...options,
+        method: 'POST',
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      false,
+    ),
 }

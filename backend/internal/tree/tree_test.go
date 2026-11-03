@@ -226,6 +226,37 @@ func TestMovePositions(t *testing.T) {
 	wantIDs(t, "workspace", f.children(f.ws), other, page)
 }
 
+// A page added or moved to the end of a page without a position goes before the
+// trailing empty paragraph; anything else still goes last.
+func TestPageAtEndGoesBeforeTrailingParagraph(t *testing.T) {
+	f := newFixture(t)
+	page, a, trailing := uuid.New(), uuid.New(), uuid.New()
+	f.apply(
+		createPage(page, f.ws, nil, "Page"),
+		createBlock(a, page, nil, model.ItemTypeParagraph, "a"),
+		model.Op{Op: model.OpCreate, ID: trailing, Type: ptr(model.ItemTypeParagraph), ParentID: &page},
+	)
+
+	child, other, block := uuid.New(), uuid.New(), uuid.New()
+	f.apply(createPage(child, page, nil, "Child"))
+	wantIDs(t, "after create", f.children(page), a, child, trailing)
+
+	f.apply(createPage(other, f.ws, nil, "Other"), move(other, page, nil))
+	wantIDs(t, "after move", f.children(page), a, child, other, trailing)
+
+	f.apply(createBlock(block, page, nil, model.ItemTypeQuote, "q"))
+	wantIDs(t, "a block still goes last", f.children(page), a, child, other, trailing, block)
+
+	// The last child is no longer an empty paragraph, so a page goes last too.
+	last := uuid.New()
+	f.apply(createPage(last, page, nil, "Last"))
+	wantIDs(t, "no trailing paragraph", f.children(page), a, child, other, trailing, block, last)
+
+	// An explicit position is always taken as given.
+	f.apply(move(child, page, ptr(5)))
+	wantIDs(t, "explicit position", f.children(page), a, other, trailing, block, last, child)
+}
+
 func TestDeleteBlockTrashesChildPages(t *testing.T) {
 	f := newFixture(t)
 	page, a, b, b1, c := f.page()

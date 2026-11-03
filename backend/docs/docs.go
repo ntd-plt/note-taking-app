@@ -345,7 +345,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Applies up to 500 create, update, move, delete and trash operations in order, all-or-nothing. Ids are chosen by the client. position is an index into the parent's child_ids when the operation runs, not counting the item itself; without it the item goes at the end. update merges props key by key: null values, and wrong values for keys the type relies on, are ignored. Rejected: unknown types, other users' items, items inside a trashed page, positions out of range, cycles, delete on a page, trash on a block, changing between page and block, a heading without a level, and props over 64 KB. A rejection names the failing operation in op_index.",
+                "description": "Applies up to 500 create, update, move, delete and trash operations in order, all-or-nothing. Ids are chosen by the client. position is an index into the parent's child_ids when the operation runs, not counting the item itself; without it the item goes at the end, except that a page added to the end of a page goes before its trailing empty paragraph. update merges props key by key: null values, and wrong values for keys the type relies on, are ignored. Rejected: unknown types, other users' items, items inside a trashed page, positions out of range, cycles, delete on a page, trash on a block, changing between page and block, a heading without a level, and props over 64 KB. A rejection names the failing operation in op_index.",
                 "consumes": [
                     "application/json"
                 ],
@@ -681,7 +681,7 @@ const docTemplate = `{
                     ],
                     "allOf": [
                         {
-                            "$ref": "#/definitions/backend_internal_model.OpKind"
+                            "$ref": "#/definitions/backend_internal_model.OpType"
                         }
                     ]
                 },
@@ -699,7 +699,7 @@ const docTemplate = `{
                 }
             }
         },
-        "backend_internal_model.OpKind": {
+        "backend_internal_model.OpType": {
             "type": "string",
             "enum": [
                 "create",
