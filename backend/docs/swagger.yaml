@@ -2,17 +2,21 @@ basePath: /api/v1
 definitions:
   backend_internal_model.Item:
     properties:
+      child_ids:
+        items:
+          type: string
+        type: array
       created_at:
-        type: string
-      icon:
         type: string
       id:
         type: string
-      is_favorite:
-        type: boolean
-      name:
-        type: string
       parent_id:
+        type: string
+      parent_page_id:
+        type: string
+      props:
+        $ref: '#/definitions/backend_internal_model.Props'
+      trashed_at:
         type: string
       type:
         $ref: '#/definitions/backend_internal_model.ItemType'
@@ -23,41 +27,64 @@ definitions:
     type: object
   backend_internal_model.ItemType:
     enum:
-    - note
-    - folder
+    - workspace
+    - page
+    - paragraph
+    - heading
+    - bulletListItem
+    - numberedListItem
+    - checkListItem
+    - toggleListItem
+    - quote
     type: string
     x-enum-varnames:
-    - ItemTypeNote
-    - ItemTypeFolder
-  backend_internal_model.NoteContent:
+    - ItemTypeWorkspace
+    - ItemTypePage
+    - ItemTypeParagraph
+    - ItemTypeHeading
+    - ItemTypeBulletListItem
+    - ItemTypeNumberedListItem
+    - ItemTypeCheckListItem
+    - ItemTypeToggleListItem
+    - ItemTypeQuote
+  backend_internal_model.Op:
     properties:
-      content:
-        type: string
-      item_id:
-        type: string
-      updated_at:
-        type: string
-    type: object
-  backend_internal_model.TrashItem:
-    properties:
-      created_at:
-        type: string
-      deleted_at:
-        type: string
-      icon:
-        type: string
       id:
         type: string
-      name:
-        type: string
+      op:
+        allOf:
+        - $ref: '#/definitions/backend_internal_model.OpKind'
+        enum:
+        - create
+        - update
+        - move
+        - delete
+        - trash
       parent_id:
         type: string
+      position:
+        type: integer
+      props:
+        $ref: '#/definitions/backend_internal_model.Props'
       type:
         $ref: '#/definitions/backend_internal_model.ItemType'
-      updated_at:
-        type: string
-      user_id:
-        type: string
+    type: object
+  backend_internal_model.OpKind:
+    enum:
+    - create
+    - update
+    - move
+    - delete
+    - trash
+    type: string
+    x-enum-varnames:
+    - OpCreate
+    - OpUpdate
+    - OpMove
+    - OpDelete
+    - OpTrash
+  backend_internal_model.Props:
+    additionalProperties: {}
     type: object
   backend_internal_pkg.AuthResponse:
     properties:
@@ -99,62 +126,27 @@ definitions:
     - name
     - password
     type: object
-  internal_services.CreateItemRequest:
+  internal_services.ApplyOpsRequest:
     properties:
-      content:
-        type: string
-      icon:
-        type: string
-      id:
-        description: optional, if not provided, a new UUID will be generated
-        type: string
-      is_favorite:
-        type: boolean
-      name:
-        type: string
-      parent_id:
-        type: string
-      type:
-        allOf:
-        - $ref: '#/definitions/backend_internal_model.ItemType'
-        enum:
-        - note
-        - folder
-    type: object
-  internal_services.IDsRequest:
-    properties:
-      ids:
+      ops:
         items:
-          type: string
+          $ref: '#/definitions/backend_internal_model.Op'
         type: array
     type: object
-  internal_services.MoveItemEntry:
+  internal_services.ItemResponse:
     properties:
-      id:
+      ancestors:
+        items:
+          $ref: '#/definitions/backend_internal_model.Item'
+        type: array
+      focus_id:
         type: string
-      parentID:
-        type: string
-    type: object
-  internal_services.MoveItemsRequest:
-    properties:
+      in_trash:
+        type: boolean
       items:
         items:
-          $ref: '#/definitions/internal_services.MoveItemEntry'
+          $ref: '#/definitions/backend_internal_model.Item'
         type: array
-    type: object
-  internal_services.PutContentRequest:
-    properties:
-      content:
-        type: string
-    type: object
-  internal_services.UpdateItemRequest:
-    properties:
-      icon:
-        type: string
-      is_favorite:
-        type: boolean
-      name:
-        type: string
     type: object
   internal_services.UpdateUserRequest:
     properties:
@@ -178,7 +170,7 @@ definitions:
     type: object
 info:
   contact: {}
-  description: API for managing users and their items (notes and folders).
+  description: API for managing users and their pages and blocks.
   title: Note Taking App API
   version: "1.0"
 paths:
@@ -296,77 +288,25 @@ paths:
       summary: Sign up
       tags:
       - auth
-  /items:
+  /items/{id}:
     get:
-      description: Returns the authenticated user's items without note content, folders
-        first and then by name. Use parent_id to list only the children of one folder,
-        or parent_id=null for the top level.
+      description: For a page id, returns the page and everything under it as one
+        flat list in document order (child pages included, not their content), plus
+        its ancestor pages. For a block id, returns the page that contains the block,
+        with focus_id set to the block. The workspace root cannot be opened.
       parameters:
-      - description: Folder id, or the word null for the top level
-        in: query
-        name: parent_id
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/backend_internal_model.Item'
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: List items
-      tags:
-      - items
-    patch:
-      consumes:
-      - application/json
-      description: Moves items into a destination folder (or the top level when parent_id
-        is null). Every entry needs a parent_id. Moving a folder moves everything
-        inside it; nothing is copied. The whole request is applied atomically. Returns
-        the items in request order.
-      parameters:
-      - description: Items to move and their new parents
-        in: body
-        name: request
+      - description: Page or block id
+        in: path
+        name: id
         required: true
-        schema:
-          $ref: '#/definitions/internal_services.MoveItemsRequest'
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/backend_internal_model.Item'
-            type: array
+            $ref: '#/definitions/internal_services.ItemResponse'
         "400":
           description: Bad Request
           schema:
@@ -385,18 +325,6 @@ paths:
             additionalProperties:
               type: string
             type: object
-        "409":
-          description: Conflict
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "413":
-          description: Request Entity Too Large
-          schema:
-            additionalProperties:
-              type: string
-            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -405,26 +333,20 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: Move items
+      summary: Open a page or block
       tags:
       - items
+  /items/{id}/duplicate:
     post:
-      consumes:
-      - application/json
-      description: Creates a note or a folder, optionally inside a folder. With the
-        cloneFromId query parameter it instead duplicates that item (and, for a folder,
-        everything inside it) next to the original, named "Name (Copy N)"; the request
-        body must then be empty. Duplicating is atomic.
+      description: Deep-copies the item and everything under it, child pages included,
+        with new ids, and places the copy right after the original. A copied page
+        is named "Name (Copy N)". Copied pages are not favorites.
       parameters:
-      - description: Id of the item to duplicate. When set, the body must be empty.
-        in: query
-        name: cloneFromId
+      - description: Page or block id
+        in: path
+        name: id
+        required: true
         type: string
-      - description: Item to create
-        in: body
-        name: request
-        schema:
-          $ref: '#/definitions/internal_services.CreateItemRequest'
       produces:
       - application/json
       responses:
@@ -456,12 +378,6 @@ paths:
             additionalProperties:
               type: string
             type: object
-        "413":
-          description: Request Entity Too Large
-          schema:
-            additionalProperties:
-              type: string
-            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -470,26 +386,38 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: Create or duplicate an item
+      summary: Duplicate a page or block
       tags:
       - items
-  /items/{id}:
-    delete:
-      description: Deletes one item. Deleting a folder deletes everything inside it.
+  /ops:
+    post:
+      consumes:
+      - application/json
+      description: 'Applies up to 500 create, update, move, delete and trash operations
+        in order, all-or-nothing. Ids are chosen by the client. position is an index
+        into the parent''s child_ids when the operation runs, not counting the item
+        itself; without it the item goes at the end. update merges props key by key:
+        null values, and wrong values for keys the type relies on, are ignored. Rejected:
+        unknown types, other users'' items, items inside a trashed page, positions
+        out of range, cycles, delete on a page, trash on a block, changing between
+        page and block, a heading without a level, and props over 64 KB. A rejection
+        names the failing operation in op_index.'
       parameters:
-      - description: Item ID
-        in: path
-        name: id
+      - description: Operations to apply
+        in: body
+        name: request
         required: true
-        type: string
+        schema:
+          $ref: '#/definitions/internal_services.ApplyOpsRequest'
+      produces:
+      - application/json
       responses:
         "204":
           description: No Content
         "400":
           description: Bad Request
           schema:
-            additionalProperties:
-              type: string
+            additionalProperties: true
             type: object
         "401":
           description: Unauthorized
@@ -500,113 +428,17 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties:
-              type: string
+            additionalProperties: true
             type: object
-        "500":
-          description: Internal Server Error
+        "409":
+          description: Conflict
           schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Delete an item
-      tags:
-      - items
-    get:
-      description: Returns one item, without note content
-      parameters:
-      - description: Item ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/backend_internal_model.Item'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Get an item
-      tags:
-      - items
-    patch:
-      consumes:
-      - application/json
-      description: 'Edits the name, icon and/or favorite flag of one item. Partial
-        update: omitted fields are left unchanged, and unknown fields are rejected.
-        An empty icon resets it to the default for the item''s type. Use PATCH /items
-        to move items.'
-      parameters:
-      - description: Item ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Fields to update
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_services.UpdateItemRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/backend_internal_model.Item'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
+            additionalProperties: true
             type: object
         "413":
           description: Request Entity Too Large
           schema:
-            additionalProperties:
-              type: string
+            additionalProperties: true
             type: object
         "500":
           description: Internal Server Error
@@ -616,128 +448,14 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: Update an item
+      summary: Apply a batch of changes
       tags:
       - items
-  /items/{id}/content:
+  /pages:
     get:
-      description: Returns the body of a note. Folders have no content.
-      parameters:
-      - description: Item ID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/backend_internal_model.NoteContent'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Get a note's content
-      tags:
-      - items
-    put:
-      consumes:
-      - application/json
-      description: Replaces the body of a note and bumps the note's updated_at. Folders
-        have no content.
-      parameters:
-      - description: Item ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: New content
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_services.PutContentRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/backend_internal_model.NoteContent'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "413":
-          description: Request Entity Too Large
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Replace a note's content
-      tags:
-      - items
-  /items/restore:
-    post:
-      consumes:
-      - application/json
-      description: Puts trashed items back. A folder comes back with the items trashed
-        together with it. An item whose original folder is not in the tree any more
-        goes to the top level. Restored items are not favorites. Returns every restored
-        item.
-      parameters:
-      - description: Trashed items to restore
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_services.IDsRequest'
+      description: Returns every page that is not in the trash, in document order.
+        parent_id is the direct parent (a block, a page or the workspace); parent_page_id
+        is the nearest page above, left out for a top-level page.
       produces:
       - application/json
       responses:
@@ -747,111 +465,6 @@ paths:
             items:
               $ref: '#/definitions/backend_internal_model.Item'
             type: array
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "409":
-          description: Conflict
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "413":
-          description: Request Entity Too Large
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Restore items from the trash
-      tags:
-      - trash
-  /items/trash:
-    post:
-      consumes:
-      - application/json
-      description: Moves items, and everything inside any folder among them, to the
-        trash in one atomic step. Trashed items leave the item tree and lose their
-        favorite flag. Returns every row that moved.
-      parameters:
-      - description: Items to trash
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/internal_services.IDsRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/backend_internal_model.TrashItem'
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "413":
-          description: Request Entity Too Large
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Move items to the trash
-      tags:
-      - trash
-  /trash:
-    delete:
-      description: Permanently deletes everything in the authenticated user's trash.
-      responses:
-        "204":
-          description: No Content
         "401":
           description: Unauthorized
           schema:
@@ -866,80 +479,9 @@ paths:
             type: object
       security:
       - BearerAuth: []
-      summary: Empty the trash
+      summary: List pages for the sidebar
       tags:
-      - trash
-    get:
-      description: Returns the authenticated user's trashed items, newest first, as
-        a flat list. Items past the retention period are not listed.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/backend_internal_model.TrashItem'
-            type: array
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: List the trash
-      tags:
-      - trash
-  /trash/{id}:
-    delete:
-      description: Permanently deletes one trashed item and the trashed items inside
-        it. Use DELETE /items/{id} for items that are not in the trash.
-      parameters:
-      - description: Trashed item ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Delete a trashed item permanently
-      tags:
-      - trash
+      - items
   /users/me:
     get:
       description: Returns the authenticated user's profile (never includes the password

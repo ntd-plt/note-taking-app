@@ -102,8 +102,8 @@ func isNotFound(err error) bool {
 	return errors.As(err, &nf)
 }
 
-// builder collects items under one parent so a test can insert a whole tree in one
-// InsertItems call, child_ids included.
+// builder collects items so a test can create a whole tree in one ApplyOps batch,
+// each item appended to its parent.
 type builder struct {
 	items []model.Item
 	index map[uuid.UUID]int
@@ -134,8 +134,12 @@ func (b *builder) add(parent uuid.UUID, typ model.ItemType, name string) uuid.UU
 
 func mustInsert(t *testing.T, db *database.PostgreItemsDataSource, userID uuid.UUID, b *builder) {
 	t.Helper()
-	if err := db.InsertItems(userID, b.items); err != nil {
-		t.Fatalf("inserting: %v", err)
+	ops := make([]model.Op, len(b.items))
+	for i, it := range b.items {
+		ops[i] = model.Op{Op: model.OpCreate, ID: it.ID, Type: ptr(it.Type), ParentID: it.ParentID, Props: it.Props}
+	}
+	if err := db.ApplyOps(userID, ops); err != nil {
+		t.Fatalf("creating: %v", err)
 	}
 }
 
@@ -177,6 +181,9 @@ func TestPostgresSchemaChecks(t *testing.T) {
 		"trashed block":        "INSERT INTO items (id, user_id, parent_id, type, trashed_at) VALUES ($1, $2, $3, 'quote', NOW())",
 		"unknown type":         "INSERT INTO items (id, user_id, parent_id, type) VALUES ($1, $2, $3, 'codeBlock')",
 		"block without parent": "INSERT INTO items (id, user_id, type) SELECT $1, $2, 'paragraph' WHERE $3::uuid IS NOT NULL",
+		"page name too long":   `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', jsonb_build_object('name', repeat('a', 256), 'icon', 'x'))`,
+		"page icon too long":   `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', jsonb_build_object('name', 'x', 'icon', repeat('a', 33)))`,
+		"props too large":      `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', jsonb_build_object('name', 'x', 'icon', 'x', 'big', repeat('a', 140000)))`,
 	}
 	for name, query := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -207,10 +214,13 @@ func TestPostgresPageTreeFollowsChildIDsAndStopsAtChildPages(t *testing.T) {
 	child := b.add(bullet, model.ItemTypePage, "Child")
 	b.add(child, model.ItemTypeParagraph, "inside child")
 	last := b.add(page, model.ItemTypeHeading, "last")
-	// Put the heading first: order must come from child_ids, not insertion order.
-	b.items[b.index[page]].ChildIDs = []uuid.UUID{last, first, bullet}
 	b.items[b.index[last]].Props["level"] = 3
 	mustInsert(t, db, me, b)
+	// Put the heading first: order must come from child_ids, not creation order.
+	if _, err := pool.Exec(context.Background(), "UPDATE items SET child_ids = $2 WHERE id = $1",
+		page, []uuid.UUID{last, first, bullet}); err != nil {
+		t.Fatal(err)
+	}
 
 	items, err := db.GetPageTree(me, page)
 	if err != nil {
@@ -354,34 +364,87 @@ func TestPostgresListPagesInDocumentOrder(t *testing.T) {
 	}
 }
 
-func TestPostgresInsertItemsIsAllOrNothing(t *testing.T) {
+// ListPages and GetPageTree hide a trashed page wherever it sits, not only directly
+// under the workspace where the trash puts it.
+func TestPostgresTrashedPageHiddenAtAnyDepth(t *testing.T) {
 	db, pool := newItemsDB(t)
 	me := newUser(t, pool)
 	ws := workspaceOf(t, db, me).ID
 
 	b := newBuilder()
-	b.add(ws, model.ItemTypePage, "Fine")
-	b.add(workspaceOf(t, db, newUser(t, pool)).ID, model.ItemTypePage, "Someone else's workspace")
-	if err := db.InsertItems(me, b.items); !errors.Is(err, database.ErrInvalidParent) {
-		t.Fatalf("err = %v, want ErrInvalidParent", err)
+	a := b.add(ws, model.ItemTypePage, "A")
+	bullet := b.add(a, model.ItemTypeBulletListItem, "bullet")
+	gone := b.add(bullet, model.ItemTypePage, "Gone")
+	b.add(gone, model.ItemTypePage, "Inside gone")
+	kept := b.add(a, model.ItemTypePage, "Kept")
+	mustInsert(t, db, me, b)
+	if _, err := pool.Exec(context.Background(), "UPDATE items SET trashed_at = NOW() WHERE id = $1", gone); err != nil {
+		t.Fatal(err)
 	}
 
-	dup := newBuilder()
-	p := dup.add(ws, model.ItemTypePage, "Twice")
-	dup.items = append(dup.items, dup.items[0])
-	var exists *pkg.AlreadyExistsError
-	if err := db.InsertItems(me, dup.items); !errors.As(err, &exists) {
-		t.Fatalf("duplicate id: err = %v, want already exists", err)
+	pages, err := db.ListPages(me)
+	if err != nil {
+		t.Fatal(err)
 	}
+	var ids []uuid.UUID
+	for _, p := range pages {
+		ids = append(ids, p.ID)
+	}
+	if !slices.Equal(ids, []uuid.UUID{a, kept}) {
+		t.Errorf("pages = %v, want A and Kept", ids)
+	}
+	items, err := db.GetPageTree(me, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.ID == gone {
+			t.Error("page tree includes the trashed page")
+		}
+	}
+}
 
-	if pages, _ := db.ListPages(me); len(pages) != 0 {
-		t.Errorf("pages after failed inserts = %+v", pages)
+func TestPostgresOpenItem(t *testing.T) {
+	db, pool := newItemsDB(t)
+	me := newUser(t, pool)
+	ws := workspaceOf(t, db, me).ID
+
+	b := newBuilder()
+	top := b.add(ws, model.ItemTypePage, "Top")
+	page := b.add(top, model.ItemTypePage, "Page")
+	quote := b.add(page, model.ItemTypeQuote, "quote")
+	mustInsert(t, db, me, b)
+
+	opened, err := db.OpenItem(me, quote)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := db.GetItem(me, p); !isNotFound(err) {
-		t.Errorf("rolled-back item is still there: %v", err)
+	if opened.Location.PageID != page || opened.Location.Type != model.ItemTypeQuote || opened.Location.InTrash {
+		t.Errorf("location = %+v", opened.Location)
 	}
-	if got := workspaceOf(t, db, me).ChildIDs; len(got) != 0 {
-		t.Errorf("workspace child_ids = %v after failed inserts", got)
+	if len(opened.Items) != 2 || opened.Items[0].ID != page || opened.Items[1].ID != quote {
+		t.Errorf("items = %+v", opened.Items)
+	}
+	if len(opened.Ancestors) != 1 || opened.Ancestors[0].ID != top {
+		t.Errorf("ancestors = %+v", opened.Ancestors)
+	}
+	if _, err := db.OpenItem(me, ws); !isNotFound(err) {
+		t.Errorf("opening the workspace: err = %v, want not found", err)
+	}
+}
+
+// Every block type the model knows must be one the schema accepts.
+func TestPostgresSchemaAcceptsEveryBlockType(t *testing.T) {
+	db, pool := newItemsDB(t)
+	me := newUser(t, pool)
+	b := newBuilder()
+	page := b.add(workspaceOf(t, db, me).ID, model.ItemTypePage, "Page")
+	mustInsert(t, db, me, b)
+	for _, typ := range model.BlockTypes {
+		if _, err := pool.Exec(context.Background(),
+			"INSERT INTO items (id, user_id, parent_id, type) VALUES ($1, $2, $3, $4)", uuid.New(), me, page, typ); err != nil {
+			t.Errorf("%s: %v", typ, err)
+		}
 	}
 }
 

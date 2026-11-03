@@ -1,5 +1,6 @@
 -- Back to the folder/note schema of migrations 001 and 002. Item data is lost.
 DROP TABLE IF EXISTS items;
+DROP FUNCTION IF EXISTS child_rank(UUID[], UUID);
 
 CREATE TABLE IF NOT EXISTS items (
     id UUID PRIMARY KEY,

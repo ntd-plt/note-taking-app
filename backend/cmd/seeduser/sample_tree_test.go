@@ -20,7 +20,7 @@ func seedFake(t *testing.T, nodes []node) (*testutil.FakeDatabase, uuid.UUID, []
 		t.Fatal(err)
 	}
 	rows, _ := buildItems(db.Workspace(user.ID).ID, nodes)
-	if err := db.InsertItems(user.ID, rows); err != nil {
+	if err := db.ApplyOps(user.ID, createOps(rows)); err != nil {
 		t.Fatal(err)
 	}
 	return db, user.ID, rows

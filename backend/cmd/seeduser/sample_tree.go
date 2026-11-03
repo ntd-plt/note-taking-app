@@ -1,12 +1,12 @@
 package main
 
 import (
+	"backend/internal/model"
 	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
-
-	"backend/internal/model"
+	"maps"
 
 	"github.com/google/uuid"
 )
@@ -110,9 +110,9 @@ func buildItems(parent uuid.UUID, nodes []node) (items []model.Item, ids []uuid.
 		p := parent
 		props := n.Props
 		if n.Text != "" {
-			props = model.Props{}
-			for k, v := range n.Props {
-				props[k] = v
+			props = maps.Clone(n.Props)
+			if props == nil {
+				props = model.Props{}
 			}
 			props[model.PropContent] = textContent(n.Text)
 		}
@@ -135,4 +135,13 @@ func buildItems(parent uuid.UUID, nodes []node) (items []model.Item, ids []uuid.
 		ids = append(ids, it.ID)
 	}
 	return items, ids
+}
+
+func createOps(items []model.Item) []model.Op {
+	ops := make([]model.Op, len(items))
+	for i, it := range items {
+		typ := it.Type
+		ops[i] = model.Op{Op: model.OpCreate, ID: it.ID, Type: &typ, ParentID: it.ParentID, Props: it.Props}
+	}
+	return ops
 }

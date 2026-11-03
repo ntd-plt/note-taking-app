@@ -70,8 +70,27 @@ func (it Item) Name() string {
 // ItemLocation is where an item lives: the page it belongs to (itself, for a page)
 // and whether that page or any page above it is in the trash.
 type ItemLocation struct {
-	ID      uuid.UUID
 	Type    ItemType
 	PageID  uuid.UUID
 	InTrash bool
+}
+
+// OpType is what one operation in a batch does.
+type OpType string
+
+const (
+	OpCreate OpType = "create"
+	OpUpdate OpType = "update"
+	OpMove   OpType = "move"
+	OpDelete OpType = "delete"
+	OpTrash  OpType = "trash"
+)
+
+type Op struct {
+	Op       OpType     `json:"op" enums:"create,update,move,delete,trash"`
+	ID       uuid.UUID  `json:"id"`
+	Type     *ItemType  `json:"type,omitempty"`
+	ParentID *uuid.UUID `json:"parent_id,omitempty"`
+	Position *int       `json:"position,omitempty"`
+	Props    Props      `json:"props,omitempty"`
 }

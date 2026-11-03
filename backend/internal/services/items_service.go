@@ -62,6 +62,9 @@ func respondError(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": "item already exists"})
 	case stderrors.Is(err, database.ErrInvalidParent):
 		c.JSON(http.StatusBadRequest, gin.H{"error": database.ErrInvalidParent.Error()})
+	case stderrors.Is(err, database.ErrInvalidItem):
+		log.Printf("schema check failed: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": database.ErrInvalidItem.Error()})
 	default:
 		log.Printf("internal error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -109,24 +112,14 @@ func (s *ItemsService) GetItem(c *gin.Context) {
 		return
 	}
 
-	loc, err := s.db.ResolveItem(userID, id)
-	if err != nil {
-		respondError(c, err)
-		return
-	}
-	items, err := s.db.GetPageTree(userID, loc.PageID)
-	if err != nil {
-		respondError(c, err)
-		return
-	}
-	ancestors, err := s.db.Ancestors(userID, loc.PageID)
+	opened, err := s.db.OpenItem(userID, id)
 	if err != nil {
 		respondError(c, err)
 		return
 	}
 
-	resp := ItemResponse{Items: items, Ancestors: ancestors, InTrash: loc.InTrash}
-	if loc.Type != model.ItemTypePage {
+	resp := ItemResponse{Items: opened.Items, Ancestors: opened.Ancestors, InTrash: opened.Location.InTrash}
+	if opened.Location.Type != model.ItemTypePage {
 		resp.FocusID = &id
 	}
 	c.JSON(http.StatusOK, resp)

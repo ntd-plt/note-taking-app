@@ -29,10 +29,13 @@ func newItemsRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 	})
 	r.GET("/api/v1/items/:id", h.GetItem)
 	r.GET("/api/v1/pages", h.ListPages)
+	r.POST("/api/v1/ops", h.ApplyOps)
+	r.POST("/api/v1/items/:id/duplicate", h.DuplicateItem)
 	return r
 }
 
-// tree adds items for one user to a fake database, each appended to its parent.
+// tree adds items for one user to a fake database through ApplyOps, each appended
+// to its parent.
 type tree struct {
 	t      *testing.T
 	db     *testutil.FakeDatabase
@@ -48,7 +51,9 @@ func newTree(t *testing.T, db *testutil.FakeDatabase) *tree {
 func (tr *tree) add(it model.Item) uuid.UUID {
 	tr.t.Helper()
 	it.ID = uuid.New()
-	if err := tr.db.InsertItems(tr.userID, []model.Item{it}); err != nil {
+	typ := it.Type
+	op := model.Op{Op: model.OpCreate, ID: it.ID, Type: &typ, ParentID: it.ParentID, Props: it.Props}
+	if err := tr.db.ApplyOps(tr.userID, []model.Op{op}); err != nil {
 		tr.t.Fatal(err)
 	}
 	return it.ID
@@ -61,7 +66,11 @@ func (tr *tree) page(parent uuid.UUID, name string) uuid.UUID {
 
 func (tr *tree) block(parent uuid.UUID, typ model.ItemType, text string) uuid.UUID {
 	content := []any{map[string]any{"type": "text", "text": text, "styles": map[string]any{}}}
-	return tr.add(model.Item{ParentID: &parent, Type: typ, Props: model.Props{"content": content}})
+	props := model.Props{"content": content}
+	if typ == model.ItemTypeHeading {
+		props["level"] = 1
+	}
+	return tr.add(model.Item{ParentID: &parent, Type: typ, Props: props})
 }
 
 func (tr *tree) trash(id uuid.UUID) {

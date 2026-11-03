@@ -39,7 +39,9 @@ func NewRouter(authService *services.AuthService, userService *services.UserServ
 		protected.PUT("/users/me", userService.UpdateUser)
 
 		protected.GET("/items/:id", itemsService.GetItem)
+		protected.POST("/items/:id/duplicate", itemsService.DuplicateItem)
 		protected.GET("/pages", itemsService.ListPages)
+		protected.POST("/ops", itemsService.ApplyOps)
 	}
 	return router
 }

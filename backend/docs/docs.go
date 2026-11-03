@@ -189,37 +189,35 @@ const docTemplate = `{
                 }
             }
         },
-        "/items": {
+        "/items/{id}": {
             "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Returns the authenticated user's items without note content, folders first and then by name. Use parent_id to list only the children of one folder, or parent_id=null for the top level.",
+                "description": "For a page id, returns the page and everything under it as one flat list in document order (child pages included, not their content), plus its ancestor pages. For a block id, returns the page that contains the block, with focus_id set to the block. The workspace root cannot be opened.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "items"
                 ],
-                "summary": "List items",
+                "summary": "Open a page or block",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Folder id, or the word null for the top level",
-                        "name": "parent_id",
-                        "in": "query"
+                        "description": "Page or block id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/backend_internal_model.Item"
-                            }
+                            "$ref": "#/definitions/internal_services.ItemResponse"
                         }
                     },
                     "400": {
@@ -259,38 +257,30 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
+            }
+        },
+        "/items/{id}/duplicate": {
             "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Creates a note or a folder, optionally inside a folder. With the cloneFromId query parameter it instead duplicates that item (and, for a folder, everything inside it) next to the original, named \"Name (Copy N)\"; the request body must then be empty. Duplicating is atomic.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Deep-copies the item and everything under it, child pages included, with new ids, and places the copy right after the original. A copied page is named \"Name (Copy N)\". Copied pages are not favorites.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "items"
                 ],
-                "summary": "Create or duplicate an item",
+                "summary": "Duplicate a page or block",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Id of the item to duplicate. When set, the body must be empty.",
-                        "name": "cloneFromId",
-                        "in": "query"
-                    },
-                    {
-                        "description": "Item to create",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/internal_services.CreateItemRequest"
-                        }
+                        "description": "Page or block id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -336,13 +326,86 @@ const docTemplate = `{
                             }
                         }
                     },
-                    "413": {
-                        "description": "Request Entity Too Large",
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/ops": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Applies up to 500 create, update, move, delete and trash operations in order, all-or-nothing. Ids are chosen by the client. position is an index into the parent's child_ids when the operation runs, not counting the item itself; without it the item goes at the end. update merges props key by key: null values, and wrong values for keys the type relies on, are ignored. Rejected: unknown types, other users' items, items inside a trashed page, positions out of range, cycles, delete on a page, trash on a block, changing between page and block, a heading without a level, and props over 64 KB. A rejection names the failing operation in op_index.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "items"
+                ],
+                "summary": "Apply a batch of changes",
+                "parameters": [
+                    {
+                        "description": "Operations to apply",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_services.ApplyOpsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "413": {
+                        "description": "Request Entity Too Large",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "500": {
@@ -355,35 +418,23 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
-            "patch": {
+            }
+        },
+        "/pages": {
+            "get": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Moves items into a destination folder (or the top level when parent_id is null). Every entry needs a parent_id. Moving a folder moves everything inside it; nothing is copied. The whole request is applied atomically. Returns the items in request order.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Returns every page that is not in the trash, in document order. parent_id is the direct parent (a block, a page or the workspace); parent_page_id is the nearest page above, left out for a top-level page.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "items"
                 ],
-                "summary": "Move items",
-                "parameters": [
-                    {
-                        "description": "Items to move and their new parents",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_services.MoveItemsRequest"
-                        }
-                    }
-                ],
+                "summary": "List pages for the sidebar",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -394,752 +445,8 @@ const docTemplate = `{
                             }
                         }
                     },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
                     "401": {
                         "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "413": {
-                        "description": "Request Entity Too Large",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/items/restore": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Puts trashed items back. A folder comes back with the items trashed together with it. An item whose original folder is not in the tree any more goes to the top level. Restored items are not favorites. Returns every restored item.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "trash"
-                ],
-                "summary": "Restore items from the trash",
-                "parameters": [
-                    {
-                        "description": "Trashed items to restore",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_services.IDsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/backend_internal_model.Item"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "413": {
-                        "description": "Request Entity Too Large",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/items/trash": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Moves items, and everything inside any folder among them, to the trash in one atomic step. Trashed items leave the item tree and lose their favorite flag. Returns every row that moved.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "trash"
-                ],
-                "summary": "Move items to the trash",
-                "parameters": [
-                    {
-                        "description": "Items to trash",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_services.IDsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/backend_internal_model.TrashItem"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "413": {
-                        "description": "Request Entity Too Large",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/items/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns one item, without note content",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "items"
-                ],
-                "summary": "Get an item",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Item ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/backend_internal_model.Item"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Deletes one item. Deleting a folder deletes everything inside it.",
-                "tags": [
-                    "items"
-                ],
-                "summary": "Delete an item",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Item ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Edits the name, icon and/or favorite flag of one item. Partial update: omitted fields are left unchanged, and unknown fields are rejected. An empty icon resets it to the default for the item's type. Use PATCH /items to move items.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "items"
-                ],
-                "summary": "Update an item",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Item ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Fields to update",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_services.UpdateItemRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/backend_internal_model.Item"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "413": {
-                        "description": "Request Entity Too Large",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/items/{id}/content": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns the body of a note. Folders have no content.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "items"
-                ],
-                "summary": "Get a note's content",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Item ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/backend_internal_model.NoteContent"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Replaces the body of a note and bumps the note's updated_at. Folders have no content.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "items"
-                ],
-                "summary": "Replace a note's content",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Item ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "New content",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_services.PutContentRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/backend_internal_model.NoteContent"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "413": {
-                        "description": "Request Entity Too Large",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/trash": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Returns the authenticated user's trashed items, newest first, as a flat list. Items past the retention period are not listed.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "trash"
-                ],
-                "summary": "List the trash",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/backend_internal_model.TrashItem"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Permanently deletes everything in the authenticated user's trash.",
-                "tags": [
-                    "trash"
-                ],
-                "summary": "Empty the trash",
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/trash/{id}": {
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Permanently deletes one trashed item and the trashed items inside it. Use DELETE /items/{id} for items that are not in the trash.",
-                "tags": [
-                    "trash"
-                ],
-                "summary": "Delete a trashed item permanently",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Trashed item ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1298,22 +605,28 @@ const docTemplate = `{
         "backend_internal_model.Item": {
             "type": "object",
             "properties": {
-                "created_at": {
-                    "type": "string"
+                "child_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
-                "icon": {
+                "created_at": {
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
                 },
-                "is_favorite": {
-                    "type": "boolean"
-                },
-                "name": {
+                "parent_id": {
                     "type": "string"
                 },
-                "parent_id": {
+                "parent_page_id": {
+                    "type": "string"
+                },
+                "props": {
+                    "$ref": "#/definitions/backend_internal_model.Props"
+                },
+                "trashed_at": {
                     "type": "string"
                 },
                 "type": {
@@ -1330,59 +643,82 @@ const docTemplate = `{
         "backend_internal_model.ItemType": {
             "type": "string",
             "enum": [
-                "note",
-                "folder"
+                "workspace",
+                "page",
+                "paragraph",
+                "heading",
+                "bulletListItem",
+                "numberedListItem",
+                "checkListItem",
+                "toggleListItem",
+                "quote"
             ],
             "x-enum-varnames": [
-                "ItemTypeNote",
-                "ItemTypeFolder"
+                "ItemTypeWorkspace",
+                "ItemTypePage",
+                "ItemTypeParagraph",
+                "ItemTypeHeading",
+                "ItemTypeBulletListItem",
+                "ItemTypeNumberedListItem",
+                "ItemTypeCheckListItem",
+                "ItemTypeToggleListItem",
+                "ItemTypeQuote"
             ]
         },
-        "backend_internal_model.NoteContent": {
+        "backend_internal_model.Op": {
             "type": "object",
             "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "item_id": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "backend_internal_model.TrashItem": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "deleted_at": {
-                    "type": "string"
-                },
-                "icon": {
-                    "type": "string"
-                },
                 "id": {
                     "type": "string"
                 },
-                "name": {
-                    "type": "string"
+                "op": {
+                    "enum": [
+                        "create",
+                        "update",
+                        "move",
+                        "delete",
+                        "trash"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/backend_internal_model.OpKind"
+                        }
+                    ]
                 },
                 "parent_id": {
                     "type": "string"
                 },
+                "position": {
+                    "type": "integer"
+                },
+                "props": {
+                    "$ref": "#/definitions/backend_internal_model.Props"
+                },
                 "type": {
                     "$ref": "#/definitions/backend_internal_model.ItemType"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "string"
                 }
             }
+        },
+        "backend_internal_model.OpKind": {
+            "type": "string",
+            "enum": [
+                "create",
+                "update",
+                "move",
+                "delete",
+                "trash"
+            ],
+            "x-enum-varnames": [
+                "OpCreate",
+                "OpUpdate",
+                "OpMove",
+                "OpDelete",
+                "OpTrash"
+            ]
+        },
+        "backend_internal_model.Props": {
+            "type": "object",
+            "additionalProperties": {}
         },
         "backend_internal_pkg.AuthResponse": {
             "type": "object",
@@ -1443,93 +779,37 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_services.CreateItemRequest": {
+        "internal_services.ApplyOpsRequest": {
             "type": "object",
             "properties": {
-                "content": {
-                    "type": "string"
-                },
-                "icon": {
-                    "type": "string"
-                },
-                "id": {
-                    "description": "optional, if not provided, a new UUID will be generated",
-                    "type": "string"
-                },
-                "is_favorite": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "parent_id": {
-                    "type": "string"
-                },
-                "type": {
-                    "enum": [
-                        "note",
-                        "folder"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/backend_internal_model.ItemType"
-                        }
-                    ]
-                }
-            }
-        },
-        "internal_services.IDsRequest": {
-            "type": "object",
-            "properties": {
-                "ids": {
+                "ops": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/backend_internal_model.Op"
                     }
                 }
             }
         },
-        "internal_services.MoveItemEntry": {
+        "internal_services.ItemResponse": {
             "type": "object",
             "properties": {
-                "id": {
+                "ancestors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backend_internal_model.Item"
+                    }
+                },
+                "focus_id": {
                     "type": "string"
                 },
-                "parentID": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_services.MoveItemsRequest": {
-            "type": "object",
-            "properties": {
+                "in_trash": {
+                    "type": "boolean"
+                },
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_services.MoveItemEntry"
+                        "$ref": "#/definitions/backend_internal_model.Item"
                     }
-                }
-            }
-        },
-        "internal_services.PutContentRequest": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_services.UpdateItemRequest": {
-            "type": "object",
-            "properties": {
-                "icon": {
-                    "type": "string"
-                },
-                "is_favorite": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
                 }
             }
         },
@@ -1582,7 +862,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Note Taking App API",
-	Description:      "API for managing users and their items (notes and folders).",
+	Description:      "API for managing users and their pages and blocks.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

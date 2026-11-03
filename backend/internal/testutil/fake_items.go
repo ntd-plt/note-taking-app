@@ -1,7 +1,6 @@
 package testutil
 
 import (
-	"fmt"
 	"sort"
 	"time"
 
@@ -13,8 +12,9 @@ import (
 )
 
 // The FakeDatabase item methods follow the Postgres datasource: children are
-// ordered by their parent's child_ids, and children the parent does not list come
-// last, by creation time.
+// ordered by their parent's child_ids, children the parent does not list come
+// last, by creation time, and trashed pages are skipped wherever they sit. Writes
+// go through package tree (see fake_tree.go), as they do in Postgres.
 
 func (f *FakeDatabase) addWorkspace(userID uuid.UUID) model.Item {
 	now := time.Now()
@@ -99,7 +99,7 @@ func (f *FakeDatabase) GetItem(userID, id uuid.UUID) (model.Item, error) {
 }
 
 func (f *FakeDatabase) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, error) {
-	loc := model.ItemLocation{ID: id}
+	var loc model.ItemLocation
 	if err := f.Errs["ResolveItem"]; err != nil {
 		return loc, err
 	}
@@ -127,6 +127,21 @@ func (f *FakeDatabase) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, er
 	return loc, nil
 }
 
+func (f *FakeDatabase) OpenItem(userID, id uuid.UUID) (database.OpenedItem, error) {
+	var out database.OpenedItem
+	var err error
+	if out.Location, err = f.ResolveItem(userID, id); err != nil {
+		return database.OpenedItem{}, err
+	}
+	if out.Items, err = f.GetPageTree(userID, out.Location.PageID); err != nil {
+		return database.OpenedItem{}, err
+	}
+	if out.Ancestors, err = f.Ancestors(userID, out.Location.PageID); err != nil {
+		return database.OpenedItem{}, err
+	}
+	return out, nil
+}
+
 func (f *FakeDatabase) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, error) {
 	if err := f.Errs["GetPageTree"]; err != nil {
 		return nil, err
@@ -142,6 +157,9 @@ func (f *FakeDatabase) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, erro
 			return
 		}
 		for _, c := range f.children(parent) {
+			if c.TrashedAt != nil {
+				continue
+			}
 			items = append(items, c)
 			if c.Type != model.ItemTypePage {
 				walk(c, depth+1)
@@ -200,51 +218,4 @@ func (f *FakeDatabase) ListPages(userID uuid.UUID) ([]model.Item, error) {
 	}
 	walk(ws, nil, 0)
 	return pages, nil
-}
-
-func (f *FakeDatabase) InsertItems(userID uuid.UUID, items []model.Item) error {
-	if err := f.Errs["InsertItems"]; err != nil {
-		return err
-	}
-	inBatch := map[uuid.UUID]bool{}
-	var attachOrder []uuid.UUID
-	attach := map[uuid.UUID][]uuid.UUID{}
-	for _, it := range items {
-		if it.ParentID == nil || it.Type == model.ItemTypeWorkspace {
-			return fmt.Errorf("item %s: only the workspace has no parent, and it is created with the user", it.ID)
-		}
-		if _, exists := f.Items[it.ID]; exists || inBatch[it.ID] {
-			return pkg.NewAlreadyExistsError("item")
-		}
-		if !inBatch[*it.ParentID] {
-			if _, ok := f.owned(userID, *it.ParentID); !ok {
-				return database.ErrInvalidParent
-			}
-			if _, seen := attach[*it.ParentID]; !seen {
-				attachOrder = append(attachOrder, *it.ParentID)
-			}
-			attach[*it.ParentID] = append(attach[*it.ParentID], it.ID)
-		}
-		inBatch[it.ID] = true
-	}
-
-	now := time.Now()
-	for _, it := range items {
-		it.UserID = userID
-		if it.ChildIDs == nil {
-			it.ChildIDs = []uuid.UUID{}
-		}
-		if it.Props == nil {
-			it.Props = model.Props{}
-		}
-		it.CreatedAt, it.UpdatedAt = now, now
-		f.Items[it.ID] = it
-	}
-	for _, parent := range attachOrder {
-		p := f.Items[parent]
-		p.ChildIDs = append(append([]uuid.UUID{}, p.ChildIDs...), attach[parent]...)
-		p.UpdatedAt = now
-		f.Items[parent] = p
-	}
-	return nil
 }
