@@ -9,7 +9,7 @@ import (
 )
 
 // NewPool creates the single shared connection pool used by all Postgres
-// data sources (user, notes, folders).
+// data sources (users and the item tree).
 func NewPool(cfg *configs.Config) (*pgxpool.Pool, error) {
 	url := fmt.Sprintf("postgres://%s:%s@%s:%s/%s",
 		cfg.DBUser, cfg.DBPass, cfg.DBHost, cfg.DBPort, cfg.DBName)

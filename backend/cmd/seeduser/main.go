@@ -1,10 +1,11 @@
 // Command seeduser creates a development user from SEED_USER_EMAIL, SEED_USER_PASSWORD and
 // SEED_USER_NAME (set in .env), so a freshly reset database has an account to log in with.
-// It then fills that user's workspace with a small sample tree of folders and notes. It does
-// nothing when the variables are not all set, and leaves a user who already has items alone.
+// It then fills that user's workspace with a sample tree of pages and blocks. It does nothing
+// when the variables are not all set, and leaves a user who already has pages alone.
 package main
 
 import (
+	"context"
 	stderrors "errors"
 	"fmt"
 	"os"
@@ -15,6 +16,9 @@ import (
 	"backend/internal/model"
 	"backend/internal/pkg"
 	"backend/internal/pkg/hash"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -77,18 +81,31 @@ func run() error {
 		fmt.Printf("seed-user: created %s (%s).\n", email, name)
 	}
 
-	have, err := items.ListItems(user.ID, model.ItemFilter{})
+	seeded, err := hasPages(pool, user.ID)
 	if err != nil {
 		return err
 	}
-	if len(have) > 0 {
-		fmt.Printf("seed-user: %s already has %d items; leaving them alone.\n", email, len(have))
+	if seeded {
+		fmt.Printf("seed-user: %s already has pages; leaving them alone.\n", email)
 		return nil
 	}
-	n, err := insertTree(items, user.ID, nil, tree)
+	workspace, err := items.GetWorkspace(user.ID)
 	if err != nil {
+		return fmt.Errorf("finding the workspace of %s: %w", email, err)
+	}
+	rows, _ := buildItems(workspace.ID, tree)
+	if err := items.ApplyOps(user.ID, createOps(rows)); err != nil {
 		return err
 	}
-	fmt.Printf("seed-user: created %d sample items.\n", n)
+	fmt.Printf("seed-user: created %d sample items.\n", len(rows))
 	return nil
+}
+
+// hasPages reports whether the user already has any page, trashed ones included, so
+// running the seed twice does not add a second sample tree.
+func hasPages(pool *pgxpool.Pool, userID uuid.UUID) (bool, error) {
+	var found bool
+	err := pool.QueryRow(context.Background(),
+		"SELECT EXISTS (SELECT 1 FROM items WHERE user_id = $1 AND type = 'page')", userID).Scan(&found)
+	return found, err
 }

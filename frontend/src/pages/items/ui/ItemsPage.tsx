@@ -1,29 +1,21 @@
 import { useParams } from '@tanstack/react-router'
-import { Editor, useItemsQuery, useItemsStore } from '@/widgets/note-editor'
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { AppSidebar } from './Sidebar'
-import { FolderView } from './FolderView'
-
-function ItemContent() {
-  const params = useParams({ strict: false })
-  const activeItemId = useItemsStore((state) => state.activeItemId)
-  const { data: itemsData } = useItemsQuery()
-
-  const openId = params.itemId || activeItemId
-  const openItem = (itemsData ?? []).find((i) => i.id === openId)
-
-  if (openItem?.type === 'folder') {
-    return <FolderView folder={openItem} />
-  }
-  return <Editor />
-}
+import { SidebarInset, SidebarProvider } from '#/components/ui/sidebar'
+import { PageView } from '#/widgets/block-editor'
+import { PageSidebar } from '#/widgets/page-sidebar'
 
 export function ItemsPage() {
+  const { itemId } = useParams({ strict: false })
   return (
     <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset className="bg-background flex flex-col h-screen overflow-hidden">
-        <ItemContent />
+      <PageSidebar currentId={itemId} />
+      <SidebarInset className="flex h-screen flex-col overflow-hidden bg-background">
+        {itemId ? (
+          <PageView itemId={itemId} />
+        ) : (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            Pick a page in the sidebar, or add one with +.
+          </div>
+        )}
       </SidebarInset>
     </SidebarProvider>
   )

@@ -7,20 +7,22 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
-	"strings"
 	"testing"
+	"time"
 
 	"backend/internal/database"
 	"backend/internal/model"
 	"backend/internal/pkg"
-	"backend/internal/services"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newItemsDB(t *testing.T) (*database.PostgreItemsDataSource, *pgxpool.Pool) {
+// newSchema connects to TEST_DATABASE_URL inside a fresh schema that is dropped when
+// the test ends.
+func newSchema(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	url := os.Getenv("TEST_DATABASE_URL")
 	if url == "" {
@@ -53,42 +55,47 @@ func newItemsDB(t *testing.T) (*database.PostgreItemsDataSource, *pgxpool.Pool) 
 		_, _ = admin.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE")
 		admin.Close()
 	})
+	return pool
+}
 
-	files, err := filepath.Glob("../../migrations/*.up.sql")
+func migrationFiles(t *testing.T, pattern string) []string {
+	t.Helper()
+	files, err := filepath.Glob("../../migrations/" + pattern)
 	if err != nil || len(files) == 0 {
-		t.Fatalf("finding migrations: %v (%d files)", err, len(files))
+		t.Fatalf("finding migrations %s: %v (%d files)", pattern, err, len(files))
 	}
 	sort.Strings(files)
+	return files
+}
+
+func applyFiles(t *testing.T, pool *pgxpool.Pool, files ...string) {
+	t.Helper()
 	for _, file := range files {
 		migration, err := os.ReadFile(file)
 		if err != nil {
 			t.Fatalf("reading migration: %v", err)
 		}
-		if _, err := pool.Exec(ctx, string(migration)); err != nil {
+		if _, err := pool.Exec(context.Background(), string(migration)); err != nil {
 			t.Fatalf("applying %s: %v", file, err)
 		}
 	}
+}
+
+func newItemsDB(t *testing.T) (*database.PostgreItemsDataSource, *pgxpool.Pool) {
+	t.Helper()
+	pool := newSchema(t)
+	applyFiles(t, pool, migrationFiles(t, "*.up.sql")...)
 	return database.NewPostgreItemsDataSource(pool), pool
 }
 
+// newUser signs a user up, which also creates their workspace.
 func newUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	t.Helper()
-	id := uuid.New()
-	_, err := pool.Exec(context.Background(),
-		"INSERT INTO users (id, name, email, password_hash) VALUES ($1, 'u', $2, 'h')", id, id.String()+"@example.com")
-	if err != nil {
+	u := model.New().WithEmail(uuid.NewString() + "@example.com").WithUsername("u").WithPasswordHash([]byte("h"))
+	if err := database.NewPostgreUserDataSource(pool).AddUser(*u); err != nil {
 		t.Fatalf("creating user: %v", err)
 	}
-	return id
-}
-
-func mustCreate(t *testing.T, db *database.PostgreItemsDataSource, userID uuid.UUID, typ model.ItemType, name string, parent *uuid.UUID) model.Item {
-	t.Helper()
-	it, err := db.CreateItem(model.Item{UserID: userID, ParentID: parent, Type: typ, Name: name, Icon: "x"}, "content of "+name)
-	if err != nil {
-		t.Fatalf("creating %s %q: %v", typ, name, err)
-	}
-	return it
+	return u.ID
 }
 
 func isNotFound(err error) bool {
@@ -96,369 +103,443 @@ func isNotFound(err error) bool {
 	return errors.As(err, &nf)
 }
 
-func parentOf(t *testing.T, db *database.PostgreItemsDataSource, userID, id uuid.UUID) *uuid.UUID {
-	t.Helper()
-	it, err := db.GetItem(userID, id)
+// builder collects items so a test can create a whole tree in one ApplyOps batch,
+// each item appended to its parent.
+type builder struct {
+	items []model.Item
+	index map[uuid.UUID]int
+}
+
+func newBuilder() *builder { return &builder{index: map[uuid.UUID]int{}} }
+
+func (b *builder) add(parent uuid.UUID, typ model.ItemType, name string) uuid.UUID {
+	props := model.Props{"name": name}
+	if typ != model.ItemTypePage {
+		props = model.Props{"content": []any{map[string]any{"type": "text", "text": name, "styles": map[string]any{}}}}
+	}
+	if typ == model.ItemTypeHeading {
+		props["level"] = 2
+	}
+	props, err := model.CompleteProps(typ, props)
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
-	return it.ParentID
+	it := model.Item{ID: uuid.New(), ParentID: &parent, Type: typ, ChildIDs: []uuid.UUID{}, Props: props}
+	if i, ok := b.index[parent]; ok {
+		b.items[i].ChildIDs = append(b.items[i].ChildIDs, it.ID)
+	}
+	b.index[it.ID] = len(b.items)
+	b.items = append(b.items, it)
+	return it.ID
 }
 
-func TestItemsCreateGetAndOwnership(t *testing.T) {
-	db, pool := newItemsDB(t)
-	me, other := newUser(t, pool), newUser(t, pool)
-
-	folder := mustCreate(t, db, me, model.ItemTypeFolder, "Folder", nil)
-	note := mustCreate(t, db, me, model.ItemTypeNote, "Note", &folder.ID)
-	if note.CreatedAt.IsZero() {
-		t.Error("created_at was not filled in")
+func mustInsert(t *testing.T, db *database.PostgreItemsDataSource, userID uuid.UUID, b *builder) {
+	t.Helper()
+	ops := make([]model.Op, len(b.items))
+	for i, it := range b.items {
+		ops[i] = model.Op{Op: model.OpCreate, ID: it.ID, Type: ptr(it.Type), ParentID: it.ParentID, Props: it.Props}
 	}
-
-	if got, err := db.GetItem(me, note.ID); err != nil || got.ID != note.ID {
-		t.Fatalf("GetItem = %+v, %v", got, err)
-	}
-	if _, err := db.GetItem(other, note.ID); !isNotFound(err) {
-		t.Errorf("another user's GetItem err = %v, want not found", err)
-	}
-	if _, err := db.UpdateItem(other, note.ID, model.ItemPatch{Name: ptr("x")}); !isNotFound(err) {
-		t.Errorf("another user's UpdateItem err = %v, want not found", err)
-	}
-	if err := db.DeleteItem(other, note.ID); !isNotFound(err) {
-		t.Errorf("another user's DeleteItem err = %v, want not found", err)
-	}
-	if _, err := db.GetNoteContent(other, note.ID); !isNotFound(err) {
-		t.Errorf("another user's GetNoteContent err = %v, want not found", err)
-	}
-	if _, err := db.GetItem(me, note.ID); err != nil {
-		t.Errorf("the note disappeared after another user's attempts: %v", err)
+	if err := db.ApplyOps(userID, ops); err != nil {
+		t.Fatalf("creating: %v", err)
 	}
 }
 
-func TestItemsCreateParentRules(t *testing.T) {
-	db, pool := newItemsDB(t)
-	me, other := newUser(t, pool), newUser(t, pool)
-	note := mustCreate(t, db, me, model.ItemTypeNote, "Note", nil)
-	theirs := mustCreate(t, db, other, model.ItemTypeFolder, "Theirs", nil)
-
-	for name, parent := range map[string]uuid.UUID{
-		"a note":                note.ID,
-		"another user's folder": theirs.ID,
-		"a missing item":        uuid.New(),
-	} {
-		_, err := db.CreateItem(model.Item{UserID: me, ParentID: &parent, Type: model.ItemTypeNote, Name: "X", Icon: "x"}, "")
-		if !errors.Is(err, database.ErrInvalidParent) {
-			t.Errorf("parent is %s: err = %v, want ErrInvalidParent", name, err)
-		}
+func workspaceOf(t *testing.T, db *database.PostgreItemsDataSource, userID uuid.UUID) model.Item {
+	t.Helper()
+	ws, err := db.GetWorkspace(userID)
+	if err != nil {
+		t.Fatalf("getting workspace: %v", err)
 	}
-
-	id := uuid.New()
-	if _, err := db.CreateItem(model.Item{ID: id, UserID: me, Type: model.ItemTypeNote, Name: "A", Icon: "x"}, ""); err != nil {
-		t.Fatal(err)
-	}
-	_, err := db.CreateItem(model.Item{ID: id, UserID: me, Type: model.ItemTypeNote, Name: "B", Icon: "x"}, "")
-	var exists *pkg.AlreadyExistsError
-	if !errors.As(err, &exists) {
-		t.Errorf("duplicate id err = %v, want AlreadyExistsError", err)
-	}
-
-	var count int
-	_ = pool.QueryRow(context.Background(), "SELECT count(*) FROM items").Scan(&count)
-	if count != 3 {
-		t.Errorf("%d items stored, want 3: failed creates must leave nothing behind", count)
-	}
+	return ws
 }
 
-func TestItemsCreateTooDeep(t *testing.T) {
+func TestPostgresSignupCreatesOneWorkspace(t *testing.T) {
 	db, pool := newItemsDB(t)
 	me := newUser(t, pool)
 
-	var parent *uuid.UUID
-	for i := 0; i < database.MaxTreeDepth; i++ {
-		f := mustCreate(t, db, me, model.ItemTypeFolder, "level", parent)
-		parent = &f.ID
+	ws := workspaceOf(t, db, me)
+	if ws.Type != model.ItemTypeWorkspace || ws.ParentID != nil || len(ws.ChildIDs) != 0 {
+		t.Errorf("workspace = %+v", ws)
 	}
-	_, err := db.CreateItem(model.Item{UserID: me, ParentID: parent, Type: model.ItemTypeNote, Name: "deep", Icon: "x"}, "")
-	if !errors.Is(err, database.ErrTooDeep) {
-		t.Errorf("err = %v, want ErrTooDeep", err)
-	}
-	var count int
-	_ = pool.QueryRow(context.Background(), "SELECT count(*) FROM items").Scan(&count)
-	if count != database.MaxTreeDepth {
-		t.Errorf("%d items stored, want %d: the rejected note must not remain", count, database.MaxTreeDepth)
+	_, err := pool.Exec(context.Background(), "INSERT INTO items (id, user_id, type) VALUES ($1, $2, 'workspace')", uuid.New(), me)
+	if err == nil {
+		t.Error("a second workspace for the same user was accepted")
 	}
 }
 
-func TestItemsListOrderAndFilters(t *testing.T) {
+func TestPostgresSchemaChecks(t *testing.T) {
 	db, pool := newItemsDB(t)
 	me, other := newUser(t, pool), newUser(t, pool)
-	mustCreate(t, db, me, model.ItemTypeNote, "b note", nil)
-	zeta := mustCreate(t, db, me, model.ItemTypeFolder, "Zeta", nil)
-	mustCreate(t, db, me, model.ItemTypeNote, "A note", nil)
-	mustCreate(t, db, me, model.ItemTypeFolder, "alpha", nil)
-	mustCreate(t, db, me, model.ItemTypeNote, "inside", &zeta.ID)
-	mustCreate(t, db, other, model.ItemTypeNote, "not mine", nil)
+	ws := workspaceOf(t, db, me).ID
+	theirs := workspaceOf(t, db, other).ID
 
-	all, err := db.ListItems(me, model.ItemFilter{})
+	cases := map[string]string{
+		"page without a name":  `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', '{"icon": "x"}')`,
+		"page without an icon": `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', '{"name": "x"}')`,
+		"blank page name":      `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', '{"name": "  ", "icon": "x"}')`,
+		"name not a string":    `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', '{"name": 1, "icon": "x"}')`,
+		"props not an object":  `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'quote', '[]')`,
+		"trashed block":        "INSERT INTO items (id, user_id, parent_id, type, trashed_at) VALUES ($1, $2, $3, 'quote', NOW())",
+		"unknown type":         "INSERT INTO items (id, user_id, parent_id, type) VALUES ($1, $2, $3, 'codeBlock')",
+		"block without parent": "INSERT INTO items (id, user_id, type) SELECT $1, $2, 'paragraph' WHERE $3::uuid IS NOT NULL",
+		"page name too long":   `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', jsonb_build_object('name', repeat('a', 256), 'icon', 'x'))`,
+		"page icon too long":   `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', jsonb_build_object('name', 'x', 'icon', repeat('a', 33)))`,
+		"props too large":      `INSERT INTO items (id, user_id, parent_id, type, props) VALUES ($1, $2, $3, 'page', jsonb_build_object('name', 'x', 'icon', 'x', 'big', repeat('a', 140000)))`,
+	}
+	for name, query := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := pool.Exec(context.Background(), query, uuid.New(), me, ws); err == nil {
+				t.Error("accepted")
+			}
+		})
+	}
+	t.Run("parent owned by another user", func(t *testing.T) {
+		_, err := pool.Exec(context.Background(),
+			"INSERT INTO items (id, user_id, parent_id, type) VALUES ($1, $2, $3, 'paragraph')", uuid.New(), me, theirs)
+		if err == nil {
+			t.Error("accepted")
+		}
+	})
+}
+
+func TestPostgresPageTreeFollowsChildIDsAndStopsAtChildPages(t *testing.T) {
+	db, pool := newItemsDB(t)
+	me := newUser(t, pool)
+	ws := workspaceOf(t, db, me).ID
+
+	b := newBuilder()
+	page := b.add(ws, model.ItemTypePage, "Page")
+	first := b.add(page, model.ItemTypeParagraph, "first")
+	bullet := b.add(page, model.ItemTypeBulletListItem, "bullet")
+	nested := b.add(bullet, model.ItemTypeBulletListItem, "nested")
+	child := b.add(bullet, model.ItemTypePage, "Child")
+	b.add(child, model.ItemTypeParagraph, "inside child")
+	last := b.add(page, model.ItemTypeHeading, "last")
+	b.items[b.index[last]].Props["level"] = 3
+	mustInsert(t, db, me, b)
+	// Put the heading first: order must come from child_ids, not creation order.
+	if _, err := pool.Exec(context.Background(), "UPDATE items SET child_ids = $2 WHERE id = $1",
+		page, []uuid.UUID{last, first, bullet}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, err := db.GetPageTree(me, page)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []uuid.UUID
+	for _, it := range items {
+		ids = append(ids, it.ID)
+	}
+	if want := []uuid.UUID{page, last, first, bullet, nested, child}; !slices.Equal(ids, want) {
+		t.Fatalf("items = %v, want %v", ids, want)
+	}
+	if items[1].Props["level"] != float64(3) || items[2].Props["content"] == nil {
+		t.Errorf("props = %v, %v", items[1].Props, items[2].Props)
+	}
+	if c := items[5]; c.Name() != "Child" || c.Props["icon"] != model.DefaultPageIcon || c.Props["is_favorite"] != false {
+		t.Errorf("child page = %+v", c)
+	}
+	if !slices.Equal(items[3].ChildIDs, []uuid.UUID{nested, child}) {
+		t.Errorf("bullet child_ids = %v", items[3].ChildIDs)
+	}
+	if got := workspaceOf(t, db, me).ChildIDs; !slices.Equal(got, []uuid.UUID{page}) {
+		t.Errorf("workspace child_ids = %v, want the new page appended", got)
+	}
+
+	if _, err := db.GetPageTree(me, bullet); !isNotFound(err) {
+		t.Errorf("page tree of a block: err = %v, want not found", err)
+	}
+	if _, err := db.GetPageTree(newUser(t, pool), page); !isNotFound(err) {
+		t.Errorf("page tree of another user's page: err = %v, want not found", err)
+	}
+}
+
+func TestPostgresResolveItemAndAncestors(t *testing.T) {
+	db, pool := newItemsDB(t)
+	me := newUser(t, pool)
+	ws := workspaceOf(t, db, me).ID
+
+	b := newBuilder()
+	top := b.add(ws, model.ItemTypePage, "Top")
+	toggle := b.add(top, model.ItemTypeToggleListItem, "toggle")
+	mid := b.add(toggle, model.ItemTypePage, "Mid")
+	leaf := b.add(mid, model.ItemTypePage, "Leaf")
+	quote := b.add(leaf, model.ItemTypeQuote, "quote")
+	deep := b.add(quote, model.ItemTypeParagraph, "deep")
+	mustInsert(t, db, me, b)
+
+	loc, err := db.ResolveItem(me, deep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loc.PageID != leaf || loc.Type != model.ItemTypeParagraph || loc.InTrash {
+		t.Errorf("resolve block = %+v", loc)
+	}
+	if loc, err := db.ResolveItem(me, mid); err != nil || loc.PageID != mid {
+		t.Errorf("resolve page = %+v, %v", loc, err)
+	}
+	if _, err := db.ResolveItem(me, ws); !isNotFound(err) {
+		t.Errorf("resolve workspace: err = %v, want not found", err)
+	}
+	if _, err := db.ResolveItem(newUser(t, pool), deep); !isNotFound(err) {
+		t.Errorf("resolve another user's block: err = %v, want not found", err)
+	}
+
+	crumbs, err := db.Ancestors(me, leaf)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var names []string
-	for _, it := range all {
-		names = append(names, it.Name)
+	for _, c := range crumbs {
+		names = append(names, c.Name())
 	}
-	if got, want := strings.Join(names, ","), "alpha,Zeta,A note,b note,inside"; got != want {
-		t.Errorf("order = %s, want %s (folders first, then by name ignoring case)", got, want)
+	if !slices.Equal(names, []string{"Top", "Mid"}) {
+		t.Errorf("ancestors = %v", names)
+	}
+	if crumbs, err := db.Ancestors(me, top); err != nil || len(crumbs) != 0 {
+		t.Errorf("ancestors of a top-level page = %v, %v", crumbs, err)
 	}
 
-	root, _ := db.ListItems(me, model.ItemFilter{ParentSet: true})
-	if len(root) != 4 {
-		t.Errorf("top level has %d items, want 4", len(root))
+	// Trash the top page the way the trash will: leave it under the workspace,
+	// stamped, and out of the workspace's child_ids.
+	if _, err := pool.Exec(context.Background(), "UPDATE items SET trashed_at = NOW() WHERE id = $1", top); err != nil {
+		t.Fatal(err)
 	}
-	children, _ := db.ListItems(me, model.ItemFilter{ParentSet: true, ParentID: &zeta.ID})
-	if len(children) != 1 || children[0].Name != "inside" {
-		t.Errorf("children = %+v, want [inside]", children)
+	if _, err := pool.Exec(context.Background(), "UPDATE items SET child_ids = '{}' WHERE id = $1", ws); err != nil {
+		t.Fatal(err)
 	}
-	empty, _ := db.ListItems(newUser(t, pool), model.ItemFilter{})
-	if empty == nil || len(empty) != 0 {
-		t.Errorf("an empty listing = %#v, want an empty non-nil slice", empty)
+	if loc, err := db.ResolveItem(me, deep); err != nil || !loc.InTrash {
+		t.Errorf("resolve inside a trashed page = %+v, %v; want in_trash", loc, err)
 	}
 }
 
-func TestItemsUpdateIsPartial(t *testing.T) {
+func TestPostgresListPagesInDocumentOrder(t *testing.T) {
 	db, pool := newItemsDB(t)
 	me := newUser(t, pool)
-	note := mustCreate(t, db, me, model.ItemTypeNote, "Old", nil)
+	ws := workspaceOf(t, db, me).ID
 
-	got, err := db.UpdateItem(me, note.ID, model.ItemPatch{IsFavorite: ptr(true)})
+	b := newBuilder()
+	a := b.add(ws, model.ItemTypePage, "A")
+	bullet := b.add(a, model.ItemTypeBulletListItem, "bullet")
+	a1 := b.add(bullet, model.ItemTypePage, "A1")
+	a2 := b.add(a, model.ItemTypePage, "A2")
+	gone := b.add(ws, model.ItemTypePage, "Gone")
+	b.add(gone, model.ItemTypePage, "Inside gone")
+	z := b.add(ws, model.ItemTypePage, "Z")
+	mustInsert(t, db, me, b)
+
+	other := newUser(t, pool)
+	ob := newBuilder()
+	ob.add(workspaceOf(t, db, other).ID, model.ItemTypePage, "Theirs")
+	mustInsert(t, db, other, ob)
+
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, "UPDATE items SET trashed_at = NOW() WHERE id = $1", gone); err != nil {
+		t.Fatal(err)
+	}
+	// Reverse the top level: Z before A.
+	if _, err := pool.Exec(ctx, "UPDATE items SET child_ids = $2 WHERE id = $1", ws, []uuid.UUID{z, a}); err != nil {
+		t.Fatal(err)
+	}
+
+	pages, err := db.ListPages(me)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Name != "Old" || got.Icon != "x" || !got.IsFavorite {
-		t.Errorf("got %+v, want only is_favorite changed", got)
+	var ids []uuid.UUID
+	for _, p := range pages {
+		ids = append(ids, p.ID)
 	}
-	got, err = db.UpdateItem(me, note.ID, model.ItemPatch{Name: ptr("New"), IsFavorite: ptr(false)})
-	if err != nil {
-		t.Fatal(err)
+	if !slices.Equal(ids, []uuid.UUID{z, a, a1, a2}) {
+		t.Fatalf("pages = %+v", pages)
 	}
-	if got.Name != "New" || got.IsFavorite {
-		t.Errorf("got %+v, want name New and favorite cleared", got)
+	if *pages[0].ParentID != ws || pages[0].ParentPageID != nil || pages[0].Name() != "Z" {
+		t.Errorf("Z = %+v", pages[0])
 	}
-	if !got.UpdatedAt.After(note.UpdatedAt) {
-		t.Error("updated_at did not move forward")
+	if *pages[2].ParentID != bullet || pages[2].ParentPageID == nil || *pages[2].ParentPageID != a {
+		t.Errorf("A1 = %+v, want parent the bullet and parent page A", pages[2])
+	}
+	if *pages[3].ParentID != a || *pages[3].ParentPageID != a {
+		t.Errorf("A2 = %+v", pages[3])
 	}
 }
 
-func TestItemsMove(t *testing.T) {
+// ListPages and GetPageTree hide a trashed page wherever it sits, not only directly
+// under the workspace where the trash puts it.
+func TestPostgresTrashedPageHiddenAtAnyDepth(t *testing.T) {
 	db, pool := newItemsDB(t)
-	me, other := newUser(t, pool), newUser(t, pool)
-	top := mustCreate(t, db, me, model.ItemTypeFolder, "Top", nil)
-	sub := mustCreate(t, db, me, model.ItemTypeFolder, "Sub", &top.ID)
-	leaf := mustCreate(t, db, me, model.ItemTypeFolder, "Leaf", &sub.ID)
-	note := mustCreate(t, db, me, model.ItemTypeNote, "Note", nil)
-	dest := mustCreate(t, db, me, model.ItemTypeFolder, "Dest", nil)
-	theirs := mustCreate(t, db, other, model.ItemTypeNote, "Theirs", nil)
+	me := newUser(t, pool)
+	ws := workspaceOf(t, db, me).ID
 
-	t.Run("moves a folder with its subtree", func(t *testing.T) {
-		moved, err := db.MoveItems(me, []model.ItemMove{{ID: top.ID, ParentID: &dest.ID}, {ID: note.ID, ParentID: &dest.ID}})
-		if err != nil || len(moved) != 2 {
-			t.Fatalf("MoveItems = %v, %v", moved, err)
-		}
-		if p := parentOf(t, db, me, leaf.ID); p == nil || *p != sub.ID {
-			t.Errorf("the subtree was re-parented to %v", p)
-		}
-		if p := parentOf(t, db, me, top.ID); p == nil || *p != dest.ID {
-			t.Errorf("top parent = %v, want %v", p, dest.ID)
-		}
-	})
+	b := newBuilder()
+	a := b.add(ws, model.ItemTypePage, "A")
+	bullet := b.add(a, model.ItemTypeBulletListItem, "bullet")
+	gone := b.add(bullet, model.ItemTypePage, "Gone")
+	b.add(gone, model.ItemTypePage, "Inside gone")
+	kept := b.add(a, model.ItemTypePage, "Kept")
+	mustInsert(t, db, me, b)
+	if _, err := pool.Exec(context.Background(), "UPDATE items SET trashed_at = NOW() WHERE id = $1", gone); err != nil {
+		t.Fatal(err)
+	}
 
-	t.Run("to the top level", func(t *testing.T) {
-		if _, err := db.MoveItems(me, []model.ItemMove{{ID: note.ID}}); err != nil {
+	pages, err := db.ListPages(me)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []uuid.UUID
+	for _, p := range pages {
+		ids = append(ids, p.ID)
+	}
+	if !slices.Equal(ids, []uuid.UUID{a, kept}) {
+		t.Errorf("pages = %v, want A and Kept", ids)
+	}
+	items, err := db.GetPageTree(me, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.ID == gone {
+			t.Error("page tree includes the trashed page")
+		}
+	}
+}
+
+func TestPostgresTrashRestoreAndDelete(t *testing.T) {
+	db, pool := newItemsDB(t)
+	me := newUser(t, pool)
+	other := newUser(t, pool)
+	ws := workspaceOf(t, db, me).ID
+
+	b := newBuilder()
+	a := b.add(ws, model.ItemTypePage, "A")
+	bullet := b.add(a, model.ItemTypeBulletListItem, "bullet")
+	child := b.add(bullet, model.ItemTypePage, "Child")
+	inChild := b.add(child, model.ItemTypeParagraph, "inside")
+	deep := b.add(inChild, model.ItemTypePage, "Deep")
+	old := b.add(ws, model.ItemTypePage, "Old")
+	mustInsert(t, db, me, b)
+	ob := newBuilder()
+	theirs := ob.add(workspaceOf(t, db, other).ID, model.ItemTypePage, "Theirs")
+	mustInsert(t, db, other, ob)
+
+	trash := func(user uuid.UUID, id uuid.UUID) {
+		t.Helper()
+		if err := db.ApplyOps(user, []model.Op{{Op: model.OpTrash, ID: id}}); err != nil {
 			t.Fatal(err)
 		}
-		if p := parentOf(t, db, me, note.ID); p != nil {
-			t.Errorf("parent = %v, want nil", p)
-		}
-	})
+	}
+	trash(me, child)
+	trash(me, old)
+	trash(other, theirs)
+	if _, err := pool.Exec(context.Background(), "UPDATE items SET trashed_at = NOW() - interval '40 days' WHERE id = $1", old); err != nil {
+		t.Fatal(err)
+	}
 
-	t.Run("rejects a cycle and changes nothing", func(t *testing.T) {
-		_, err := db.MoveItems(me, []model.ItemMove{{ID: note.ID, ParentID: &sub.ID}, {ID: top.ID, ParentID: &leaf.ID}})
-		if !errors.Is(err, database.ErrMoveConflict) {
-			t.Errorf("err = %v, want ErrMoveConflict", err)
-		}
-		if p := parentOf(t, db, me, note.ID); p != nil {
-			t.Errorf("the valid half of a failed move was applied: parent = %v", p)
-		}
-		if p := parentOf(t, db, me, top.ID); p == nil || *p != dest.ID {
-			t.Errorf("top parent = %v, want it unchanged (%v)", p, dest.ID)
-		}
-	})
+	pages, err := db.ListTrash(me)
+	if err != nil || len(pages) != 2 || pages[0].ID != child || pages[1].ID != old {
+		t.Fatalf("trash = %+v (%v), want Child then Old, and not Deep or another user's page", pages, err)
+	}
 
-	t.Run("rejects a folder moved into itself", func(t *testing.T) {
-		_, err := db.MoveItems(me, []model.ItemMove{{ID: dest.ID, ParentID: &dest.ID}})
-		if err == nil {
-			t.Error("moving a folder into itself must fail")
-		}
-	})
+	// Back to its old place, then into the trash again.
+	pos := 0
+	if err := db.ApplyOps(me, []model.Op{{Op: model.OpRestore, ID: child, ParentID: &bullet, Position: &pos}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := db.GetItem(me, bullet); !slices.Equal(got.ChildIDs, []uuid.UUID{child}) {
+		t.Errorf("bullet children = %v, want Child back", got.ChildIDs)
+	}
+	trash(me, child)
 
-	t.Run("rejects a note as destination", func(t *testing.T) {
-		_, err := db.MoveItems(me, []model.ItemMove{{ID: top.ID, ParentID: &note.ID}})
-		if !errors.Is(err, database.ErrInvalidParent) {
-			t.Errorf("err = %v, want ErrInvalidParent", err)
-		}
-	})
-
-	t.Run("rejects another user's item or destination", func(t *testing.T) {
-		if _, err := db.MoveItems(me, []model.ItemMove{{ID: theirs.ID, ParentID: &dest.ID}}); !errors.Is(err, database.ErrMoveConflict) {
-			t.Errorf("moving their item: err = %v, want ErrMoveConflict", err)
-		}
-		if _, err := db.MoveItems(other, []model.ItemMove{{ID: theirs.ID, ParentID: &dest.ID}}); !errors.Is(err, database.ErrInvalidParent) {
-			t.Errorf("into my folder: err = %v, want ErrInvalidParent", err)
-		}
-		if p := parentOf(t, db, other, theirs.ID); p != nil {
-			t.Errorf("their note moved into my folder: parent = %v", p)
-		}
-	})
+	before := time.Now().Add(-30 * 24 * time.Hour)
+	if n, err := db.EmptyTrash(me, &before); err != nil || n != 1 {
+		t.Fatalf("purge removed %d (%v), want only Old", n, err)
+	}
+	if err := db.DeleteFromTrash(me, deep); !isNotFound(err) {
+		t.Errorf("deleting a page inside a trashed page: %v, want not found", err)
+	}
+	if err := db.DeleteFromTrash(me, theirs); !isNotFound(err) {
+		t.Errorf("deleting another user's page: %v, want not found", err)
+	}
+	if err := db.DeleteFromTrash(me, child); err != nil {
+		t.Fatal(err)
+	}
+	var left int
+	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM items WHERE id = ANY($1)",
+		[]uuid.UUID{child, inChild, deep, old}).Scan(&left); err != nil || left != 0 {
+		t.Errorf("%d rows left (%v), want the trashed pages and all inside them gone", left, err)
+	}
+	if n, err := db.EmptyTrash(other, nil); err != nil || n != 1 {
+		t.Errorf("other user's empty removed %d (%v), want 1", n, err)
+	}
 }
 
-func TestItemsDeleteCascades(t *testing.T) {
+func TestPostgresOpenItem(t *testing.T) {
 	db, pool := newItemsDB(t)
 	me := newUser(t, pool)
-	top := mustCreate(t, db, me, model.ItemTypeFolder, "Top", nil)
-	sub := mustCreate(t, db, me, model.ItemTypeFolder, "Sub", &top.ID)
-	deep := mustCreate(t, db, me, model.ItemTypeNote, "Deep", &sub.ID)
-	keep := mustCreate(t, db, me, model.ItemTypeNote, "Keep", nil)
+	ws := workspaceOf(t, db, me).ID
 
-	if err := db.DeleteItem(me, top.ID); err != nil {
+	b := newBuilder()
+	top := b.add(ws, model.ItemTypePage, "Top")
+	page := b.add(top, model.ItemTypePage, "Page")
+	quote := b.add(page, model.ItemTypeQuote, "quote")
+	mustInsert(t, db, me, b)
+
+	opened, err := db.OpenItem(me, quote)
+	if err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []uuid.UUID{top.ID, sub.ID, deep.ID} {
-		if _, err := db.GetItem(me, id); !isNotFound(err) {
-			t.Errorf("item %v survived: err = %v", id, err)
-		}
+	if opened.Location.PageID != page || opened.Location.Type != model.ItemTypeQuote || opened.Location.InTrash {
+		t.Errorf("location = %+v", opened.Location)
 	}
-	var contents int
-	_ = pool.QueryRow(context.Background(), "SELECT count(*) FROM note_contents").Scan(&contents)
-	if contents != 1 {
-		t.Errorf("%d content rows left, want only Keep's", contents)
+	if len(opened.Items) != 2 || opened.Items[0].ID != page || opened.Items[1].ID != quote {
+		t.Errorf("items = %+v", opened.Items)
 	}
-	if _, err := db.GetItem(me, keep.ID); err != nil {
-		t.Errorf("an unrelated note was deleted: %v", err)
+	if len(opened.Ancestors) != 1 || opened.Ancestors[0].ID != top {
+		t.Errorf("ancestors = %+v", opened.Ancestors)
 	}
-	if err := db.DeleteItem(me, top.ID); !isNotFound(err) {
-		t.Errorf("deleting twice: err = %v, want not found", err)
+	if _, err := db.OpenItem(me, ws); !isNotFound(err) {
+		t.Errorf("opening the workspace: err = %v, want not found", err)
 	}
 }
 
-func TestItemsContent(t *testing.T) {
-	db, pool := newItemsDB(t)
-	me, other := newUser(t, pool), newUser(t, pool)
-	folder := mustCreate(t, db, me, model.ItemTypeFolder, "Folder", nil)
-	note := mustCreate(t, db, me, model.ItemTypeNote, "Note", nil)
-
-	got, err := db.GetNoteContent(me, note.ID)
-	if err != nil || got.Content != "content of Note" {
-		t.Fatalf("GetNoteContent = %+v, %v", got, err)
-	}
-
-	saved, err := db.PutNoteContent(me, note.ID, "<p>new</p>")
-	if err != nil || saved.Content != "<p>new</p>" {
-		t.Fatalf("PutNoteContent = %+v, %v", saved, err)
-	}
-	if again, _ := db.GetNoteContent(me, note.ID); again.Content != "<p>new</p>" {
-		t.Errorf("content = %q, want it persisted", again.Content)
-	}
-	item, _ := db.GetItem(me, note.ID)
-	if !item.UpdatedAt.After(note.UpdatedAt) {
-		t.Error("saving content must bump the note's updated_at")
-	}
-	if _, err := db.PutNoteContent(me, note.ID, ""); err != nil {
-		t.Errorf("saving an empty body: %v", err)
-	}
-
-	if _, err := db.GetNoteContent(me, folder.ID); !errors.Is(err, database.ErrNotANote) {
-		t.Errorf("folder content err = %v, want ErrNotANote", err)
-	}
-	if _, err := db.PutNoteContent(me, folder.ID, "x"); !errors.Is(err, database.ErrNotANote) {
-		t.Errorf("folder put err = %v, want ErrNotANote", err)
-	}
-	if _, err := db.PutNoteContent(other, note.ID, "hijacked"); !isNotFound(err) {
-		t.Errorf("another user's put err = %v, want not found", err)
-	}
-	if again, _ := db.GetNoteContent(me, note.ID); again.Content != "" {
-		t.Errorf("content = %q: another user's put must change nothing", again.Content)
-	}
-	if _, err := db.PutNoteContent(me, note.ID, strings.Repeat("a", services.MaxContentBytes+1)); err == nil {
-		t.Error("content over the limit must be rejected by the database as well")
-	}
-}
-
-func TestItemsDuplicateCopiesSubtreeAndContent(t *testing.T) {
+// Every block type the model knows must be one the schema accepts.
+func TestPostgresSchemaAcceptsEveryBlockType(t *testing.T) {
 	db, pool := newItemsDB(t)
 	me := newUser(t, pool)
-	top := mustCreate(t, db, me, model.ItemTypeFolder, "Top", nil)
-	sub := mustCreate(t, db, me, model.ItemTypeFolder, "Sub", &top.ID)
-	mustCreate(t, db, me, model.ItemTypeNote, "Deep", &sub.ID)
-	mustCreate(t, db, me, model.ItemTypeNote, "Shallow", &top.ID)
-
-	snapshot, _ := db.ListItems(me, model.ItemFilter{})
-	plan, err := services.PlanDuplicate(me, snapshot, top.ID, uuid.New)
-	if err != nil {
-		t.Fatal(err)
-	}
-	root, err := db.ApplyDuplicate(plan)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if root.Name != "Top (Copy 1)" || root.ParentID != nil || root.ID == top.ID {
-		t.Errorf("root copy = %+v", root)
-	}
-
-	var items, contents int
-	_ = pool.QueryRow(context.Background(), "SELECT count(*) FROM items").Scan(&items)
-	_ = pool.QueryRow(context.Background(), "SELECT count(*) FROM note_contents").Scan(&contents)
-	if items != 8 || contents != 4 {
-		t.Errorf("%d items and %d contents, want 8 and 4", items, contents)
-	}
-
-	kids, _ := db.ListItems(me, model.ItemFilter{ParentSet: true, ParentID: &root.ID})
-	if len(kids) != 2 || kids[0].Name != "Sub" || kids[1].Name != "Shallow" {
-		t.Fatalf("copied children = %+v, want [Sub, Shallow]", kids)
-	}
-	grand, _ := db.ListItems(me, model.ItemFilter{ParentSet: true, ParentID: &kids[0].ID})
-	if len(grand) != 1 || grand[0].Name != "Deep" {
-		t.Fatalf("copied grandchildren = %+v, want [Deep]", grand)
-	}
-	if c, err := db.GetNoteContent(me, grand[0].ID); err != nil || c.Content != "content of Deep" {
-		t.Errorf("copied content = %+v, %v", c, err)
-	}
-	if c, _ := db.GetNoteContent(me, grand[0].ID); c.ItemID == uuid.Nil {
-		t.Error("copied content row has no item id")
+	b := newBuilder()
+	page := b.add(workspaceOf(t, db, me).ID, model.ItemTypePage, "Page")
+	mustInsert(t, db, me, b)
+	for _, typ := range model.BlockTypes {
+		if _, err := pool.Exec(context.Background(),
+			"INSERT INTO items (id, user_id, parent_id, type) VALUES ($1, $2, $3, $4)", uuid.New(), me, page, typ); err != nil {
+			t.Errorf("%s: %v", typ, err)
+		}
 	}
 }
 
-func TestItemsDuplicateIsAtomic(t *testing.T) {
-	db, pool := newItemsDB(t)
-	me, other := newUser(t, pool), newUser(t, pool)
-	folder := mustCreate(t, db, me, model.ItemTypeFolder, "Folder", nil)
-	mustCreate(t, db, me, model.ItemTypeNote, "Inside", &folder.ID)
-	theirs := mustCreate(t, db, other, model.ItemTypeNote, "Theirs", nil)
-
-	snapshot, _ := db.ListItems(me, model.ItemFilter{})
-	plan, err := services.PlanDuplicate(me, snapshot, folder.ID, uuid.New)
-	if err != nil {
+func TestPostgresMigrationGivesExistingUsersAWorkspace(t *testing.T) {
+	pool := newSchema(t)
+	applyFiles(t, pool, migrationFiles(t, "00[12]_*.up.sql")...)
+	ctx := context.Background()
+	me := uuid.New()
+	if _, err := pool.Exec(ctx, "INSERT INTO users (id, name, email, password_hash) VALUES ($1, 'u', 'old@example.com', 'h')", me); err != nil {
 		t.Fatal(err)
 	}
-	plan.Copies[len(plan.Copies)-1].SourceID = theirs.ID
+	applyFiles(t, pool, migrationFiles(t, "003_*.up.sql")...)
 
-	if _, err := db.ApplyDuplicate(plan); !errors.Is(err, database.ErrMoveConflict) {
-		t.Errorf("err = %v, want ErrMoveConflict", err)
+	if _, err := database.NewPostgreItemsDataSource(pool).GetWorkspace(me); err != nil {
+		t.Errorf("existing user has no workspace: %v", err)
 	}
-	var items int
-	_ = pool.QueryRow(context.Background(), "SELECT count(*) FROM items").Scan(&items)
-	if items != 3 {
-		t.Errorf("%d items stored, want 3: a failed duplicate must create nothing", items)
+
+	applyFiles(t, pool, migrationFiles(t, "003_*.down.sql")...)
+	var tables int
+	if err := pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM information_schema.tables
+		WHERE table_schema = current_schema() AND table_name IN ('items', 'note_contents', 'trash_items')`).Scan(&tables); err != nil {
+		t.Fatal(err)
+	}
+	if tables != 3 {
+		t.Errorf("after the down migration found %d of the old tables, want 3", tables)
 	}
 }
-
-func ptr[T any](v T) *T { return &v }

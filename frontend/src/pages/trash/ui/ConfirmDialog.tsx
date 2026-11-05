@@ -1,3 +1,4 @@
+import { Button } from '#/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -5,42 +6,42 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
+} from '#/components/ui/dialog'
 
-export interface ConfirmRequest {
+export function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  onConfirm,
+  onOpenChange,
+}: {
+  open: boolean
   title: string
   description: string
   confirmLabel: string
   onConfirm: () => void
-}
-
-export function ConfirmDialog({
-  request,
-  onClose,
-}: {
-  request: ConfirmRequest | null
-  onClose: () => void
+  onOpenChange: (open: boolean) => void
 }) {
   return (
-    <Dialog open={request !== null} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{request?.title}</DialogTitle>
-          <DialogDescription>{request?.description}</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             variant="destructive"
             onClick={() => {
-              request?.onConfirm()
-              onClose()
+              onOpenChange(false)
+              onConfirm()
             }}
           >
-            {request?.confirmLabel}
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

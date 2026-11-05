@@ -1,12 +1,11 @@
 package database
 
 import (
-	"context"
-	"errors"
-	"strings"
-
 	"backend/internal/model"
 	"backend/internal/pkg"
+	"context"
+	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -17,8 +16,14 @@ import (
 const (
 	pgForeignKeyViolation = "23503"
 	pgUniqueViolation     = "23505"
+	pgCheckViolation      = "23514"
 
-	itemColumns = "id, user_id, parent_id, type, name, icon, is_favorite, created_at, updated_at"
+	itemColumns = "i.id, i.user_id, i.parent_id, i.type, i.child_ids, i.props, i.trashed_at, i.created_at, i.updated_at"
+)
+
+var (
+	ErrInvalidParent = errors.New("parent must be one of your items")
+	ErrInvalidItem   = errors.New("item is not valid")
 )
 
 type PostgreItemsDataSource struct {
@@ -29,21 +34,136 @@ func NewPostgreItemsDataSource(conn *pgxpool.Pool) *PostgreItemsDataSource {
 	return &PostgreItemsDataSource{conn: conn}
 }
 
-func qualified(alias, columns string) string {
-	cols := strings.Split(columns, ", ")
-	for i, c := range cols {
-		cols[i] = alias + "." + c
-	}
-	return strings.Join(cols, ", ")
+type querier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-func scanItem(row pgx.Row) (model.Item, error) {
+func scanItem(row pgx.Row, extra ...any) (model.Item, error) {
 	var it model.Item
-	err := row.Scan(&it.ID, &it.UserID, &it.ParentID, &it.Type, &it.Name, &it.Icon, &it.IsFavorite, &it.CreatedAt, &it.UpdatedAt)
+	dest := append([]any{&it.ID, &it.UserID, &it.ParentID, &it.Type, &it.ChildIDs, &it.Props, &it.TrashedAt, &it.CreatedAt, &it.UpdatedAt}, extra...)
+	err := row.Scan(dest...)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.Item{}, pkg.NewNotFoundError("item")
 	}
 	return it, err
+}
+
+func translateErr(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case pgForeignKeyViolation:
+			return ErrInvalidParent
+		case pgUniqueViolation:
+			return pkg.NewAlreadyExistsError("item")
+		case pgCheckViolation:
+			return fmt.Errorf("%w: %s", ErrInvalidItem, pgErr.ConstraintName)
+		}
+	}
+	return err
+}
+
+func (db *PostgreItemsDataSource) GetWorkspace(userID uuid.UUID) (model.Item, error) {
+	return scanItem(db.conn.QueryRow(context.Background(),
+		"SELECT "+itemColumns+" FROM items i WHERE i.user_id = $1 AND i.type = 'workspace'", userID))
+}
+
+func (db *PostgreItemsDataSource) GetItem(userID, id uuid.UUID) (model.Item, error) {
+	return getItem(context.Background(), db.conn, userID, id)
+}
+
+func getItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.Item, error) {
+	return scanItem(q.QueryRow(ctx,
+		"SELECT "+itemColumns+" FROM items i WHERE i.id = $1 AND i.user_id = $2", id, userID))
+}
+
+func (db *PostgreItemsDataSource) OpenItem(userID, id uuid.UUID) (OpenedItem, error) {
+	ctx := context.Background()
+	tx, err := db.conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return OpenedItem{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var out OpenedItem
+	if out.Location, err = resolveItem(ctx, tx, userID, id); err != nil {
+		return OpenedItem{}, err
+	}
+	if out.Items, err = pageTree(ctx, tx, userID, out.Location.PageID); err != nil {
+		return OpenedItem{}, err
+	}
+	if out.Ancestors, err = ancestors(ctx, tx, userID, out.Location.PageID); err != nil {
+		return OpenedItem{}, err
+	}
+	return out, tx.Commit(ctx)
+}
+
+func (db *PostgreItemsDataSource) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, error) {
+	return resolveItem(context.Background(), db.conn, userID, id)
+}
+
+func resolveItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.ItemLocation, error) {
+	var loc model.ItemLocation
+	var typ *model.ItemType
+	var pageID *uuid.UUID
+	err := q.QueryRow(ctx, `
+		WITH RECURSIVE up(id, parent_id, type, trashed_at, depth) AS (
+			SELECT id, parent_id, type, trashed_at, 0 FROM items WHERE id = $1 AND user_id = $2
+			UNION ALL
+			SELECT i.id, i.parent_id, i.type, i.trashed_at, u.depth + 1
+			FROM items i JOIN up u ON i.id = u.parent_id
+			WHERE u.depth < $3
+		)
+		SELECT (SELECT type FROM up WHERE depth = 0),
+		       (SELECT id FROM up WHERE type = 'page' ORDER BY depth LIMIT 1),
+		       EXISTS (SELECT 1 FROM up WHERE trashed_at IS NOT NULL)`,
+		id, userID, MaxTreeDepth).Scan(&typ, &pageID, &loc.InTrash)
+	if err != nil {
+		return loc, err
+	}
+	if typ == nil || pageID == nil {
+		return loc, pkg.NewNotFoundError("item")
+	}
+	loc.Type, loc.PageID = *typ, *pageID
+	return loc, nil
+}
+
+func (db *PostgreItemsDataSource) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, error) {
+	return pageTree(context.Background(), db.conn, userID, pageID)
+}
+
+func pageTree(ctx context.Context, q querier, userID, pageID uuid.UUID) ([]model.Item, error) {
+	page, err := getItem(ctx, q, userID, pageID)
+	if err != nil {
+		return nil, err
+	}
+	if page.Type != model.ItemTypePage {
+		return nil, pkg.NewNotFoundError("page")
+	}
+	items := []model.Item{page}
+
+	rows, err := q.Query(ctx, `
+		WITH RECURSIVE down(id, path) AS (
+			SELECT c.id, ARRAY[child_rank(p.child_ids, c.id)]
+			FROM items p JOIN items c ON c.parent_id = p.id
+			WHERE p.id = $1 AND p.user_id = $2 AND c.trashed_at IS NULL
+			UNION ALL
+			SELECT c.id, d.path || child_rank(p.child_ids, c.id)
+			FROM down d JOIN items p ON p.id = d.id JOIN items c ON c.parent_id = p.id
+			WHERE p.type <> 'page' AND c.trashed_at IS NULL AND cardinality(d.path) < $3
+		)
+		SELECT `+itemColumns+` FROM down d JOIN items i ON i.id = d.id
+		ORDER BY d.path, i.created_at, i.id`,
+		pageID, userID, MaxTreeDepth)
+	if err != nil {
+		return nil, err
+	}
+	below, err := collectItems(rows)
+	if err != nil {
+		return nil, err
+	}
+	return append(items, below...), nil
 }
 
 func collectItems(rows pgx.Rows) ([]model.Item, error) {
@@ -59,296 +179,63 @@ func collectItems(rows pgx.Rows) ([]model.Item, error) {
 	return items, rows.Err()
 }
 
-func translateErr(err error) error {
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		switch pgErr.Code {
-		case pgForeignKeyViolation:
-			return ErrInvalidParent
-		case pgUniqueViolation:
-			return pkg.NewAlreadyExistsError("item")
-		}
-	}
-	return err
+func (db *PostgreItemsDataSource) Ancestors(userID, id uuid.UUID) ([]model.Item, error) {
+	return ancestors(context.Background(), db.conn, userID, id)
 }
 
-func depthOf(ctx context.Context, q pgx.Tx, id uuid.UUID) (int, error) {
-	var depth int
-	err := q.QueryRow(ctx, `
-		WITH RECURSIVE up(id, parent_id, depth) AS (
-			SELECT id, parent_id, 1 FROM items WHERE id = $1
+func ancestors(ctx context.Context, q querier, userID, id uuid.UUID) ([]model.Item, error) {
+	rows, err := q.Query(ctx, `
+		WITH RECURSIVE up(id, depth) AS (
+			SELECT parent_id, 1 FROM items WHERE id = $1 AND user_id = $2 AND parent_id IS NOT NULL
 			UNION ALL
-			SELECT i.id, i.parent_id, u.depth + 1 FROM items i JOIN up u ON i.id = u.parent_id
-			WHERE u.depth <= $2
+			SELECT i.parent_id, u.depth + 1 FROM items i JOIN up u ON i.id = u.id
+			WHERE i.parent_id IS NOT NULL AND u.depth < $3
 		)
-		SELECT COALESCE(MAX(depth), 0) FROM up`, id, MaxTreeDepth).Scan(&depth)
-	return depth, err
-}
-
-func (db *PostgreItemsDataSource) CreateItem(item model.Item, content string) (model.Item, error) {
-	ctx := context.Background()
-	tx, err := db.conn.Begin(ctx)
-	if err != nil {
-		return model.Item{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	if item.ID == uuid.Nil {
-		item.ID = uuid.New()
-	}
-	// A trashed item still owns its id, so a new item cannot reuse it.
-	var trashed bool
-	if err := tx.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM trash_items WHERE id = $1)", item.ID).Scan(&trashed); err != nil {
-		return model.Item{}, err
-	}
-	if trashed {
-		return model.Item{}, pkg.NewAlreadyExistsError("item")
-	}
-	created, err := scanItem(tx.QueryRow(ctx, `
-		INSERT INTO items (id, user_id, parent_id, type, name, icon, is_favorite)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING `+itemColumns,
-		item.ID, item.UserID, item.ParentID, item.Type, item.Name, item.Icon, item.IsFavorite))
-	if err != nil {
-		return model.Item{}, translateErr(err)
-	}
-
-	if item.Type == model.ItemTypeNote {
-		if _, err := tx.Exec(ctx, "INSERT INTO note_contents (item_id, content) VALUES ($1, $2)", item.ID, content); err != nil {
-			return model.Item{}, translateErr(err)
-		}
-	}
-
-	if item.ParentID != nil {
-		depth, err := depthOf(ctx, tx, item.ID)
-		if err != nil {
-			return model.Item{}, err
-		}
-		if depth > MaxTreeDepth {
-			return model.Item{}, ErrTooDeep
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return model.Item{}, err
-	}
-	return created, nil
-}
-
-func (db *PostgreItemsDataSource) GetItem(userID, id uuid.UUID) (model.Item, error) {
-	return scanItem(db.conn.QueryRow(context.Background(),
-		"SELECT "+itemColumns+" FROM items WHERE id = $1 AND user_id = $2", id, userID))
-}
-
-func (db *PostgreItemsDataSource) ListItems(userID uuid.UUID, filter model.ItemFilter) ([]model.Item, error) {
-	query := "SELECT " + itemColumns + " FROM items WHERE user_id = $1"
-	args := []any{userID}
-	if filter.ParentSet {
-		if filter.ParentID == nil {
-			query += " AND parent_id IS NULL"
-		} else {
-			query += " AND parent_id = $2"
-			args = append(args, *filter.ParentID)
-		}
-	}
-	query += " ORDER BY (type <> 'folder'), lower(name), name, created_at, id"
-
-	rows, err := db.conn.Query(context.Background(), query, args...)
+		SELECT `+itemColumns+`
+		FROM up JOIN items i ON i.id = up.id
+		WHERE i.type = 'page'
+		ORDER BY up.depth DESC`, id, userID, MaxTreeDepth)
 	if err != nil {
 		return nil, err
 	}
 	return collectItems(rows)
 }
 
-func (db *PostgreItemsDataSource) UpdateItem(userID, id uuid.UUID, patch model.ItemPatch) (model.Item, error) {
-	return scanItem(db.conn.QueryRow(context.Background(), `
-		UPDATE items
-		SET name = COALESCE($3, name),
-		    icon = COALESCE($4, icon),
-		    is_favorite = COALESCE($5, is_favorite),
-		    updated_at = NOW()
-		WHERE id = $1 AND user_id = $2
-		RETURNING `+itemColumns,
-		id, userID, patch.Name, patch.Icon, patch.IsFavorite))
-}
-
-func (db *PostgreItemsDataSource) MoveItems(userID uuid.UUID, moves []model.ItemMove) ([]model.Item, error) {
-	ctx := context.Background()
-	tx, err := db.conn.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	// Serialize concurrent moves by the same user, so the cycle check below cannot
-	// be invalidated by another move committing at the same time.
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1::text))", userID.String()); err != nil {
-		return nil, err
-	}
-
-	ids := make([]uuid.UUID, len(moves))
-	parents := make([]*uuid.UUID, len(moves))
-	for i, m := range moves {
-		ids[i], parents[i] = m.ID, m.ParentID
-	}
-	rows, err := tx.Query(ctx, `
-		UPDATE items AS i
-		SET parent_id = u.parent_id, updated_at = NOW()
-		FROM (SELECT * FROM UNNEST($1::uuid[], $2::uuid[]) AS t(id, parent_id)) AS u
-		WHERE i.id = u.id AND i.user_id = $3
-		RETURNING `+qualified("i", itemColumns), ids, parents, userID)
-	if err != nil {
-		return nil, translateErr(err)
-	}
-	moved, err := collectItems(rows)
-	if err != nil {
-		return nil, translateErr(err)
-	}
-	if len(moved) != len(moves) {
-		return nil, ErrMoveConflict
-	}
-
-	var cycles int
-	err = tx.QueryRow(ctx, `
-		WITH RECURSIVE walk(origin, cur, depth) AS (
-			SELECT id, parent_id, 1 FROM items WHERE id = ANY($1)
+func (db *PostgreItemsDataSource) ListPages(userID uuid.UUID) ([]model.Item, error) {
+	// Start from the user's pages (idx_items_user_pages) and walk each one up to the
+	// workspace, collecting its position at every level, rather than walking down
+	// through every block. A page is left out when it or any item above it is in
+	// the trash, or when the walk never reaches the workspace.
+	rows, err := db.conn.Query(context.Background(), `
+		WITH RECURSIVE up(page_id, cur, cur_parent, parent_page_id, path, trashed, depth) AS (
+			SELECT p.id, p.id, p.parent_id, NULL::uuid, ARRAY[]::int[], p.trashed_at IS NOT NULL, 0
+			FROM items p WHERE p.user_id = $1 AND p.type = 'page'
 			UNION ALL
-			SELECT w.origin, i.parent_id, w.depth + 1 FROM walk w JOIN items i ON i.id = w.cur
-			WHERE w.cur <> w.origin AND w.depth <= $2
+			SELECT u.page_id, par.id, par.parent_id,
+			       COALESCE(u.parent_page_id, CASE WHEN par.type = 'page' THEN par.id END),
+			       child_rank(par.child_ids, u.cur) || u.path,
+			       par.trashed_at IS NOT NULL,
+			       u.depth + 1
+			FROM up u JOIN items par ON par.id = u.cur_parent
+			WHERE NOT u.trashed AND u.depth < $2
 		)
-		SELECT COUNT(*) FROM walk WHERE cur = origin`, ids, MaxTreeDepth).Scan(&cycles)
+		SELECT `+itemColumns+`, u.parent_page_id
+		FROM up u JOIN items w ON w.id = u.cur AND w.type = 'workspace'
+		JOIN items i ON i.id = u.page_id
+		ORDER BY u.path, i.created_at, i.id`, userID, MaxTreeDepth)
 	if err != nil {
 		return nil, err
 	}
-	if cycles > 0 {
-		return nil, ErrMoveConflict
-	}
-
-	for _, m := range moved {
-		if m.ParentID == nil {
-			continue
-		}
-		depth, err := depthOf(ctx, tx, m.ID)
+	defer rows.Close()
+	pages := []model.Item{}
+	for rows.Next() {
+		var parentPage *uuid.UUID
+		it, err := scanItem(rows, &parentPage)
 		if err != nil {
 			return nil, err
 		}
-		if depth > MaxTreeDepth {
-			return nil, ErrTooDeep
-		}
+		it.ParentPageID = parentPage
+		pages = append(pages, it)
 	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return moved, nil
-}
-
-func (db *PostgreItemsDataSource) DeleteItem(userID, id uuid.UUID) error {
-	tag, err := db.conn.Exec(context.Background(), "DELETE FROM items WHERE id = $1 AND user_id = $2", id, userID)
-	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return pkg.NewNotFoundError("item")
-	}
-	return nil
-}
-
-func (db *PostgreItemsDataSource) ApplyDuplicate(plan model.DuplicatePlan) (model.Item, error) {
-	ctx := context.Background()
-	var root model.Item
-	if len(plan.Copies) == 0 {
-		return root, ErrMoveConflict
-	}
-
-	tx, err := db.conn.Begin(ctx)
-	if err != nil {
-		return root, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	for i, c := range plan.Copies {
-		it, err := scanItem(tx.QueryRow(ctx, `
-			INSERT INTO items (id, user_id, parent_id, type, name, icon, is_favorite)
-			SELECT $1, user_id, $2, type, $3, icon, is_favorite FROM items WHERE id = $4 AND user_id = $5
-			RETURNING `+itemColumns,
-			c.NewID, c.ParentID, c.Name, c.SourceID, plan.UserID))
-		var notFound *pkg.NotFoundError
-		if errors.As(err, &notFound) {
-			return root, ErrMoveConflict
-		}
-		if err != nil {
-			return root, translateErr(err)
-		}
-		if i == 0 {
-			root = it
-		}
-		if c.Type == model.ItemTypeNote {
-			if _, err := tx.Exec(ctx,
-				"INSERT INTO note_contents (item_id, content) SELECT $1, content FROM note_contents WHERE item_id = $2",
-				c.NewID, c.SourceID); err != nil {
-				return root, translateErr(err)
-			}
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return root, err
-	}
-	return root, nil
-}
-
-func (db *PostgreItemsDataSource) GetNoteContent(userID, id uuid.UUID) (model.NoteContent, error) {
-	var nc model.NoteContent
-	err := db.conn.QueryRow(context.Background(), `
-		SELECT c.item_id, c.content, c.updated_at
-		FROM note_contents c JOIN items i ON i.id = c.item_id
-		WHERE c.item_id = $1 AND i.user_id = $2`, id, userID).
-		Scan(&nc.ItemID, &nc.Content, &nc.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return db.missingContent(userID, id)
-	}
-	return nc, err
-}
-
-func (db *PostgreItemsDataSource) missingContent(userID, id uuid.UUID) (model.NoteContent, error) {
-	it, err := db.GetItem(userID, id)
-	if err != nil {
-		return model.NoteContent{}, err
-	}
-	if it.Type != model.ItemTypeNote {
-		return model.NoteContent{}, ErrNotANote
-	}
-	return model.NoteContent{}, pkg.NewNotFoundError("note content")
-}
-
-func (db *PostgreItemsDataSource) PutNoteContent(userID, id uuid.UUID, content string) (model.NoteContent, error) {
-	ctx := context.Background()
-	tx, err := db.conn.Begin(ctx)
-	if err != nil {
-		return model.NoteContent{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	var nc model.NoteContent
-	err = tx.QueryRow(ctx, `
-		UPDATE note_contents AS c
-		SET content = $3, updated_at = NOW()
-		FROM items i
-		WHERE c.item_id = $1 AND i.id = c.item_id AND i.user_id = $2
-		RETURNING c.item_id, c.content, c.updated_at`, id, userID, content).
-		Scan(&nc.ItemID, &nc.Content, &nc.UpdatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return db.missingContent(userID, id)
-	}
-	if err != nil {
-		return model.NoteContent{}, err
-	}
-	if _, err := tx.Exec(ctx, "UPDATE items SET updated_at = $2 WHERE id = $1", id, nc.UpdatedAt); err != nil {
-		return model.NoteContent{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return model.NoteContent{}, err
-	}
-	return nc, nil
+	return pages, rows.Err()
 }

@@ -3,21 +3,6 @@ import { Button } from '@/components/ui/button'
 import { Header } from '@/shared'
 import { validateSession, logout } from '#/shared/api'
 
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuPortal,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-
 export const Route = createFileRoute('/')({
   loader: async () => {
     return await validateSession()

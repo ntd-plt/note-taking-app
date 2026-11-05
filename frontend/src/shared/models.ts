@@ -26,36 +26,3 @@ export interface AuthResponse {
   token: string
   user: User
 }
-
-export type ItemType = 'note' | 'folder'
-
-export interface Item {
-  id: string
-  type: ItemType
-  name: string
-  parentId: string | null
-  icon: string
-  isFavorite: boolean
-  createdAt?: string // RFC3339 timestamp from the backend
-  updatedAt?: string // RFC3339 timestamp from the backend
-}
-
-export interface TrashItem {
-  id: string
-  type: ItemType
-  name: string
-  parentId: string | null // the folder it was in when it was trashed
-  icon: string
-  deletedAt: string // RFC3339 timestamp from the backend
-}
-
-export interface NoteContent {
-  itemId: string
-  content: string
-  updatedAt?: string
-}
-
-export const DEFAULT_ICONS: Record<ItemType, string> = {
-  note: '📄',
-  folder: '📁',
-}

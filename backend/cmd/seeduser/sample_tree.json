@@ -1,117 +1,340 @@
 [
   {
-    "type": "folder",
-    "icon": "🚀",
-    "name": "Getting Started",
+    "type": "page",
+    "props": {
+      "name": "Getting Started",
+      "icon": "🚀",
+      "is_favorite": true
+    },
     "children": [
       {
-        "type": "note",
-        "icon": "👋",
-        "name": "Welcome",
-        "favorite": true,
-        "content": "<h1>Welcome</h1><p>This is a sample workspace. Edit, move or delete anything here.</p>"
+        "type": "heading",
+        "props": {
+          "level": 1
+        },
+        "text": "Welcome 👋"
       },
       {
-        "type": "note",
-        "icon": "🧭",
-        "name": "How this app works",
-        "content": "<h1>How this app works</h1><p>Notes live in folders. Drag items in the sidebar to move them, and deleted items go to the Trash.</p>"
+        "type": "paragraph",
+        "props": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Everything here is a ",
+              "styles": {}
+            },
+            {
+              "type": "text",
+              "text": "block",
+              "styles": {
+                "bold": true
+              }
+            },
+            {
+              "type": "text",
+              "text": ", and pages can live inside any block. Drag blocks with the ",
+              "styles": {}
+            },
+            {
+              "type": "text",
+              "text": "⋮⋮",
+              "styles": {
+                "code": true
+              }
+            },
+            {
+              "type": "text",
+              "text": " handle.",
+              "styles": {}
+            }
+          ]
+        }
+      },
+      {
+        "type": "heading",
+        "props": {
+          "level": 2
+        },
+        "text": "Block types"
+      },
+      {
+        "type": "bulletListItem",
+        "text": "Bullet lists"
+      },
+      {
+        "type": "bulletListItem",
+        "text": "Every block can have children",
+        "children": [
+          {
+            "type": "bulletListItem",
+            "text": "Press Tab to nest a block"
+          }
+        ]
+      },
+      {
+        "type": "numberedListItem",
+        "text": "Numbered lists"
+      },
+      {
+        "type": "numberedListItem",
+        "text": "count themselves"
+      },
+      {
+        "type": "checkListItem",
+        "props": {
+          "checked": true
+        },
+        "text": "Checklists"
+      },
+      {
+        "type": "checkListItem",
+        "props": {
+          "checked": false
+        },
+        "text": "Unchecked item"
+      },
+      {
+        "type": "toggleListItem",
+        "text": "Toggles hide their children",
+        "children": [
+          {
+            "type": "paragraph",
+            "text": "Hidden until you open the toggle."
+          }
+        ]
+      },
+      {
+        "type": "quote",
+        "text": "Quotes stand out from the text around them."
+      },
+      {
+        "type": "heading",
+        "props": {
+          "level": 3
+        },
+        "text": "Child pages"
+      },
+      {
+        "type": "page",
+        "props": {
+          "name": "How this app works",
+          "icon": "🧭"
+        },
+        "children": [
+          {
+            "type": "paragraph",
+            "text": "A child page shows as a row in its parent. Click it to open it."
+          },
+          {
+            "type": "paragraph",
+            "props": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Links to pages or blocks are plain ",
+                  "styles": {}
+                },
+                {
+                  "type": "link",
+                  "href": "https://www.blocknotejs.org",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "links",
+                      "styles": {}
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": ".",
+                  "styles": {}
+                }
+              ]
+            }
+          }
+        ]
       }
     ]
   },
   {
-    "type": "folder",
-    "icon": "💼",
-    "name": "Work",
+    "type": "page",
+    "props": {
+      "name": "Work",
+      "icon": "💼"
+    },
     "children": [
       {
-        "type": "folder",
-        "icon": "🗂️",
-        "name": "Projects",
+        "type": "heading",
+        "props": {
+          "level": 1
+        },
+        "text": "Work"
+      },
+      {
+        "type": "bulletListItem",
+        "text": "Projects",
         "children": [
           {
-            "type": "folder",
-            "icon": "🎨",
-            "name": "Website Redesign",
+            "type": "page",
+            "props": {
+              "name": "Website Redesign",
+              "icon": "🎨"
+            },
             "children": [
               {
-                "type": "note",
-                "icon": "📝",
-                "name": "Kickoff notes",
-                "content": "<h1>Kickoff notes</h1><p>Goals, scope and who does what.</p>"
+                "type": "heading",
+                "props": {
+                  "level": 2
+                },
+                "text": "Kickoff"
               },
               {
-                "type": "note",
-                "icon": "✅",
-                "name": "Design checklist",
-                "content": "<h1>Design checklist</h1><p>Colours, typography, spacing, accessibility.</p>"
+                "type": "paragraph",
+                "text": "Goals: faster pages, clearer navigation."
+              },
+              {
+                "type": "checkListItem",
+                "props": {
+                  "checked": true
+                },
+                "text": "Audit the current site"
+              },
+              {
+                "type": "checkListItem",
+                "props": {
+                  "checked": false
+                },
+                "text": "Draft the new sitemap"
+              },
+              {
+                "type": "page",
+                "props": {
+                  "name": "Design checklist",
+                  "icon": "✅"
+                },
+                "children": [
+                  {
+                    "type": "checkListItem",
+                    "props": {
+                      "checked": false
+                    },
+                    "text": "Colour contrast"
+                  },
+                  {
+                    "type": "checkListItem",
+                    "props": {
+                      "checked": false
+                    },
+                    "text": "Mobile layouts"
+                  }
+                ]
               }
             ]
           },
           {
-            "type": "note",
-            "icon": "🗺️",
-            "name": "Q4 roadmap",
-            "content": "<h1>Q4 roadmap</h1><p>Three things we want to ship this quarter.</p>"
+            "type": "page",
+            "props": {
+              "name": "Q4 roadmap",
+              "icon": "🗺️"
+            },
+            "children": [
+              {
+                "type": "numberedListItem",
+                "text": "Ship the editor rewrite"
+              },
+              {
+                "type": "numberedListItem",
+                "text": "Sidebar drag-and-drop"
+              }
+            ]
           }
         ]
       },
       {
-        "type": "folder",
-        "icon": "📅",
-        "name": "Meetings",
+        "type": "toggleListItem",
+        "text": "Meetings",
         "children": [
           {
-            "type": "note",
-            "icon": "🔁",
-            "name": "Weekly sync",
-            "content": "<h1>Weekly sync</h1><p>Agenda, decisions and action items.</p>"
-          },
-          {
-            "type": "note",
-            "icon": "🤝",
-            "name": "1:1 notes",
-            "content": "<h1>1:1 notes</h1><p>Topics to talk through next time.</p>"
+            "type": "page",
+            "props": {
+              "name": "Weekly sync",
+              "icon": "🔁"
+            },
+            "children": [
+              {
+                "type": "bulletListItem",
+                "text": "Status, blockers, next steps"
+              }
+            ]
           }
         ]
       }
     ]
   },
   {
-    "type": "folder",
-    "icon": "🏡",
-    "name": "Personal",
+    "type": "page",
+    "props": {
+      "name": "Personal",
+      "icon": "🏡"
+    },
     "children": [
       {
-        "type": "note",
-        "icon": "📚",
-        "name": "Reading list",
-        "content": "<h1>Reading list</h1><p>Books and articles to get to.</p>"
+        "type": "page",
+        "props": {
+          "name": "Reading list",
+          "icon": "📚",
+          "is_favorite": true
+        },
+        "children": [
+          {
+            "type": "checkListItem",
+            "props": {
+              "checked": true
+            },
+            "text": "The Pragmatic Programmer"
+          },
+          {
+            "type": "checkListItem",
+            "props": {
+              "checked": false
+            },
+            "text": "Designing Data-Intensive Applications"
+          }
+        ]
       },
       {
-        "type": "note",
-        "icon": "🍝",
-        "name": "Recipes",
-        "content": "<h1>Recipes</h1><p>Things worth cooking again.</p>"
-      },
-      {
-        "type": "note",
-        "icon": "✈️",
-        "name": "Travel ideas",
-        "content": "<h1>Travel ideas</h1><p>Places to visit and what to see there.</p>"
+        "type": "page",
+        "props": {
+          "name": "Travel ideas",
+          "icon": "✈️"
+        },
+        "children": [
+          {
+            "type": "quote",
+            "text": "Not all those who wander are lost."
+          }
+        ]
       }
     ]
   },
   {
-    "type": "note",
-    "icon": "🗒️",
-    "name": "Scratchpad",
-    "content": "<h1>Scratchpad</h1><p>Quick thoughts go here.</p>"
+    "type": "page",
+    "props": {
+      "name": "Ideas inbox",
+      "icon": "💡"
+    },
+    "children": [
+      {
+        "type": "paragraph",
+        "text": "Jot ideas here and sort them later."
+      }
+    ]
   },
   {
-    "type": "note",
-    "icon": "💡",
-    "name": "Ideas inbox",
-    "content": "<h1>Ideas inbox</h1><p>Half-formed ideas to sort out later.</p>"
+    "type": "page",
+    "props": {
+      "name": "Scratchpad"
+    }
   }
 ]
