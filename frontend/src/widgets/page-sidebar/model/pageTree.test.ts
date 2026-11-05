@@ -3,7 +3,7 @@ import { pageName } from '#/entities/item'
 import type { Item } from '#/entities/item'
 import { seedTree } from '#/entities/item/api/mockSeed'
 import { fromWireItem } from '#/entities/item/api/wire'
-import { buildPageTree, favoritePages, visibleRows } from './pageTree'
+import { buildPageTree, favoritePages, isWithin, visibleRows } from './pageTree'
 import type { PageNode } from './pageTree'
 
 const pages = () => seedTree().tree.listPages().map(fromWireItem)
@@ -65,5 +65,18 @@ describe('favoritePages', () => {
       'Getting Started',
       'Weekly sync',
     ])
+  })
+})
+
+describe('isWithin', () => {
+  it('follows parent pages up, through blocks', () => {
+    const { tree, ids } = seedTree()
+    const all = tree.listPages().map(fromWireItem)
+    expect(isWithin(ids['Design checklist'], ids.Work, all)).toBe(true)
+    expect(isWithin(ids['Weekly sync'], ids.Work, all)).toBe(true)
+    expect(isWithin(ids.Work, ids.Work, all)).toBe(true)
+    expect(isWithin(ids.Work, ids['Design checklist'], all)).toBe(false)
+    expect(isWithin(ids['Reading list'], ids.Work, all)).toBe(false)
+    expect(isWithin('unknown', ids.Work, all)).toBe(false)
   })
 })

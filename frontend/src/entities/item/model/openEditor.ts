@@ -1,20 +1,22 @@
-// The page editor that is open, if any. Anything that changes the tree outside
-// the editor (the sidebar moving or adding a page) first flushes the editor's
-// pending save, so the editor's positions still match the server, and then
-// invalidates the open item so the editor reloads with the change.
-interface OpenEditor {
+// What the open page has not saved yet. Anything that changes the tree outside
+// the editor (the sidebar moving, adding or trashing a page) first flushes it,
+// so the editor's positions still match the server and no edit is lost, and
+// then invalidates the open item so the editor reloads with the change. The
+// block editor and the page title each register their own pending save.
+interface PendingSave {
   pageId: string
   flush: () => Promise<void>
 }
 
-let current: OpenEditor | null = null
+const open = new Set<PendingSave>()
 
-export function registerOpenEditor(editor: OpenEditor): () => void {
-  current = editor
+export function registerOpenEditor(save: PendingSave): () => void {
+  open.add(save)
   return () => {
-    if (current === editor) current = null
+    open.delete(save)
   }
 }
 
-export const flushOpenEditor = (): Promise<void> =>
-  current?.flush() ?? Promise.resolve()
+export const flushOpenEditor = async (): Promise<void> => {
+  await Promise.all([...open].map((s) => s.flush()))
+}

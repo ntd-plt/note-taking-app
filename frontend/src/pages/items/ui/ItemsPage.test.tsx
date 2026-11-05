@@ -214,6 +214,105 @@ describe('ItemsPage', () => {
     await waitFor(() => expect(rowNames()).toEqual(['📄New Page']))
   })
 
+  describe('page actions', () => {
+    async function choose(name: string, action: string, list = tree()) {
+      const trigger = within(list).getAllByLabelText(`Actions for ${name}`)[0]
+      fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
+      fireEvent.click(await screen.findByRole('menuitem', { name: action }))
+    }
+    const favorites = () =>
+      screen.queryByRole('list', { name: 'Favorites' })?.textContent ?? ''
+
+    it('lists favorites and adds and removes them', async () => {
+      const ids = mockPageIds()
+      renderPage()
+      await waitFor(() =>
+        expect(favorites()).toBe('🚀Getting Started📅Weekly sync'),
+      )
+      await choose('Ideas inbox', 'Add to favorites')
+      await waitFor(() =>
+        expect(favorites()).toBe('🚀Getting Started📅Weekly sync💡Ideas inbox'),
+      )
+      expect(mockTree().items.get(ids['Ideas inbox'])?.props?.is_favorite).toBe(
+        true,
+      )
+      await choose('Getting Started', 'Remove from favorites')
+      await waitFor(() =>
+        expect(favorites()).toBe('📅Weekly sync💡Ideas inbox'),
+      )
+      // Opening a page from favorites.
+      fireEvent.click(
+        within(screen.getByRole('list', { name: 'Favorites' })).getByText(
+          'Weekly sync',
+        ),
+      )
+      expect(router.get().itemId).toBe(ids['Weekly sync'])
+    })
+
+    it('duplicates a page right after the original and opens the copy', async () => {
+      renderPage()
+      await waitFor(() => expect(rowNames()).toHaveLength(4))
+      await choose('Work', 'Duplicate')
+      await waitFor(() =>
+        expect(rowNames()).toEqual([
+          '🚀Getting Started',
+          '💼Work',
+          '💼Work (Copy 1)',
+          '🏡Personal',
+          '💡Ideas inbox',
+        ]),
+      )
+      const copy = mockTree().items.get(mockTree().workspaceId)!.child_ids![2]
+      expect(router.get().itemId).toBe(copy)
+    })
+
+    it('moves a page to the trash, with the pages inside it', async () => {
+      const ids = mockPageIds()
+      router.set({ itemId: ids['Ideas inbox'] })
+      renderPage()
+      await waitFor(() => expect(rowNames()).toHaveLength(4))
+      await choose('Work', 'Move to trash')
+      await waitFor(() =>
+        expect(rowNames()).toEqual([
+          '🚀Getting Started',
+          '🏡Personal',
+          '💡Ideas inbox',
+        ]),
+      )
+      // Weekly sync was inside Work, so it leaves the favorites too.
+      expect(favorites()).toBe('🚀Getting Started')
+      expect(mockTree().items.get(ids.Work)?.trashed_at).toBeTruthy()
+      // A page that was not inside stays open.
+      expect(router.get().itemId).toBe(ids['Ideas inbox'])
+    })
+
+    it('leaves the open page when it is inside the trashed one', async () => {
+      const ids = mockPageIds()
+      router.set({ itemId: ids['Design checklist'] })
+      renderPage()
+      expect(await screen.findByDisplayValue('Design checklist')).toBeTruthy()
+      await choose('Work', 'Move to trash')
+      await waitFor(() => expect(router.get().itemId).toBeUndefined())
+      expect(router.navigate).toHaveBeenCalledWith({ to: '/items' })
+      expect(await screen.findByText(/Pick a page/)).toBeTruthy()
+    })
+
+    it('saves pending edits of the open page before trashing it', async () => {
+      const ids = mockPageIds()
+      router.set({ itemId: ids['Ideas inbox'] })
+      renderPage()
+      const title = await screen.findByDisplayValue('Ideas inbox')
+      fireEvent.change(title, { target: { value: 'Later' } })
+      await choose('Ideas inbox', 'Move to trash')
+      await waitFor(() => expect(router.get().itemId).toBeUndefined())
+      await waitFor(() =>
+        expect(mockTree().items.get(ids['Ideas inbox'])?.props?.name).toBe(
+          'Later',
+        ),
+      )
+    })
+  })
+
   describe('dragging pages', () => {
     // Rows are 28 px tall from y = 0, in on-screen order.
     function layoutRows() {

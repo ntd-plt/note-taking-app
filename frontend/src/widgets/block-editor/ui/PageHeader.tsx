@@ -11,7 +11,12 @@ import {
 } from '#/components/ui/dropdown-menu'
 import { useSidebar } from '#/components/ui/sidebar'
 import { cn } from '#/lib/utils'
-import { MAX_NAME_LENGTH, pageIcon, pageName } from '#/entities/item'
+import {
+  MAX_NAME_LENGTH,
+  pageIcon,
+  pageName,
+  registerOpenEditor,
+} from '#/entities/item'
 import type { Item } from '#/entities/item'
 import { SAVE_DELAY_MS } from '../model/pageSaver'
 
@@ -114,21 +119,31 @@ export function PageHeader({
     onSaveRef.current = onSave
   })
 
-  const flushName = React.useCallback(() => {
+  const flushName = React.useCallback(async () => {
     clearTimeout(timer.current)
     const next = pendingName.current
     pendingName.current = null
     if (next === null || next.trim() === '') return
     setSavingTitle(true)
-    void onSaveRef.current({ name: next }).finally(() => setSavingTitle(false))
+    try {
+      await onSaveRef.current({ name: next })
+    } finally {
+      setSavingTitle(false)
+    }
   }, [])
-  React.useEffect(() => flushName, [flushName])
+  React.useEffect(() => {
+    const unregister = registerOpenEditor({ pageId: page.id, flush: flushName })
+    return () => {
+      unregister()
+      void flushName()
+    }
+  }, [page.id, flushName])
 
   const changeName = (value: string) => {
     setName(value)
     pendingName.current = value
     clearTimeout(timer.current)
-    timer.current = setTimeout(flushName, SAVE_DELAY_MS)
+    timer.current = setTimeout(() => void flushName(), SAVE_DELAY_MS)
   }
 
   const changeIcon = (value: string) => {
@@ -205,7 +220,7 @@ export function PageHeader({
           readOnly={readOnly}
           maxLength={MAX_NAME_LENGTH}
           onChange={(e) => changeName(e.target.value)}
-          onBlur={flushName}
+          onBlur={() => void flushName()}
           className="w-full border-none bg-transparent pt-2 pb-1 font-heading text-4xl font-extrabold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/20 focus:ring-0"
           placeholder="Untitled"
         />

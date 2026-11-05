@@ -8,12 +8,16 @@ import { toast } from 'sonner'
 import {
   ChevronRight,
   ChevronsUpDown,
+  Copy,
   HelpCircle,
   LogOut,
+  MoreHorizontal,
   PanelLeft,
   PanelLeftClose,
   Plus,
   Search,
+  Star,
+  StarOff,
   Trash2,
   User,
 } from 'lucide-react'
@@ -49,9 +53,12 @@ import {
 } from '#/components/ui/command'
 import { cn } from '#/lib/utils'
 import {
+  PROP,
   applyOps,
+  duplicateItem,
   fetchItem,
   flushOpenEditor,
+  isFavorite,
   itemKeys,
   pageIcon,
   pageName,
@@ -59,7 +66,12 @@ import {
   useWorkspace,
 } from '#/entities/item'
 import type { Item, Op } from '#/entities/item'
-import { buildPageTree, visibleRows } from '../model/pageTree'
+import {
+  buildPageTree,
+  favoritePages,
+  isWithin,
+  visibleRows,
+} from '../model/pageTree'
 import type { PageNode } from '../model/pageTree'
 import {
   knownChildIds,
@@ -205,15 +217,71 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
   const open = (id: string) =>
     void navigate({ to: '/items/$itemId', params: { itemId: id } })
 
-  // Sends a change made from the sidebar. The open editor saves first, so its
-  // positions still match, and reloads afterwards to show the change.
+  // Sends a change made from the sidebar. When it changes the tree, the open
+  // editor saves first, so its positions still match, and reloads afterwards
+  // to show the change.
+  const refresh = (reloadEditor = true) =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
+      reloadEditor &&
+        queryClient.invalidateQueries({ queryKey: itemKeys.items }),
+    ])
   const send = async (ops: Op[]) => {
     await applyOps(ops)
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
-      queryClient.invalidateQueries({ queryKey: itemKeys.items }),
-    ])
+    await refresh()
   }
+
+  // A favorite is a prop the editor never shows, so the editor is left alone.
+  const toggleFavorite = async (page: Item) => {
+    try {
+      await applyOps([
+        {
+          op: 'update',
+          id: page.id,
+          props: { [PROP.isFavorite]: !isFavorite(page) },
+        },
+      ])
+      await refresh(false)
+    } catch (err) {
+      toast.error(`Couldn't update favorites: ${(err as Error).message}`)
+    }
+  }
+
+  // The copy goes right after the original, in the same parent, and opens.
+  const duplicatePage = async (page: Item) => {
+    try {
+      await flushOpenEditor()
+      const copy = await duplicateItem(page.id)
+      await refresh()
+      open(copy.id)
+    } catch (err) {
+      toast.error(`Couldn't duplicate the page: ${(err as Error).message}`)
+    }
+  }
+
+  // Trashing hides the page and everything under it. If the open page is among
+  // them, leave it first so the editor is not reloaded into a trashed page.
+  const trashPage = async (page: Item) => {
+    try {
+      await flushOpenEditor()
+      const leaving = !!currentId && isWithin(currentId, page.id, pages)
+      await applyOps([{ op: 'trash', id: page.id }])
+      if (leaving) await navigate({ to: '/items' })
+      await refresh()
+      toast.success(`Moved "${pageName(page)}" to the trash`)
+    } catch (err) {
+      toast.error(
+        `Couldn't move the page to the trash: ${(err as Error).message}`,
+      )
+    }
+  }
+
+  const actions: PageActions = {
+    onToggleFavorite: (p) => void toggleFavorite(p),
+    onDuplicate: (p) => void duplicatePage(p),
+    onTrash: (p) => void trashPage(p),
+  }
+  const favorites = favoritePages(pages)
 
   const addPage = async (parentId: string | undefined) => {
     if (!parentId) return
@@ -360,6 +428,34 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
             </SidebarMenu>
           </SidebarGroup>
 
+          {favorites.length > 0 && (
+            <SidebarGroup className="mt-4 p-0">
+              <div className="px-2 py-1">
+                <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                  Favorites
+                </SidebarGroupLabel>
+              </div>
+              <div role="list" aria-label="Favorites" className="px-0.5">
+                {favorites.map((p) => (
+                  <div
+                    key={p.id}
+                    role="listitem"
+                    onClick={() => open(p.id)}
+                    className={cn(
+                      'group flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pl-2 pr-1 text-xs text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60',
+                      p.id === currentId &&
+                        'bg-sidebar-accent font-semibold text-sidebar-foreground',
+                    )}
+                  >
+                    <span className="shrink-0">{pageIcon(p)}</span>
+                    <span className="flex-1 truncate">{pageName(p)}</span>
+                    <PageMenu page={p} actions={actions} />
+                  </div>
+                ))}
+              </div>
+            </SidebarGroup>
+          )}
+
           <SidebarGroup className="mt-4 flex-1 p-0">
             <div className="flex items-center justify-between px-2 py-1">
               <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
@@ -406,6 +502,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
                     })
                   }
                   onAddChild={() => void addPage(row.item.id)}
+                  actions={actions}
                   onPointerDown={(e) => startDrag(row.item.id, e)}
                 />
               ))}
@@ -507,6 +604,69 @@ function DropLine({ depth }: { depth: number }) {
   )
 }
 
+interface PageActions {
+  onToggleFavorite: (page: Item) => void
+  onDuplicate: (page: Item) => void
+  onTrash: (page: Item) => void
+}
+
+// The ⋯ menu of a page row. Its events stay out of the row, which would
+// otherwise open the page or start a drag.
+function PageMenu({ page, actions }: { page: Item; actions: PageActions }) {
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation()
+  const favorite = isFavorite(page)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Actions for ${pageName(page)}`}
+          title="More actions"
+          onPointerDown={stop}
+          onClick={stop}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 hover:bg-sidebar-accent focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+        >
+          <MoreHorizontal className="h-3 w-3" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        className="w-48"
+        onPointerDown={stop}
+        onClick={stop}
+      >
+        <DropdownMenuItem
+          className="cursor-pointer text-xs"
+          onSelect={() => actions.onToggleFavorite(page)}
+        >
+          {favorite ? (
+            <StarOff className="mr-2 h-3.5 w-3.5 opacity-60" />
+          ) : (
+            <Star className="mr-2 h-3.5 w-3.5 opacity-60" />
+          )}
+          {favorite ? 'Remove from favorites' : 'Add to favorites'}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="cursor-pointer text-xs"
+          onSelect={() => actions.onDuplicate(page)}
+        >
+          <Copy className="mr-2 h-3.5 w-3.5 opacity-60" />
+          Duplicate
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          variant="destructive"
+          className="cursor-pointer text-xs"
+          onSelect={() => actions.onTrash(page)}
+        >
+          <Trash2 className="mr-2 h-3.5 w-3.5 opacity-60" />
+          Move to trash
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 function PageRow({
   row,
   active,
@@ -517,6 +677,7 @@ function PageRow({
   onOpen,
   onToggle,
   onAddChild,
+  actions,
   onPointerDown,
 }: {
   row: PageNode
@@ -528,6 +689,7 @@ function PageRow({
   onOpen: () => void
   onToggle: () => void
   onAddChild: () => void
+  actions: PageActions
   onPointerDown: (e: React.PointerEvent) => void
 }) {
   const { item, depth, children } = row
@@ -586,6 +748,7 @@ function PageRow({
         >
           <Plus className="h-3 w-3" />
         </button>
+        <PageMenu page={item} actions={actions} />
       </div>
     </>
   )

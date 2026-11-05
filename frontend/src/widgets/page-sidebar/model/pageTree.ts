@@ -49,3 +49,20 @@ export function visibleRows(
 
 export const favoritePages = (pages: readonly Item[]): Item[] =>
   pages.filter(isFavorite)
+
+// isWithin reports whether a page is `ancestorId` itself or sits anywhere below
+// it, following parentPageId through /pages.
+export function isWithin(
+  pageId: string,
+  ancestorId: string,
+  pages: readonly Item[],
+): boolean {
+  const byId = new Map(pages.map((p) => [p.id, p]))
+  const seen = new Set<string>()
+  for (let p = byId.get(pageId); p && !seen.has(p.id); ) {
+    if (p.id === ancestorId) return true
+    seen.add(p.id)
+    p = p.parentPageId ? byId.get(p.parentPageId) : undefined
+  }
+  return false
+}
