@@ -4,10 +4,7 @@ import {
   Scripts,
   createRootRoute,
 } from '@tanstack/react-router'
-import {
-  TanStackRouterDevtools,
-  TanStackRouterDevtoolsPanel,
-} from '@tanstack/react-router-devtools'
+import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import { Toaster } from '@/components/ui/sonner'
@@ -23,7 +20,8 @@ export const Route = createRootRoute({
       },
       {
         name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
+        content:
+          'width=device-width, initial-scale=1, interactive-widget=resizes-content',
       },
     ],
     links: [

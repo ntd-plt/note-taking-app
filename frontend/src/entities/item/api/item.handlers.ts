@@ -38,12 +38,8 @@ export const itemHandlers = [
   http.get(`${API}/pages`, () => HttpResponse.json(state.tree.listPages())),
 
   http.get(`${API}/items/:id`, ({ params }) => {
-    const id = params.id as string
-    // TODO(phase 5): remove the fall-through once the old folder/note mocks are
-    // gone. Until then, ids this tree does not know go on to their handler.
-    if (!state.tree.has(id)) return undefined
     try {
-      return HttpResponse.json(state.tree.open(id))
+      return HttpResponse.json(state.tree.open(params.id as string))
     } catch (err) {
       return fail(err)
     }
