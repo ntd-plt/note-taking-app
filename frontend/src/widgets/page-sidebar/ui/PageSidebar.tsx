@@ -5,6 +5,7 @@ import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
+import { showUndoToast } from '#/shared/ui/undoToast'
 import {
   ChevronRight,
   ChevronsUpDown,
@@ -260,27 +261,14 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
     }
   }
 
-  // siblingsOf returns a parent's childIds: from /pages for a page or the
-  // workspace, else from the page that holds the parent block.
-  const siblingsOf = async (parentId: string, holderPageId: string | null) => {
-    const known = knownChildIds(parentId, pages)
-    if (known || !holderPageId) return known
-    const opened = await fetchItem(holderPageId)
-    return opened.items.find((i) => i.id === parentId)?.childIds
-  }
-
-  // undoTrash puts the page back where it was. If that spot is gone (its
-  // parent was deleted or trashed meanwhile), it goes to the end of the top
-  // level instead.
-  const undoTrash = async (
-    page: Item,
-    spot: { parentId: string; position?: number },
-    reopen: boolean,
-  ) => {
+  // undoTrash puts the page back at the end of the parent it was in. If that
+  // parent is gone (deleted or trashed meanwhile), it goes to the end of the
+  // top level instead.
+  const undoTrash = async (page: Item, parentId: string, reopen: boolean) => {
     try {
       await flushOpenEditor()
       try {
-        await applyOps([{ op: 'restore', id: page.id, ...spot }])
+        await applyOps([{ op: 'restore', id: page.id, parentId }])
       } catch {
         await applyOps([{ op: 'restore', id: page.id }])
         toast.info(
@@ -296,24 +284,18 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
 
   // Trashing hides the page and everything under it. If the open page is among
   // them, leave it first so the editor is not reloaded into a trashed page.
-  // Undo in the toast puts it back where it was.
+  // Undo in the toast puts it back in the parent it was in.
   const trashPage = async (page: Item) => {
     try {
       await flushOpenEditor()
       const leaving = !!currentId && isWithin(currentId, page.id, pages)
       const reopen = currentId === page.id
       const parentId = page.parentId!
-      const siblings = await siblingsOf(parentId, page.parentPageId)
-      const at = siblings?.indexOf(page.id) ?? -1
-      const spot = { parentId, position: at >= 0 ? at : undefined }
       await applyOps([{ op: 'trash', id: page.id }])
       if (leaving) await navigate({ to: '/items' })
       await refresh()
-      toast.success(`Moved "${pageName(page)}" to the trash`, {
-        action: {
-          label: 'Undo',
-          onClick: () => void undoTrash(page, spot, reopen),
-        },
+      showUndoToast(`Moved "${pageName(page)}" to the trash`, () => {
+        void undoTrash(page, parentId, reopen)
       })
     } catch (err) {
       toast.error(

@@ -288,11 +288,8 @@ describe('ItemsPage', () => {
       expect(router.get().itemId).toBe(ids['Ideas inbox'])
     })
 
-    it('undoes a trash from the toast, back to the same place', async () => {
+    it('undoes a trash from the toast, to the end of its old parent', async () => {
       const ids = mockPageIds()
-      const before = [
-        ...mockTree().items.get(mockTree().workspaceId)!.child_ids!,
-      ]
       router.set({ itemId: ids.Work })
       renderPage()
       expect(await screen.findByDisplayValue('Work')).toBeTruthy()
@@ -300,13 +297,33 @@ describe('ItemsPage', () => {
       await waitFor(() => expect(router.get().itemId).toBeUndefined())
       fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
       await waitFor(() =>
-        expect(mockTree().items.get(mockTree().workspaceId)!.child_ids).toEqual(
-          before,
-        ),
+        expect(
+          names(mockTree().items.get(mockTree().workspaceId)!.child_ids!),
+        ).toEqual(['Getting Started', 'Personal', 'Ideas inbox', 'Work']),
       )
       // It was open, so it opens again.
       await waitFor(() => expect(router.get().itemId).toBe(ids.Work))
       expect(mockTree().items.get(ids.Work)?.trashed_at).toBeFalsy()
+    })
+
+    it('keeps one toast, for the latest trash', async () => {
+      const ids = mockPageIds()
+      renderPage()
+      await waitFor(() => expect(rowNames()).toHaveLength(4))
+      await choose('Personal', 'Move to trash')
+      expect(await screen.findByText(/Moved "Personal"/)).toBeTruthy()
+      await choose('Ideas inbox', 'Move to trash')
+      expect(await screen.findByText(/Moved "Ideas inbox"/)).toBeTruthy()
+      await waitFor(() =>
+        expect(screen.queryByText(/Moved "Personal"/)).toBeNull(),
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+      await waitFor(() =>
+        expect(
+          mockTree().items.get(ids['Ideas inbox'])?.trashed_at,
+        ).toBeFalsy(),
+      )
+      expect(mockTree().items.get(ids.Personal)?.trashed_at).toBeTruthy()
     })
 
     it('undoes a trash of a page inside a block, back into that block', async () => {

@@ -149,7 +149,7 @@ describe('PageSaver', () => {
 })
 
 describe('PageSaver reporting trashed pages', () => {
-  it('tells where each trashed child page was', async () => {
+  it('tells which parent each trashed child page was in', async () => {
     let current = [p('a'), page('c'), p('b', 'b', [page('d')])]
     const onTrashed = vi.fn()
     const saver = new PageSaver({
@@ -166,13 +166,11 @@ describe('PageSaver reporting trashed pages', () => {
         id: 'c',
         props: { name: 'c', icon: '📄' },
         parentId: 'pg',
-        afterId: 'a',
       },
       {
         id: 'd',
         props: { name: 'd', icon: '📄' },
         parentId: 'b',
-        afterId: null,
       },
     ])
   })

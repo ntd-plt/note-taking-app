@@ -13,7 +13,7 @@ import type { DefaultReactSuggestionItem } from '@blocknote/react'
 import { BlockNoteView } from '@blocknote/shadcn'
 import '@blocknote/shadcn/style.css'
 import { FileText } from 'lucide-react'
-import { toast } from 'sonner'
+import { showUndoToast } from '#/shared/ui/undoToast'
 import {
   DEFAULT_PAGE_ICON,
   DEFAULT_PAGE_NAME,
@@ -72,10 +72,10 @@ function slashItems(editor: PageEditor): DefaultReactSuggestionItem[] {
   return items
 }
 
-// putBack re-inserts a trashed child page block where it was: after the block
-// that was before it, else first in its parent, else at the end of the page
-// (before the trailing paragraph) when its old place is gone. The next save sees
-// the page block again and restores the page.
+// putBack re-inserts a trashed child page block at the end of its old parent:
+// as the last child of the block it was in, or at the end of the page (before
+// the trailing empty paragraph) when it was top-level or that block is gone. The
+// next save sees the page block again and restores the page.
 function putBack(editor: PageEditor, pageId: string, t: TrashedBlock) {
   if (editor.getBlock(t.id)) return
   const block = {
@@ -83,22 +83,24 @@ function putBack(editor: PageEditor, pageId: string, t: TrashedBlock) {
     type: 'page' as const,
     props: t.props as { name: string; icon: string },
   }
-  if (t.afterId && editor.getBlock(t.afterId)) {
-    editor.insertBlocks([block], t.afterId, 'after')
-    return
-  }
   const parent = t.parentId === pageId ? null : editor.getBlock(t.parentId)
   if (parent) {
-    const first = parent.children.at(0)
-    if (first) editor.insertBlocks([block], first, 'before')
+    const last = parent.children.at(-1)
+    if (last) editor.insertBlocks([block], last, 'after')
     else editor.updateBlock(parent, { children: [block] })
     return
   }
   const doc = editor.document
-  const anchor = t.parentId === pageId && !t.afterId ? doc.at(0) : doc.at(-1)
-  if (anchor) editor.insertBlocks([block], anchor, 'before')
-  else editor.replaceBlocks(doc, [block])
+  const last = doc.at(-1)
+  if (!last) editor.replaceBlocks(doc, [block])
+  else if (isEmptyParagraph(last)) editor.insertBlocks([block], last, 'before')
+  else editor.insertBlocks([block], last, 'after')
 }
+
+const isEmptyParagraph = (b: EditorBlock) =>
+  b.type === 'paragraph' &&
+  b.children.length === 0 &&
+  (!Array.isArray(b.content) || b.content.length === 0)
 
 export interface BlockEditorProps {
   opened: OpenedItem
@@ -157,24 +159,19 @@ export function BlockEditor({
   const onTrashed = (pages: TrashedBlock[]) => {
     const name = (t: TrashedBlock) =>
       typeof t.props.name === 'string' ? t.props.name : DEFAULT_PAGE_NAME
-    toast.success(
+    showUndoToast(
       pages.length === 1
         ? `Moved "${name(pages[0])}" to the trash`
         : `Moved ${pages.length} pages to the trash`,
-      {
-        action: {
-          label: 'Undo',
-          onClick: () => {
-            if (mounted.current) {
-              editor.transact(() => {
-                for (const t of pages) putBack(editor, pageId, t)
-              })
-              void saver.flush()
-            } else {
-              void Promise.all(pages.map((t) => restoreFromTrash(t.id)))
-            }
-          },
-        },
+      () => {
+        if (mounted.current) {
+          editor.transact(() => {
+            for (const t of pages) putBack(editor, pageId, t)
+          })
+          void saver.flush()
+        } else {
+          void Promise.all(pages.map((t) => restoreFromTrash(t.id)))
+        }
       },
     )
   }

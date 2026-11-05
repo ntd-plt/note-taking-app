@@ -10,13 +10,12 @@ import { diffOps } from './diffOps'
 
 export const SAVE_DELAY_MS = 1000
 
-// A child page removed from the document and sent to the trash, with the spot it
-// had: its parent (the page itself for a top-level block) and the block before it.
+// A child page removed from the document and sent to the trash, with the parent
+// it was in (the page itself for a top-level block).
 export interface TrashedBlock {
   id: string
   props: Record<string, unknown>
   parentId: string
-  afterId: string | null
 }
 
 export interface PageSaverOptions {
@@ -110,14 +109,7 @@ export class PageSaver {
         this.trashed.add(op.id)
         const node = before.nodes.get(op.id)
         if (!node) continue
-        const siblings = childList(before, node.parentId)
-        const i = siblings.indexOf(op.id)
-        gone.push({
-          id: op.id,
-          props: node.props,
-          parentId: node.parentId,
-          afterId: i > 0 ? siblings[i - 1] : null,
-        })
+        gone.push({ id: op.id, props: node.props, parentId: node.parentId })
       }
       if (gone.length > 0) this.opts.onTrashed?.(gone)
     } catch (err) {

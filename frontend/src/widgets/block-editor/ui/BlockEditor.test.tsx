@@ -152,25 +152,71 @@ describe('BlockEditor', () => {
     ])
   })
 
-  it('offers Undo for a child page removed in the editor, back in its spot', async () => {
+  it('offers Undo for a child page removed in the editor, back at the end of its parent', async () => {
     const s = await setup()
-    const before = [...s.tree.items.get(s.pageId)!.child_ids!]
-    const redesign = s.editor.document[1]
+    const [first, redesign, meetings, tail] = s.editor.document
     act(() => s.editor.removeBlocks([redesign]))
     await waitFor(
       () => expect(s.tree.items.get(redesign.id)?.trashed_at).toBeTruthy(),
       SAVED,
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
-    expect(s.editor.document[1].id).toBe(redesign.id)
+    // At the end of the page, before the trailing empty paragraph.
+    expect(s.editor.document.map((b) => b.id)).toEqual([
+      first.id,
+      meetings.id,
+      redesign.id,
+      tail.id,
+    ])
     await waitFor(
-      () => expect(s.tree.items.get(s.pageId)!.child_ids).toEqual(before),
+      () => expect(s.tree.items.get(redesign.id)?.trashed_at).toBeFalsy(),
       SAVED,
     )
-    expect(s.tree.items.get(redesign.id)?.trashed_at).toBeFalsy()
     expect(s.sent.at(-1)).toEqual([
-      { op: 'restore', id: redesign.id, parentId: s.pageId, position: 1 },
+      { op: 'restore', id: redesign.id, parentId: s.pageId, position: 2 },
     ])
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull(),
+    )
+  })
+
+  it('puts a child page back as the last child of the block it was in', async () => {
+    const s = await setup()
+    const meetings = s.editor.document[2]
+    const weekly = meetings.children[0]
+    act(() => {
+      s.editor.insertBlocks(
+        [{ type: 'paragraph', content: 'after' }],
+        weekly,
+        'after',
+      )
+      s.editor.removeBlocks([weekly])
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }, SAVED))
+    expect(
+      s.editor
+        .getBlock(meetings.id)!
+        .children.map((b) => b.id)
+        .at(-1),
+    ).toBe(weekly.id)
+  })
+
+  it('shows one toast, for the latest removal', async () => {
+    const s = await setup()
+    const [, redesign] = s.editor.document
+    act(() => s.editor.removeBlocks([redesign]))
+    expect(
+      await screen.findByText(/Moved "Website Redesign"/, {}, SAVED),
+    ).toBeTruthy()
+    const weekly = s.editor.document[1].children[0]
+    act(() => s.editor.removeBlocks([weekly]))
+    expect(
+      await screen.findByText(/Moved "Weekly sync"/, {}, SAVED),
+    ).toBeTruthy()
+    await waitFor(() =>
+      expect(screen.queryByText(/Moved "Website Redesign"/)).toBeNull(),
+    )
+    expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1)
   })
 
   it('reports a rejected save', async () => {
