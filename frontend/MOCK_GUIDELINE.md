@@ -33,9 +33,14 @@ src/
 │   ├── state.ts           # Shared in-memory mock database / session state
 │   └── handler.ts         # Central aggregator of all slice-based handlers
 ├── entities/
-│   └── user/
+│   ├── user/
+│   │   └── api/
+│   │       └── user.handlers.ts   # Mocks for GET /api/me, user profiles, etc.
+│   └── item/
 │       └── api/
-│           └── user.handlers.ts   # Mocks for GET /api/me, user profiles, etc.
+│           ├── item.handlers.ts   # Mocks for /items/:id, /workspace, /pages, /ops, /items/:id/duplicate, /trash*
+│           ├── mockTree.ts        # The item tree and its rules, ported from backend/internal/tree
+│           └── mockSeed.ts        # The sample workspace the mocks start with
 └── features/
     └── auth/
         └── api/
@@ -66,7 +71,7 @@ export const tagHandlers = [
 
 If your mocks need to share state (e.g., simulating logging in, updating a user profile, and then fetching `/api/me` which returns that updated user):
 
-- Use the shared state store located at [src/mocks/state.ts](file:///home/ltp/projects/note-taking-app/frontend/src/mocks/state.ts).
+- Use the shared state store located at [src/mocks/state.ts](src/mocks/state.ts).
 - Import and mutate/read it in your slice handlers.
 
 Example of mutation:
@@ -80,7 +85,7 @@ mockState.currentUser = loggedInUser
 
 ### 3. Aggregate in the Root Handler
 
-Import your new handlers and spread them into the `handlers` array inside [src/mocks/handler.ts](file:///home/ltp/projects/note-taking-app/frontend/src/mocks/handler.ts):
+Import your new handlers and spread them into the `handlers` array inside [src/mocks/handler.ts](src/mocks/handler.ts):
 
 ```diff
   // src/mocks/handler.ts
@@ -97,8 +102,31 @@ Import your new handlers and spread them into the `handlers` array inside [src/m
 
 ---
 
+## 🌳 The item tree mocks
+
+Pages and blocks are mocked by `src/entities/item/api/`. Unlike the other mocks, these follow the server's rules exactly, so the editor and sidebar can be tested against them as if against the real API:
+
+- `mockTree.ts` is a TypeScript port of `backend/internal/tree`: positions, the trailing-paragraph rule, cycles, prop defaults and checks, all-or-nothing batches with `op_index` on errors, duplicate, trash, restore and the 30-day retention. A change to the server's rules needs the same change here, with a test in `item.handlers.test.ts`.
+- `mockSeed.ts` builds the sample workspace through the same rules (`seedTree`), so the seed is always a valid tree.
+- The state lives in `item.handlers.ts`, not in `src/mocks/state.ts`. Tests reset and inspect it with:
+
+  ```typescript
+  import {
+    mockPageIds,
+    mockTree,
+    resetMockTree,
+  } from '#/entities/item/api/item.handlers'
+
+  afterEach(() => resetMockTree()) // back to the sample workspace
+  resetMockTree({ empty: true }) // a workspace with no pages
+  const ids = mockPageIds() // page ids by name, e.g. ids.Work
+  mockTree().items.get(ids.Work) // the raw item, as the server would store it
+  ```
+
+---
+
 ## 💡 Best Practices
 
 1. **Avoid Duplicating Mock Logic**: Use shared helper functions in `shared/api` if mock generation/transformation logic is complex.
-2. **Keep State Simple**: The shared in-memory database at [src/mocks/state.ts](file:///home/ltp/projects/note-taking-app/frontend/src/mocks/state.ts) should only contain plain JS objects that reset when the page refreshes.
+2. **Keep State Simple**: The shared in-memory database at [src/mocks/state.ts](src/mocks/state.ts) should only contain plain JS objects that reset when the page refreshes.
 3. **No Direct MSW Startup imports in slices**: A slice should never configure or start MSW directly. Slices only export handler definitions. Only the `app` or root `mocks` initialization scripts can call `setupWorker` or `setupServer`.

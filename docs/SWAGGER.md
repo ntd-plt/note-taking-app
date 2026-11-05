@@ -16,7 +16,9 @@ backend/
 ├── internal/services/
 │   ├── auth_service.go     # @Router annotations for /auth/*
 │   ├── user_service.go     # @Router annotations for /users/me
-│   └── items_service.go    # @Router annotations for /items*, named request DTOs
+│   ├── items_service.go    # @Router annotations for /items/:id, /workspace, /pages
+│   ├── ops_service.go      # @Router annotations for /ops and /items/:id/duplicate, ApplyOpsRequest
+│   └── trash_service.go    # @Router annotations for /trash*, TrashResponse
 └── docs/                 # generated — do not edit by hand
     ├── docs.go           # embeds the spec, imported for side effects in router.go
     ├── swagger.json
