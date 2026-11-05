@@ -442,7 +442,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
                     role="listitem"
                     onClick={() => open(p.id)}
                     className={cn(
-                      'group flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pl-2 pr-1 text-xs text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60',
+                      'group/row flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pl-2 pr-1 text-xs text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60',
                       p.id === currentId &&
                         'bg-sidebar-accent font-semibold text-sidebar-foreground',
                     )}
@@ -624,7 +624,7 @@ function PageMenu({ page, actions }: { page: Item; actions: PageActions }) {
           title="More actions"
           onPointerDown={stop}
           onClick={stop}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 hover:bg-sidebar-accent focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 hover:bg-sidebar-accent focus-visible:opacity-100 group-hover/row:opacity-100 data-[state=open]:opacity-100"
         >
           <MoreHorizontal className="h-3 w-3" />
         </button>
@@ -707,7 +707,7 @@ function PageRow({
         onClick={onOpen}
         style={{ paddingLeft: 4 + depth * ROW_INDENT }}
         className={cn(
-          'group flex h-7 cursor-pointer select-none items-center gap-1 rounded-md pr-1 text-xs text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60',
+          'group/row flex h-7 cursor-pointer select-none items-center gap-1 rounded-md pr-1 text-xs text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60',
           active && 'bg-sidebar-accent font-semibold text-sidebar-foreground',
           dragging && 'opacity-50',
           dropOnto && 'bg-primary/10 ring-2 ring-primary/50',
@@ -744,7 +744,7 @@ function PageRow({
             e.stopPropagation()
             onAddChild()
           }}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 hover:bg-sidebar-accent group-hover:opacity-100"
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 opacity-0 hover:bg-sidebar-accent group-hover/row:opacity-100"
         >
           <Plus className="h-3 w-3" />
         </button>
