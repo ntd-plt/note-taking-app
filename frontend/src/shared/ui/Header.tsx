@@ -19,6 +19,7 @@ import {
   NavigationMenuTrigger,
 } from '@/components/ui/navigation-menu'
 import { cn } from '@/lib/utils'
+import { LogOut, Settings, User } from 'lucide-react'
 
 interface HeaderProps {
   className?: string
@@ -156,13 +157,20 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <Link to="/profile">
-                    <DropdownMenuItem>Profile</DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <User className="mr-2 h-3.5 w-3.5 opacity-60" />
+                      Profile
+                    </DropdownMenuItem>
                   </Link>
                   <Link to="/settings">
-                    <DropdownMenuItem>Settings</DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Settings className="mr-2 h-3.5 w-3.5 opacity-60" />
+                      Settings
+                    </DropdownMenuItem>
                   </Link>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onLogout}>
+                    <LogOut className="mr-2 h-3.5 w-3.5 opacity-60" />
                     Log out
                   </DropdownMenuItem>
                 </DropdownMenuContent>

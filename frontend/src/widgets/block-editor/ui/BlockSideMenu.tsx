@@ -11,11 +11,28 @@ import {
   useExtension,
   useExtensionState,
 } from '@blocknote/react'
-import { GripVertical } from 'lucide-react'
+import {
+  Check,
+  Copy,
+  GripVertical,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListCollapse,
+  ListOrdered,
+  ListTodo,
+  Pilcrow,
+  Repeat2,
+  TextQuote,
+  Trash2,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -32,21 +49,36 @@ const DRAG_THRESHOLD = 4
 
 type TurnInto = {
   label: string
+  icon: LucideIcon
   type: EditorBlock['type']
   props?: Record<string, unknown>
 }
 
 export const TURN_INTO: TurnInto[] = [
-  { label: 'Text', type: 'paragraph' },
-  { label: 'Heading 1', type: 'heading', props: { level: 1 } },
-  { label: 'Heading 2', type: 'heading', props: { level: 2 } },
-  { label: 'Heading 3', type: 'heading', props: { level: 3 } },
-  { label: 'Bulleted list', type: 'bulletListItem' },
-  { label: 'Numbered list', type: 'numberedListItem' },
-  { label: 'To-do list', type: 'checkListItem' },
-  { label: 'Toggle list', type: 'toggleListItem' },
-  { label: 'Quote', type: 'quote' },
+  { label: 'Text', icon: Pilcrow, type: 'paragraph' },
+  { label: 'Heading 1', icon: Heading1, type: 'heading', props: { level: 1 } },
+  { label: 'Heading 2', icon: Heading2, type: 'heading', props: { level: 2 } },
+  { label: 'Heading 3', icon: Heading3, type: 'heading', props: { level: 3 } },
+  { label: 'Bulleted list', icon: List, type: 'bulletListItem' },
+  { label: 'Numbered list', icon: ListOrdered, type: 'numberedListItem' },
+  { label: 'To-do list', icon: ListTodo, type: 'checkListItem' },
+  { label: 'Toggle list', icon: ListCollapse, type: 'toggleListItem' },
+  { label: 'Quote', icon: TextQuote, type: 'quote' },
 ]
+
+type BlockLike = Pick<EditorBlock, 'type'> & { props: Record<string, unknown> }
+
+// isTurnInto reports whether a Turn into option is the block's current type. A
+// heading matches only the option with its own level.
+export const isTurnInto = (t: TurnInto, block: BlockLike) =>
+  t.type === block.type &&
+  (t.props?.level === undefined || t.props.level === block.props.level)
+
+// blockTypeLabel names a block's type the way the Turn into menu does.
+export function blockTypeLabel(block: BlockLike): string {
+  if (block.type === 'page') return 'Page'
+  return TURN_INTO.find((t) => isTurnInto(t, block))?.label ?? block.type
+}
 
 // withNewIds copies a block and everything under it with fresh ids.
 export function withNewIds(block: EditorBlock): EditorBlock {
@@ -113,6 +145,8 @@ function BlockHandle() {
   }
 
   const isPage = block.type === 'page'
+  // The store's block can lag behind an edit; read the live one when there is.
+  const live = (editor.getBlock(blockId) ?? block) as BlockLike
 
   return (
     <DropdownMenu open={open} onOpenChange={setMenuOpen}>
@@ -138,9 +172,16 @@ function BlockHandle() {
           editor.focus()
         }}
       >
+        <DropdownMenuLabel
+          data-testid="block-type"
+          className="px-3 pt-1.5 pb-1 text-[10px] font-medium tracking-normal"
+        >
+          {blockTypeLabel(live)}
+        </DropdownMenuLabel>
         {!isPage && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="text-xs">
+              <Repeat2 className="mr-2 h-3.5 w-3.5 opacity-60" />
               Turn into
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-44">
@@ -157,7 +198,14 @@ function BlockHandle() {
                       })
                   }}
                 >
+                  <t.icon className="mr-2 h-3.5 w-3.5 opacity-60" />
                   {t.label}
+                  {isTurnInto(t, live) && (
+                    <Check
+                      aria-label="Current type"
+                      className="ml-auto h-3.5 w-3.5"
+                    />
+                  )}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuSubContent>
@@ -171,6 +219,7 @@ function BlockHandle() {
               if (b) editor.insertBlocks([withNewIds(b)], b, 'after')
             }}
           >
+            <Copy className="mr-2 h-3.5 w-3.5 opacity-60" />
             Duplicate block
           </DropdownMenuItem>
         )}
@@ -183,6 +232,7 @@ function BlockHandle() {
             if (b) editor.removeBlocks([b])
           }}
         >
+          <Trash2 className="mr-2 h-3.5 w-3.5 opacity-60" />
           {isPage ? 'Move page to trash' : 'Delete'}
         </DropdownMenuItem>
       </DropdownMenuContent>
