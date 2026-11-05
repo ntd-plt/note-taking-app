@@ -28,6 +28,7 @@ func newItemsRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 		}
 	})
 	r.GET("/api/v1/items/:id", h.GetItem)
+	r.GET("/api/v1/workspace", h.GetWorkspace)
 	r.GET("/api/v1/pages", h.ListPages)
 	r.POST("/api/v1/ops", h.ApplyOps)
 	r.POST("/api/v1/items/:id/duplicate", h.DuplicateItem)
@@ -257,6 +258,24 @@ func TestListPagesInDocumentOrderWithParents(t *testing.T) {
 	if *pages[2].ParentID != a || *pages[2].ParentPageID != a {
 		t.Errorf("A2: parent = %v, parent page = %v", pages[2].ParentID, pages[2].ParentPageID)
 	}
+}
+
+func TestGetWorkspace(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	tr := newTree(t, db)
+	a := tr.page(tr.root, "A")
+	r := newItemsRouter(db, &tr.userID)
+
+	w := doJSON(t, r, http.MethodGet, "/api/v1/workspace", nil)
+	wantStatus(t, w, http.StatusOK)
+	ws := decode[model.Item](t, w)
+	if ws.ID != tr.root || ws.Type != model.ItemTypeWorkspace || !slices.Equal(ws.ChildIDs, []uuid.UUID{a}) {
+		t.Errorf("workspace = %+v, want %v holding A", ws, tr.root)
+	}
+
+	db.Errs["GetWorkspace"] = errors.New("boom")
+	wantStatus(t, doJSON(t, r, http.MethodGet, "/api/v1/workspace", nil), http.StatusInternalServerError)
+	wantStatus(t, doJSON(t, newItemsRouter(db, nil), http.MethodGet, "/api/v1/workspace", nil), http.StatusUnauthorized)
 }
 
 func TestListPagesEmptyAndErrors(t *testing.T) {

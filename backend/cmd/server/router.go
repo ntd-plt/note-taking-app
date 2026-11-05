@@ -40,6 +40,7 @@ func NewRouter(authService *services.AuthService, userService *services.UserServ
 
 		protected.GET("/items/:id", itemsService.GetItem)
 		protected.POST("/items/:id/duplicate", itemsService.DuplicateItem)
+		protected.GET("/workspace", itemsService.GetWorkspace)
 		protected.GET("/pages", itemsService.ListPages)
 		protected.POST("/ops", itemsService.ApplyOps)
 	}

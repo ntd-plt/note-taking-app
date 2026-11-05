@@ -11,6 +11,7 @@ import { buildPageTree, visibleRows } from './pageTree'
 import {
   knownChildIds,
   placementToMove,
+  pointerToDrop,
   resolveSidebarDrop,
 } from './sidebarDrop'
 import type { SidebarDrop } from './sidebarDrop'
@@ -187,5 +188,26 @@ describe('knownChildIds', () => {
     const s = setup()
     const weekly = s.pages().find((p) => p.id === s.ids['Weekly sync'])!
     expect(knownChildIds(weekly.parentId!, s.pages())).toBeUndefined()
+  })
+})
+
+describe('pointerToDrop', () => {
+  const rows = [
+    { id: 'a', top: 0, bottom: 40 },
+    { id: 'b', top: 40, bottom: 80 },
+  ]
+
+  it('drops onto the middle of a row and between rows at its edges', () => {
+    expect(pointerToDrop(rows, 20)).toEqual({ kind: 'onto', pageId: 'a' })
+    expect(pointerToDrop(rows, 5)).toEqual({ kind: 'gap', index: 0 })
+    expect(pointerToDrop(rows, 35)).toEqual({ kind: 'gap', index: 1 })
+    expect(pointerToDrop(rows, 45)).toEqual({ kind: 'gap', index: 1 })
+    expect(pointerToDrop(rows, 79)).toEqual({ kind: 'gap', index: 2 })
+  })
+
+  it('drops above the first and below the last row', () => {
+    expect(pointerToDrop(rows, -10)).toEqual({ kind: 'gap', index: 0 })
+    expect(pointerToDrop(rows, 500)).toEqual({ kind: 'gap', index: 2 })
+    expect(pointerToDrop([], 0)).toBeNull()
   })
 })

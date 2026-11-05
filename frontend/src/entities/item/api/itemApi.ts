@@ -12,6 +12,9 @@ export const fetchItem = async (id: string): Promise<OpenedItem> =>
     ),
   )
 
+export const fetchWorkspace = async (): Promise<Item> =>
+  fromWireItem(await rawApiClient.get<WireItem>(`${API}/workspace`))
+
 export const fetchPages = async (): Promise<Item[]> =>
   (await rawApiClient.get<WireItem[]>(`${API}/pages`)).map(fromWireItem)
 

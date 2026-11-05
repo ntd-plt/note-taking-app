@@ -1,8 +1,10 @@
 export * from './model/types'
 export * from './model/props'
+export { registerOpenEditor, flushOpenEditor } from './model/openEditor'
 export {
   fetchItem,
   fetchPages,
+  fetchWorkspace,
   applyOps,
   duplicateItem,
   opIndex,
@@ -12,6 +14,7 @@ export {
   changesPages,
   useItem,
   usePages,
+  useWorkspace,
   useApplyOps,
   useDuplicateItem,
 } from './api/queries'

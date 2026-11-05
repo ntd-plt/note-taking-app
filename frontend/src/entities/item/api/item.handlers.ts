@@ -1,5 +1,5 @@
-// MSW handlers for the item tree endpoints: GET /items/:id, GET /pages, POST /ops
-// and POST /items/:id/duplicate. The rules live in mockTree.ts.
+// MSW handlers for the item tree endpoints: GET /items/:id, GET /workspace,
+// GET /pages, POST /ops and POST /items/:id/duplicate. The rules live in mockTree.ts.
 import { http, HttpResponse } from 'msw'
 import { seedTree } from './mockSeed'
 import type { SeedNode } from './mockSeed'
@@ -31,6 +31,10 @@ const fail = (err: unknown) => {
 }
 
 export const itemHandlers = [
+  http.get(`${API}/workspace`, () =>
+    HttpResponse.json(state.tree.items.get(state.tree.workspaceId)),
+  ),
+
   http.get(`${API}/pages`, () => HttpResponse.json(state.tree.listPages())),
 
   http.get(`${API}/items/:id`, ({ params }) => {

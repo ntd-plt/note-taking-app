@@ -1,17 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Op } from '../model/types'
-import { applyOps, duplicateItem, fetchItem, fetchPages } from './itemApi'
+import {
+  applyOps,
+  duplicateItem,
+  fetchItem,
+  fetchPages,
+  fetchWorkspace,
+} from './itemApi'
 
 export const itemKeys = {
   item: (id: string) => ['item', id] as const,
+  items: ['item'] as const,
   pages: ['pages'] as const,
+  workspace: ['workspace'] as const,
 }
 
+// The editor loads an item once and then owns it: a refetch remounts the editor,
+// so it happens only when asked for (after a failed save, or a change made
+// outside the editor), never on focus or remount. The editor marks the item
+// stale after each save, so opening it again later loads it fresh.
 export function useItem(id: string | undefined) {
   return useQuery({
     queryKey: itemKeys.item(id ?? ''),
     queryFn: () => fetchItem(id!),
     enabled: !!id,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  })
+}
+
+// The workspace id never changes, so it is fetched once.
+export function useWorkspace() {
+  return useQuery({
+    queryKey: itemKeys.workspace,
+    queryFn: fetchWorkspace,
+    staleTime: Infinity,
   })
 }
 

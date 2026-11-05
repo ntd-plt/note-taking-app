@@ -1,15 +1,16 @@
-import { useParams } from '@tanstack/react-router'
-import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { AppSidebar } from '@/pages/items'
-import { TrashView } from './TrashView'
+import { SidebarInset, SidebarProvider } from '#/components/ui/sidebar'
+import { PageSidebar } from '#/widgets/page-sidebar'
 
+// The trash is rebuilt for pages later; until then it is a placeholder.
 export function TrashPage() {
-  const params = useParams({ strict: false })
   return (
     <SidebarProvider>
-      <AppSidebar inTrash />
-      <SidebarInset className="bg-background flex flex-col h-screen overflow-hidden">
-        <TrashView folderId={params.itemId ?? null} />
+      <PageSidebar />
+      <SidebarInset className="flex h-screen flex-col overflow-hidden bg-background">
+        <div className="flex flex-1 flex-col items-center justify-center gap-1 text-sm text-muted-foreground">
+          <span className="text-2xl">🗑️</span>
+          <span>The trash is coming back soon.</span>
+        </div>
       </SidebarInset>
     </SidebarProvider>
   )

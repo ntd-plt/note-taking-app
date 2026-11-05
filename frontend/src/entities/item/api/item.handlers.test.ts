@@ -6,6 +6,7 @@ import {
   duplicateItem,
   fetchItem,
   fetchPages,
+  fetchWorkspace,
   opIndex,
   pageName,
 } from '#/entities/item'
@@ -117,6 +118,14 @@ describe('reading the sample tree', () => {
     expect(opened.items[0].id).toBe(mockPageIds()['Reading list'])
     expect(opened.focusId).toBe(block.id)
     expect(opened.ancestors.map(pageName)).toEqual(['Personal'])
+  })
+
+  it('returns the workspace, even with no pages', async () => {
+    resetMockTree({ empty: true })
+    const w = await fetchWorkspace()
+    expect(w.id).toBe(ws())
+    expect(w.type).toBe('workspace')
+    expect(w.childIds).toEqual([])
   })
 
   it('does not open the workspace', async () => {

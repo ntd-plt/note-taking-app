@@ -125,6 +125,30 @@ func (s *ItemsService) GetItem(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// GetWorkspace godoc
+// @Summary      Get the workspace root
+// @Description  Returns the user's hidden workspace item. Its child_ids are the top-level pages; create a top-level page with it as parent_id.
+// @Tags         items
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  model.Item
+// @Failure      401  {object}  map[string]string
+// @Failure      404  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /workspace [get]
+func (s *ItemsService) GetWorkspace(c *gin.Context) {
+	userID, ok := currentUser(c)
+	if !ok {
+		return
+	}
+	ws, err := s.db.GetWorkspace(userID)
+	if err != nil {
+		respondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, ws)
+}
+
 // ListPages godoc
 // @Summary      List pages for the sidebar
 // @Description  Returns every page that is not in the trash, in document order. parent_id is the direct parent (a block, a page or the workspace); parent_page_id is the nearest page above, left out for a top-level page.

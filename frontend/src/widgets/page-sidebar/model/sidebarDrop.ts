@@ -93,3 +93,23 @@ export function placementToMove(
   if (siblings.indexOf(draggedId) === position) return null
   return { op: 'move', id: draggedId, parentId: placement.parentId, position }
 }
+
+// pointerToDrop maps the pointer's y to a drop over the visible rows (each
+// measured as top/bottom, in row order): the middle half of a row is onto that
+// page, its top and bottom quarters are the gaps above and below it.
+export function pointerToDrop(
+  rows: readonly { id: string; top: number; bottom: number }[],
+  y: number,
+): SidebarDrop | null {
+  if (rows.length === 0) return null
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]
+    if (y < r.top) return { kind: 'gap', index: i }
+    if (y > r.bottom) continue
+    const quarter = (r.bottom - r.top) / 4
+    if (y < r.top + quarter) return { kind: 'gap', index: i }
+    if (y > r.bottom - quarter) return { kind: 'gap', index: i + 1 }
+    return { kind: 'onto', pageId: r.id }
+  }
+  return { kind: 'gap', index: rows.length }
+}

@@ -571,6 +571,40 @@ paths:
       summary: Update the current user
       tags:
       - users
+  /workspace:
+    get:
+      description: Returns the user's hidden workspace item. Its child_ids are the
+        top-level pages; create a top-level page with it as parent_id.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/backend_internal_model.Item'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get the workspace root
+      tags:
+      - items
 securityDefinitions:
   BearerAuth:
     description: Type "Bearer" followed by a space and the JWT access token.
