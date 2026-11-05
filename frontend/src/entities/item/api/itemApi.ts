@@ -1,7 +1,12 @@
 import { ApiError, rawApiClient } from '#/shared/api/client'
-import type { Item, OpenedItem, Op } from '../model/types'
-import { fromWireItem, fromWireOpenedItem, toWireOp } from './wire'
-import type { WireItem, WireOpenedItem } from './wire'
+import type { Item, OpenedItem, Op, TrashedPage } from '../model/types'
+import {
+  fromWireItem,
+  fromWireOpenedItem,
+  fromWireTrash,
+  toWireOp,
+} from './wire'
+import type { WireItem, WireOpenedItem, WireTrash } from './wire'
 
 const API = '/api/v1'
 
@@ -30,6 +35,24 @@ export const duplicateItem = async (id: string): Promise<Item> =>
       `${API}/items/${encodeURIComponent(id)}/duplicate`,
     ),
   )
+
+export const fetchTrash = async (): Promise<TrashedPage[]> =>
+  fromWireTrash(await rawApiClient.get<WireTrash>(`${API}/trash`))
+
+// restoreFromTrash puts a page back at the end of the top level. To put it
+// somewhere else, send a restore op.
+export const restoreFromTrash = async (id: string): Promise<void> => {
+  await rawApiClient.post<null>(
+    `${API}/trash/${encodeURIComponent(id)}/restore`,
+  )
+}
+
+export const deleteFromTrash = async (id: string): Promise<void> => {
+  await rawApiClient.delete<null>(`${API}/trash/${encodeURIComponent(id)}`)
+}
+
+export const emptyTrash = async (): Promise<number> =>
+  (await rawApiClient.delete<{ deleted: number }>(`${API}/trash`)).deleted
 
 // opIndex returns the index of the operation a batch was rejected for, if any.
 export function opIndex(err: unknown): number | undefined {

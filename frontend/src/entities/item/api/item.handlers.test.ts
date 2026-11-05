@@ -6,12 +6,21 @@ import {
   duplicateItem,
   fetchItem,
   fetchPages,
+  deleteFromTrash,
+  emptyTrash,
+  fetchTrash,
   fetchWorkspace,
   opIndex,
+  restoreFromTrash,
   pageName,
 } from '#/entities/item'
 import type { Item, Op } from '#/entities/item'
-import { mockPageIds, mockTree, resetMockTree } from './item.handlers'
+import {
+  TRASH_RETENTION_MS,
+  mockPageIds,
+  mockTree,
+  resetMockTree,
+} from './item.handlers'
 
 afterEach(() => resetMockTree())
 
@@ -341,5 +350,104 @@ describe('changesPages', () => {
         { op: 'move', id: 'x', parentId: 'p' },
       ]),
     ).toBe(false)
+  })
+})
+
+describe('the trash', () => {
+  const trash = (pid: string): Op => ({ op: 'trash', id: pid })
+  const names = async () => (await fetchTrash()).map((t) => pageName(t.page))
+
+  it('lists trashed pages, newest first, without the pages inside them', async () => {
+    const page = mockPageIds()
+    await applyOps([trash(page['Website Redesign'])])
+    await new Promise((r) => setTimeout(r, 5)) // distinct trashed_at times
+    await applyOps([trash(page['Ideas inbox'])])
+    expect(await names()).toEqual(['Ideas inbox', 'Website Redesign'])
+    const [first] = await fetchTrash()
+    expect(Date.parse(first.purgeAt) - Date.parse(first.page.trashedAt!)).toBe(
+      TRASH_RETENTION_MS,
+    )
+  })
+
+  it('restores to the end of the top level, or to a given place', async () => {
+    const page = mockPageIds()
+    const work = mockTree().items.get(page.Work)!
+    const at = work.child_ids!.indexOf(page['Website Redesign'])
+    await applyOps([trash(page['Website Redesign'])])
+
+    await applyOps([
+      {
+        op: 'restore',
+        id: page['Website Redesign'],
+        parentId: page.Work,
+        position: at,
+      },
+    ])
+    expect(mockTree().items.get(page.Work)!.child_ids).toEqual(work.child_ids)
+    // What was inside came back with it.
+    expect((await fetchPages()).map(pageName)).toContain('Design checklist')
+
+    await applyOps([trash(page['Website Redesign'])])
+    await restoreFromTrash(page['Website Redesign'])
+    expect(
+      (await fetchPages()).filter((p) => !p.parentPageId).map(pageName),
+    ).toEqual([
+      'Getting Started',
+      'Work',
+      'Personal',
+      'Ideas inbox',
+      'Website Redesign',
+    ])
+    expect(await names()).toEqual([])
+  })
+
+  it('refuses a page inside a trashed page, and a place inside the page', async () => {
+    const page = mockPageIds()
+    await applyOps([trash(page.Work)])
+    await expect(restoreFromTrash(page['Design checklist'])).rejects.toThrow(
+      /restore that page instead/,
+    )
+    await expect(deleteFromTrash(page['Design checklist'])).rejects.toThrow(
+      /not in the trash/,
+    )
+    const inside = mockTree().items.get(page['Website Redesign'])!.child_ids![0]
+    await expect(
+      applyOps([{ op: 'restore', id: page.Work, parentId: inside }]),
+    ).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('deletes a page for good, with everything in it, and empties the trash', async () => {
+    const page = mockPageIds()
+    const inside = mockTree().items.get(page.Work)!.child_ids!
+    await applyOps([trash(page.Work)])
+    await applyOps([trash(page.Personal)])
+    await deleteFromTrash(page.Work)
+    expect(mockTree().has(page.Work)).toBe(false)
+    expect(mockTree().has(page['Design checklist'])).toBe(false)
+    expect(inside.some((x) => mockTree().has(x))).toBe(false)
+    expect(await emptyTrash()).toBe(1)
+    expect(await names()).toEqual([])
+    expect((await fetchPages()).map(pageName)).toEqual([
+      'Getting Started',
+      'How this app works',
+      'Ideas inbox',
+    ])
+  })
+
+  it('hides expired pages and removes them on the next trash', async () => {
+    const page = mockPageIds()
+    await applyOps([trash(page.Personal)])
+    const old = mockTree().items.get(page.Personal)!
+    mockTree().items.set(page.Personal, {
+      ...old,
+      trashed_at: new Date(
+        Date.now() - TRASH_RETENTION_MS - 1000,
+      ).toISOString(),
+    })
+    expect(await names()).toEqual([])
+    expect(mockTree().has(page.Personal)).toBe(true)
+    await applyOps([trash(page['Ideas inbox'])])
+    expect(mockTree().has(page.Personal)).toBe(false)
+    expect(await names()).toEqual(['Ideas inbox'])
   })
 })

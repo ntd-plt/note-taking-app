@@ -1,6 +1,13 @@
 // The JSON shapes of the item endpoints, and conversions to and from the client
 // types. Field names are mapped by hand: props must keep their keys exactly.
-import type { Item, ItemType, OpenedItem, Op, Props } from '../model/types'
+import type {
+  Item,
+  ItemType,
+  OpenedItem,
+  Op,
+  Props,
+  TrashedPage,
+} from '../model/types'
 
 export interface WireItem {
   id: string
@@ -20,6 +27,10 @@ export interface WireOpenedItem {
   ancestors: WireItem[]
   focus_id: string | null
   in_trash: boolean
+}
+
+export interface WireTrash {
+  pages: (WireItem & { purge_at: string })[]
 }
 
 export interface WireOp {
@@ -54,10 +65,16 @@ export function fromWireOpenedItem(w: WireOpenedItem): OpenedItem {
   }
 }
 
+export const fromWireTrash = (w: WireTrash): TrashedPage[] =>
+  w.pages.map(({ purge_at, ...page }) => ({
+    page: fromWireItem(page),
+    purgeAt: purge_at,
+  }))
+
 export function toWireOp(op: Op): WireOp {
   const out: WireOp = { op: op.op, id: op.id }
   if ('type' in op && op.type !== undefined) out.type = op.type
-  if ('parentId' in op) out.parent_id = op.parentId
+  if ('parentId' in op && op.parentId !== undefined) out.parent_id = op.parentId
   if ('position' in op && op.position !== undefined) out.position = op.position
   if ('props' in op && op.props !== undefined) out.props = op.props
   return out

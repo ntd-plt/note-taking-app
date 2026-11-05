@@ -7,6 +7,10 @@ export {
   fetchWorkspace,
   applyOps,
   duplicateItem,
+  fetchTrash,
+  restoreFromTrash,
+  deleteFromTrash,
+  emptyTrash,
   opIndex,
 } from './api/itemApi'
 export {
@@ -17,5 +21,9 @@ export {
   useWorkspace,
   useApplyOps,
   useDuplicateItem,
+  useTrash,
+  useRestoreFromTrash,
+  useDeleteFromTrash,
+  useEmptyTrash,
 } from './api/queries'
 export type { ApplyOpsInput } from './api/queries'

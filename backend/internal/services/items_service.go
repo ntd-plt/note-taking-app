@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"backend/internal/database"
 	"backend/internal/model"
@@ -16,10 +17,13 @@ import (
 
 type ItemsService struct {
 	db database.ItemsDataSource
+	// retention is how long a page stays in the trash before it is removed.
+	retention time.Duration
+	now       func() time.Time
 }
 
-func NewItemsService(db database.ItemsDataSource) *ItemsService {
-	return &ItemsService{db: db}
+func NewItemsService(db database.ItemsDataSource, trashRetention time.Duration) *ItemsService {
+	return &ItemsService{db: db, retention: trashRetention, now: time.Now}
 }
 
 // ItemResponse is a page ready to open in the editor. Items is the page itself

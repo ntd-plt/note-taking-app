@@ -94,8 +94,12 @@ func validateOp(i int, op model.Op) *opError {
 		if op.Type != nil || op.Props != nil || placed {
 			return badOp(i, string(op.Op)+" takes only an id")
 		}
+	case model.OpRestore:
+		if op.Type != nil || op.Props != nil {
+			return badOp(i, "restore only takes an id, parent_id and position")
+		}
 	default:
-		return badOp(i, "op must be one of create, update, move, delete, trash")
+		return badOp(i, "op must be one of create, update, move, delete, trash, restore")
 	}
 	return nil
 }
@@ -121,7 +125,7 @@ func respondOpError(c *gin.Context, err error) {
 
 // ApplyOps godoc
 // @Summary      Apply a batch of changes
-// @Description  Applies up to 500 create, update, move, delete and trash operations in order, all-or-nothing. Ids are chosen by the client. position is an index into the parent's child_ids when the operation runs, not counting the item itself; without it the item goes at the end, except that a page added to the end of a page goes before its trailing empty paragraph. update merges props key by key: null values, and wrong values for keys the type relies on, are ignored. Rejected: unknown types, other users' items, items inside a trashed page, positions out of range, cycles, delete on a page, trash on a block, changing between page and block, a heading without a level, and props over 64 KB. A rejection names the failing operation in op_index.
+// @Description  Applies up to 500 create, update, move, delete, trash and restore operations in order, all-or-nothing. restore takes a page out of the trash and puts it under parent_id at position, or at the end of the top level without parent_id; a page inside a trashed page cannot be restored on its own. A batch that moves pages to the trash also removes the user's pages that have been in the trash longer than the retention period. Ids are chosen by the client. position is an index into the parent's child_ids when the operation runs, not counting the item itself; without it the item goes at the end, except that a page added to the end of a page goes before its trailing empty paragraph. update merges props key by key: null values, and wrong values for keys the type relies on, are ignored. Rejected: unknown types, other users' items, items inside a trashed page, positions out of range, cycles, delete on a page, trash on a block, changing between page and block, a heading without a level, and props over 64 KB. A rejection names the failing operation in op_index.
 // @Tags         items
 // @Accept       json
 // @Produce      json
@@ -163,7 +167,21 @@ func (s *ItemsService) ApplyOps(c *gin.Context) {
 		respondOpError(c, err)
 		return
 	}
+	if movesToTrash(req.Ops) {
+		s.purgeExpiredTrash(userID)
+	}
 	c.Status(http.StatusNoContent)
+}
+
+// movesToTrash reports whether a batch can put pages in the trash: trash does,
+// and so does delete when the deleted block holds pages.
+func movesToTrash(ops []model.Op) bool {
+	for _, op := range ops {
+		if op.Op == model.OpTrash || op.Op == model.OpDelete {
+			return true
+		}
+	}
+	return false
 }
 
 // DuplicateItem godoc

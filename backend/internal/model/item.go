@@ -79,15 +79,16 @@ type ItemLocation struct {
 type OpType string
 
 const (
-	OpCreate OpType = "create"
-	OpUpdate OpType = "update"
-	OpMove   OpType = "move"
-	OpDelete OpType = "delete"
-	OpTrash  OpType = "trash"
+	OpCreate  OpType = "create"
+	OpUpdate  OpType = "update"
+	OpMove    OpType = "move"
+	OpDelete  OpType = "delete"
+	OpTrash   OpType = "trash"
+	OpRestore OpType = "restore"
 )
 
 type Op struct {
-	Op       OpType     `json:"op" enums:"create,update,move,delete,trash"`
+	Op       OpType     `json:"op" enums:"create,update,move,delete,trash,restore"`
 	ID       uuid.UUID  `json:"id"`
 	Type     *ItemType  `json:"type,omitempty"`
 	ParentID *uuid.UUID `json:"parent_id,omitempty"`

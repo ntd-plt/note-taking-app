@@ -13,15 +13,18 @@ import type { DefaultReactSuggestionItem } from '@blocknote/react'
 import { BlockNoteView } from '@blocknote/shadcn'
 import '@blocknote/shadcn/style.css'
 import { FileText } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   DEFAULT_PAGE_ICON,
   DEFAULT_PAGE_NAME,
   registerOpenEditor,
+  restoreFromTrash,
 } from '#/entities/item'
 import type { OpenedItem, Op } from '#/entities/item'
 import { fromBlockNote, toBlockNote } from '../model/blocks'
 import type { BNBlock } from '../model/blocks'
 import { PageSaver } from '../model/pageSaver'
+import type { TrashedBlock } from '../model/pageSaver'
 import { schema } from '../model/schema'
 import type { EditorBlock, PageEditor } from '../model/schema'
 import { BlockSideMenu, DragStartContext } from './BlockSideMenu'
@@ -69,6 +72,34 @@ function slashItems(editor: PageEditor): DefaultReactSuggestionItem[] {
   return items
 }
 
+// putBack re-inserts a trashed child page block where it was: after the block
+// that was before it, else first in its parent, else at the end of the page
+// (before the trailing paragraph) when its old place is gone. The next save sees
+// the page block again and restores the page.
+function putBack(editor: PageEditor, pageId: string, t: TrashedBlock) {
+  if (editor.getBlock(t.id)) return
+  const block = {
+    id: t.id,
+    type: 'page' as const,
+    props: t.props as { name: string; icon: string },
+  }
+  if (t.afterId && editor.getBlock(t.afterId)) {
+    editor.insertBlocks([block], t.afterId, 'after')
+    return
+  }
+  const parent = t.parentId === pageId ? null : editor.getBlock(t.parentId)
+  if (parent) {
+    const first = parent.children.at(0)
+    if (first) editor.insertBlocks([block], first, 'before')
+    else editor.updateBlock(parent, { children: [block] })
+    return
+  }
+  const doc = editor.document
+  const anchor = t.parentId === pageId && !t.afterId ? doc.at(0) : doc.at(-1)
+  if (anchor) editor.insertBlocks([block], anchor, 'before')
+  else editor.replaceBlocks(doc, [block])
+}
+
 export interface BlockEditorProps {
   opened: OpenedItem
   editable: boolean
@@ -113,6 +144,45 @@ export function BlockEditor({
     callbacks.current = { send, onSaveFailed, onSavingChange }
   })
 
+  // A child page removed in the editor goes to the trash on the next save; the
+  // toast offers to put it back. Once the editor is gone, Undo restores the
+  // pages to the top level instead.
+  const mounted = React.useRef(true)
+  React.useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
+  const onTrashed = (pages: TrashedBlock[]) => {
+    const name = (t: TrashedBlock) =>
+      typeof t.props.name === 'string' ? t.props.name : DEFAULT_PAGE_NAME
+    toast.success(
+      pages.length === 1
+        ? `Moved "${name(pages[0])}" to the trash`
+        : `Moved ${pages.length} pages to the trash`,
+      {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            if (mounted.current) {
+              editor.transact(() => {
+                for (const t of pages) putBack(editor, pageId, t)
+              })
+              void saver.flush()
+            } else {
+              void Promise.all(pages.map((t) => restoreFromTrash(t.id)))
+            }
+          },
+        },
+      },
+    )
+  }
+  const onTrashedRef = React.useRef(onTrashed)
+  React.useEffect(() => {
+    onTrashedRef.current = onTrashed
+  })
+
   const [saver] = React.useState(
     () =>
       new PageSaver({
@@ -121,6 +191,7 @@ export function BlockEditor({
         send: (ops, refresh) => callbacks.current.send(ops, refresh),
         onError: (err) => callbacks.current.onSaveFailed(err),
         onSavingChange: (s) => callbacks.current.onSavingChange(s),
+        onTrashed: (pages) => onTrashedRef.current(pages),
       }),
   )
 

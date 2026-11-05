@@ -72,5 +72,14 @@ export type Op =
   | { op: 'move'; id: string; parentId: string; position?: number }
   | { op: 'delete'; id: string }
   | { op: 'trash'; id: string }
+  // Takes a page out of the trash, to parentId at position, or to the end of
+  // the top level without parentId.
+  | { op: 'restore'; id: string; parentId?: string; position?: number }
 
 export const MAX_OPS_PER_BATCH = 500
+
+// A page in the trash, and when it will be removed for good.
+export interface TrashedPage {
+  page: Item
+  purgeAt: string
+}

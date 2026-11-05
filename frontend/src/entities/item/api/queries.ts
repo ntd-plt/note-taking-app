@@ -2,10 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Op } from '../model/types'
 import {
   applyOps,
+  deleteFromTrash,
   duplicateItem,
+  emptyTrash,
   fetchItem,
   fetchPages,
+  fetchTrash,
   fetchWorkspace,
+  restoreFromTrash,
 } from './itemApi'
 
 export const itemKeys = {
@@ -13,6 +17,7 @@ export const itemKeys = {
   items: ['item'] as const,
   pages: ['pages'] as const,
   workspace: ['workspace'] as const,
+  trash: ['trash'] as const,
 }
 
 // The editor loads an item once and then owns it: a refetch remounts the editor,
@@ -43,6 +48,29 @@ export function usePages() {
   return useQuery({ queryKey: itemKeys.pages, queryFn: fetchPages })
 }
 
+export function useTrash() {
+  return useQuery({ queryKey: itemKeys.trash, queryFn: fetchTrash })
+}
+
+// useTrashAction wraps a trash endpoint: afterwards the trash and the sidebar
+// are refetched, and so is any open page, which may have held a restored page.
+function useTrashAction<T>(fn: (arg: T) => Promise<unknown>) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: itemKeys.trash }),
+        queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
+        queryClient.invalidateQueries({ queryKey: itemKeys.items }),
+      ]),
+  })
+}
+
+export const useRestoreFromTrash = () => useTrashAction(restoreFromTrash)
+export const useDeleteFromTrash = () => useTrashAction(deleteFromTrash)
+export const useEmptyTrash = () => useTrashAction((_: void) => emptyTrash())
+
 // changesPages reports whether a batch can change the sidebar without the caller
 // knowing item types: creating a page, trashing one, or deleting a block (pages
 // inside it go to the trash). Moves and updates of pages must say so themselves.
@@ -50,6 +78,7 @@ export const changesPages = (ops: Op[]) =>
   ops.some(
     (op) =>
       op.op === 'trash' ||
+      op.op === 'restore' ||
       op.op === 'delete' ||
       (op.op === 'create' && op.type === 'page'),
   )
@@ -66,7 +95,10 @@ export function useApplyOps() {
     mutationFn: ({ ops }: ApplyOpsInput) => applyOps(ops),
     onSuccess: (_data, { ops, refreshPages }) => {
       if (refreshPages ?? changesPages(ops)) {
-        return queryClient.invalidateQueries({ queryKey: itemKeys.pages })
+        return Promise.all([
+          queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
+          queryClient.invalidateQueries({ queryKey: itemKeys.trash }),
+        ])
       }
     },
   })

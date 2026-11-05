@@ -70,6 +70,15 @@ func (s *pgTreeStore) Delete(id uuid.UUID) error {
 	return err
 }
 
+func (s *pgTreeStore) Trashed() ([]model.Item, error) {
+	rows, err := s.tx.Query(s.ctx, "SELECT "+itemColumns+
+		" FROM items i WHERE i.user_id = $1 AND i.type = 'page' AND i.trashed_at IS NOT NULL", s.userID)
+	if err != nil {
+		return nil, err
+	}
+	return collectItems(rows)
+}
+
 func (s *pgTreeStore) CheckChildIDs(parentIDs []uuid.UUID) error {
 	if len(parentIDs) == 0 {
 		return nil
@@ -120,6 +129,33 @@ func (db *PostgreItemsDataSource) ApplyOps(userID uuid.UUID, ops []model.Op) err
 	return db.inTree(userID, func(s tree.Store, workspaceID uuid.UUID, now time.Time) error {
 		return tree.Apply(s, workspaceID, ops, now)
 	})
+}
+
+// ListTrash reads under the tree lock too, so it never sees half a batch.
+func (db *PostgreItemsDataSource) ListTrash(userID uuid.UUID) ([]model.Item, error) {
+	var pages []model.Item
+	err := db.inTree(userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
+		var err error
+		pages, err = tree.ListTrash(s)
+		return err
+	})
+	return pages, err
+}
+
+func (db *PostgreItemsDataSource) DeleteFromTrash(userID, id uuid.UUID) error {
+	return db.inTree(userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
+		return tree.DeleteFromTrash(s, id)
+	})
+}
+
+func (db *PostgreItemsDataSource) EmptyTrash(userID uuid.UUID, before *time.Time) (int, error) {
+	var n int
+	err := db.inTree(userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
+		var err error
+		n, err = tree.EmptyTrash(s, before)
+		return err
+	})
+	return n, err
 }
 
 func (db *PostgreItemsDataSource) Duplicate(userID, id uuid.UUID) (model.Item, error) {

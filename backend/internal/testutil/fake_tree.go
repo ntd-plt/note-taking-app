@@ -74,6 +74,17 @@ func (s *fakeTreeStore) Delete(id uuid.UUID) error {
 	return nil
 }
 
+func (s *fakeTreeStore) Trashed() ([]model.Item, error) {
+	var out []model.Item
+	for _, it := range s.f.Items {
+		if it.UserID == s.userID && it.Type == model.ItemTypePage && it.TrashedAt != nil {
+			out = append(out, it)
+		}
+	}
+	slices.SortFunc(out, func(a, b model.Item) int { return slices.Compare(a.ID[:], b.ID[:]) })
+	return out, nil
+}
+
 func (s *fakeTreeStore) CheckChildIDs(parentIDs []uuid.UUID) error {
 	cmp := func(a, b uuid.UUID) int { return slices.Compare(a[:], b[:]) }
 	for _, pid := range parentIDs {
@@ -117,6 +128,41 @@ func (f *FakeDatabase) ApplyOps(userID uuid.UUID, ops []model.Op) error {
 	return f.inTree(userID, func(s tree.Store, workspaceID uuid.UUID, now time.Time) error {
 		return tree.Apply(s, workspaceID, ops, now)
 	})
+}
+
+func (f *FakeDatabase) ListTrash(userID uuid.UUID) ([]model.Item, error) {
+	if err := f.Errs["ListTrash"]; err != nil {
+		return nil, err
+	}
+	var pages []model.Item
+	err := f.inTree(userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
+		var err error
+		pages, err = tree.ListTrash(s)
+		return err
+	})
+	return pages, err
+}
+
+func (f *FakeDatabase) DeleteFromTrash(userID, id uuid.UUID) error {
+	if err := f.Errs["DeleteFromTrash"]; err != nil {
+		return err
+	}
+	return f.inTree(userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
+		return tree.DeleteFromTrash(s, id)
+	})
+}
+
+func (f *FakeDatabase) EmptyTrash(userID uuid.UUID, before *time.Time) (int, error) {
+	if err := f.Errs["EmptyTrash"]; err != nil {
+		return 0, err
+	}
+	var n int
+	err := f.inTree(userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
+		var err error
+		n, err = tree.EmptyTrash(s, before)
+		return err
+	})
+	return n, err
 }
 
 func (f *FakeDatabase) Duplicate(userID, id uuid.UUID) (model.Item, error) {

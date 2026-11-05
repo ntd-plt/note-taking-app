@@ -15,6 +15,7 @@ import {
   mockTree,
   resetMockTree,
 } from '#/entities/item/api/item.handlers'
+import { Toaster } from 'sonner'
 import { ItemsPage } from './ItemsPage'
 
 const router = vi.hoisted(() => {
@@ -68,6 +69,7 @@ function renderPage() {
   return render(
     <QueryClientProvider client={client}>
       <ItemsPage />
+      <Toaster />
     </QueryClientProvider>,
   )
 }
@@ -284,6 +286,51 @@ describe('ItemsPage', () => {
       expect(mockTree().items.get(ids.Work)?.trashed_at).toBeTruthy()
       // A page that was not inside stays open.
       expect(router.get().itemId).toBe(ids['Ideas inbox'])
+    })
+
+    it('undoes a trash from the toast, back to the same place', async () => {
+      const ids = mockPageIds()
+      const before = [
+        ...mockTree().items.get(mockTree().workspaceId)!.child_ids!,
+      ]
+      router.set({ itemId: ids.Work })
+      renderPage()
+      expect(await screen.findByDisplayValue('Work')).toBeTruthy()
+      await choose('Work', 'Move to trash')
+      await waitFor(() => expect(router.get().itemId).toBeUndefined())
+      fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+      await waitFor(() =>
+        expect(mockTree().items.get(mockTree().workspaceId)!.child_ids).toEqual(
+          before,
+        ),
+      )
+      // It was open, so it opens again.
+      await waitFor(() => expect(router.get().itemId).toBe(ids.Work))
+      expect(mockTree().items.get(ids.Work)?.trashed_at).toBeFalsy()
+    })
+
+    it('undoes a trash of a page inside a block, back into that block', async () => {
+      const ids = mockPageIds()
+      const meetings = mockTree().items.get(ids['Weekly sync'])!.parent_id!
+      renderPage()
+      await waitFor(() => expect(rowNames()).toHaveLength(4))
+      fireEvent.click(
+        within(tree())
+          .getByText('Work')
+          .closest('[role=treeitem]')!
+          .querySelector('[aria-label=Expand]')!,
+      )
+      await choose(
+        'Weekly sync',
+        'Move to trash',
+        screen.getByRole('list', { name: 'Favorites' }),
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+      await waitFor(() =>
+        expect(mockTree().items.get(meetings)!.child_ids).toEqual([
+          ids['Weekly sync'],
+        ]),
+      )
     })
 
     it('leaves the open page when it is inside the trashed one', async () => {

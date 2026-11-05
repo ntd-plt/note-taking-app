@@ -20,10 +20,13 @@ export const pageBlockSpec = createReactBlockSpec(
         params={{ itemId: block.id }}
         contentEditable={false}
         data-page-link=""
-        className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 font-medium underline decoration-border underline-offset-4 hover:bg-muted/70"
+        // BlockNote styles every link in the editor (`.bn-editor a`, unlayered,
+        // so it beats utility classes on the <a>), so the look of the name is
+        // set on the spans inside it.
+        className="group/page-link flex w-full items-center gap-2 rounded-md px-1 py-0.5 no-underline! hover:bg-muted/70"
       >
         <span>{block.props.icon || DEFAULT_PAGE_ICON}</span>
-        <span className="truncate">
+        <span className="truncate font-normal text-primary underline decoration-primary/40 underline-offset-4 group-hover/page-link:decoration-primary">
           {block.props.name || DEFAULT_PAGE_NAME}
         </span>
       </Link>

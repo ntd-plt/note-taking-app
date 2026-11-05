@@ -1,6 +1,14 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Toaster } from 'sonner'
 import type { Op } from '#/entities/item'
 import { seedTree } from '#/entities/item/api/mockSeed'
 import { fromWireOpenedItem, toWireOp } from '#/entities/item/api/wire'
@@ -45,14 +53,17 @@ async function setup(pageName = 'Work', fail = false) {
   const onSaveFailed = vi.fn()
   let editor: PageEditor | undefined
   render(
-    <BlockEditor
-      opened={fromWireOpenedItem(tree.open(pageId))}
-      editable
-      send={send}
-      onSaveFailed={onSaveFailed}
-      onSavingChange={() => {}}
-      onReady={(e) => (editor = e)}
-    />,
+    <>
+      <Toaster />
+      <BlockEditor
+        opened={fromWireOpenedItem(tree.open(pageId))}
+        editable
+        send={send}
+        onSaveFailed={onSaveFailed}
+        onSavingChange={() => {}}
+        onReady={(e) => (editor = e)}
+      />
+    </>,
   )
   await waitFor(() => expect(editor).toBeDefined())
   const childTexts = (id: string) =>
@@ -138,6 +149,27 @@ describe('BlockEditor', () => {
     expect(s.childTexts(meetings.id)).toEqual([
       '[Weekly sync]',
       'Projects and meetings.',
+    ])
+  })
+
+  it('offers Undo for a child page removed in the editor, back in its spot', async () => {
+    const s = await setup()
+    const before = [...s.tree.items.get(s.pageId)!.child_ids!]
+    const redesign = s.editor.document[1]
+    act(() => s.editor.removeBlocks([redesign]))
+    await waitFor(
+      () => expect(s.tree.items.get(redesign.id)?.trashed_at).toBeTruthy(),
+      SAVED,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(s.editor.document[1].id).toBe(redesign.id)
+    await waitFor(
+      () => expect(s.tree.items.get(s.pageId)!.child_ids).toEqual(before),
+      SAVED,
+    )
+    expect(s.tree.items.get(redesign.id)?.trashed_at).toBeFalsy()
+    expect(s.sent.at(-1)).toEqual([
+      { op: 'restore', id: redesign.id, parentId: s.pageId, position: 1 },
     ])
   })
 

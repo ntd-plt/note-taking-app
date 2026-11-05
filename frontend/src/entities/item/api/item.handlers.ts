@@ -1,11 +1,13 @@
 // MSW handlers for the item tree endpoints: GET /items/:id, GET /workspace,
-// GET /pages, POST /ops and POST /items/:id/duplicate. The rules live in mockTree.ts.
+// GET /pages, POST /ops, POST /items/:id/duplicate and the /trash endpoints. The rules live in mockTree.ts.
 import { http, HttpResponse } from 'msw'
 import { seedTree } from './mockSeed'
 import type { SeedNode } from './mockSeed'
 import { MockTree, TreeError, validateBatch } from './mockTree'
 
 const API = '/api/v1'
+// How long a page stays in the trash, as the server's TRASH_RETENTION default.
+export const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 let state = seedTree()
 
@@ -20,6 +22,9 @@ export function resetMockTree(
 
 export const mockTree = () => state.tree
 export const mockPageIds = () => state.ids
+
+const expiredBefore = () =>
+  new Date(Date.now() - TRASH_RETENTION_MS).toISOString()
 
 const fail = (err: unknown) => {
   if (err instanceof TreeError) {
@@ -56,12 +61,53 @@ export const itemHandlers = [
       )
     }
     try {
-      state.tree.apply(validateBatch(body))
+      const ops = validateBatch(body)
+      state.tree.apply(ops)
+      // Like the server: a batch that moves pages to the trash also removes
+      // the ones past the retention period.
+      if (ops.some((op) => op.op === 'trash' || op.op === 'delete'))
+        state.tree.emptyTrash(expiredBefore())
       return new HttpResponse(null, { status: 204 })
     } catch (err) {
       return fail(err)
     }
   }),
+
+  http.get(`${API}/trash`, () => {
+    const cutoff = expiredBefore()
+    const pages = state.tree
+      .trashed()
+      .filter((p) => p.trashed_at! >= cutoff)
+      .map((p) => ({
+        ...p,
+        purge_at: new Date(
+          Date.parse(p.trashed_at!) + TRASH_RETENTION_MS,
+        ).toISOString(),
+      }))
+    return HttpResponse.json({ pages })
+  }),
+
+  http.post(`${API}/trash/:id/restore`, ({ params }) => {
+    try {
+      state.tree.apply([{ op: 'restore', id: params.id as string }])
+      return new HttpResponse(null, { status: 204 })
+    } catch (err) {
+      return fail(err)
+    }
+  }),
+
+  http.delete(`${API}/trash/:id`, ({ params }) => {
+    try {
+      state.tree.deleteFromTrash(params.id as string)
+      return new HttpResponse(null, { status: 204 })
+    } catch (err) {
+      return fail(err)
+    }
+  }),
+
+  http.delete(`${API}/trash`, () =>
+    HttpResponse.json({ deleted: state.tree.emptyTrash() }),
+  ),
 
   http.post(`${API}/items/:id/duplicate`, ({ params }) => {
     try {

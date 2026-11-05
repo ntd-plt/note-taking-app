@@ -43,6 +43,11 @@ func NewRouter(authService *services.AuthService, userService *services.UserServ
 		protected.GET("/workspace", itemsService.GetWorkspace)
 		protected.GET("/pages", itemsService.ListPages)
 		protected.POST("/ops", itemsService.ApplyOps)
+
+		protected.GET("/trash", itemsService.ListTrash)
+		protected.DELETE("/trash", itemsService.EmptyTrash)
+		protected.POST("/trash/:id/restore", itemsService.RestoreFromTrash)
+		protected.DELETE("/trash/:id", itemsService.DeleteFromTrash)
 	}
 	return router
 }

@@ -154,8 +154,14 @@ function validateOp(i: number, raw: unknown) {
       if (op.type !== undefined || op.props !== undefined || placed)
         throw bad(`${op.op} takes only an id`)
       return
+    case 'restore':
+      if (op.type !== undefined || op.props !== undefined)
+        throw bad('restore only takes an id, parent_id and position')
+      return
     default:
-      throw bad('op must be one of create, update, move, delete, trash')
+      throw bad(
+        'op must be one of create, update, move, delete, trash, restore',
+      )
   }
 }
 
@@ -265,6 +271,43 @@ export class MockTree {
     }
   }
 
+  // trashed lists the pages in the trash, most recently trashed first. Pages
+  // inside a trashed page are not stamped, so they are not listed.
+  trashed(): WireItem[] {
+    return [...this.items.values()]
+      .filter((it) => it.type === 'page' && it.trashed_at)
+      .sort((a, b) => b.trashed_at!.localeCompare(a.trashed_at!))
+  }
+
+  // deleteFromTrash removes a page in the trash, and everything in it, for good.
+  deleteFromTrash(id: string) {
+    if (!this.trashed().some((p) => p.id === id))
+      throw new TreeError(404, 'page is not in the trash')
+    const gone = new Set([id])
+    for (let grew = true; grew; ) {
+      grew = false
+      for (const it of this.items.values()) {
+        if (it.parent_id && gone.has(it.parent_id) && !gone.has(it.id)) {
+          gone.add(it.id)
+          grew = true
+        }
+      }
+    }
+    const items = new Map(this.items)
+    for (const g of gone) items.delete(g)
+    this.items = items
+  }
+
+  // emptyTrash removes the pages trashed before `before` (all of them when it is
+  // left out) and returns how many.
+  emptyTrash(before?: string): number {
+    const pages = this.trashed().filter(
+      (p) => before === undefined || p.trashed_at! < before,
+    )
+    for (const p of pages) this.deleteFromTrash(p.id)
+    return pages.length
+  }
+
   listPages(): WireItem[] {
     const pages: WireItem[] = []
     const walk = (
@@ -322,6 +365,8 @@ class Engine {
         return this.delete(op)
       case 'trash':
         return this.trash(op)
+      case 'restore':
+        return this.restore(op)
       default:
         this.fail(400, `unknown op "${op.op}"`)
     }
@@ -528,6 +573,31 @@ class Engine {
     this.chain(it)
     this.detach(it.parent_id!, it.id)
     this.toTrash(this.items.get(it.id)!)
+  }
+
+  // restore takes a page out of the trash and puts it under parent_id at
+  // position, or at the end of the workspace. The new parent must not be in the
+  // trash, which also rules out a place inside the page itself.
+  private restore(op: WireOp) {
+    const it = this.get(op.id, 'item')
+    if (it.type !== 'page') {
+      this.fail(400, 'only pages are restored from the trash')
+    }
+    if (!it.trashed_at) {
+      try {
+        this.chain(it)
+      } catch {
+        this.fail(
+          409,
+          'this page is inside a page in the trash; restore that page instead',
+        )
+      }
+      this.fail(409, 'page is not in the trash')
+    }
+    const parentId = op.parent_id ?? this.ws.id
+    this.parentFor(parentId, 'page')
+    this.save({ ...it, parent_id: parentId, trashed_at: null })
+    this.attach(parentId, it.id, op.position)
   }
 
   // duplicate deep-copies an item and everything under it with new ids, and

@@ -46,7 +46,7 @@ func main() {
 
 	userService := services.NewUserService(userDataSource)
 	authService := services.NewAuthService(userService, hasher, tokenService, emailValidator)
-	itemsService := services.NewItemsService(itemsDataSource)
+	itemsService := services.NewItemsService(itemsDataSource, cfg.TrashRetention)
 
 	router := NewRouter(authService, userService, itemsService, tokenService, cfg.IsDevelopment())
 	if err := router.Run(":8080"); err != nil {

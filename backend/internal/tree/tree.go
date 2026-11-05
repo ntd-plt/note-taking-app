@@ -39,6 +39,9 @@ type Store interface {
 	Save(it model.Item) error
 	// Delete removes an item and everything still below it.
 	Delete(id uuid.UUID) error
+	// Trashed returns the pages in the trash: the ones stamped with trashed_at,
+	// not the pages inside them.
+	Trashed() ([]model.Item, error)
 	// CheckChildIDs fails if any of the parents' child_ids differs from the set
 	// of its children that are not in the trash.
 	CheckChildIDs(parentIDs []uuid.UUID) error
@@ -263,6 +266,8 @@ func Apply(s Store, workspaceID uuid.UUID, ops []model.Op, now time.Time) error 
 			err = e.delete(op)
 		case model.OpTrash:
 			err = e.trash(op)
+		case model.OpRestore:
+			err = e.restore(op)
 		default:
 			err = e.fail(Invalid, "unknown op %q", op.Op)
 		}

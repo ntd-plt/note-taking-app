@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"testing"
+	"time"
 
 	"backend/internal/database"
 	"backend/internal/model"
@@ -401,6 +402,75 @@ func TestPostgresTrashedPageHiddenAtAnyDepth(t *testing.T) {
 		if it.ID == gone {
 			t.Error("page tree includes the trashed page")
 		}
+	}
+}
+
+func TestPostgresTrashRestoreAndDelete(t *testing.T) {
+	db, pool := newItemsDB(t)
+	me := newUser(t, pool)
+	other := newUser(t, pool)
+	ws := workspaceOf(t, db, me).ID
+
+	b := newBuilder()
+	a := b.add(ws, model.ItemTypePage, "A")
+	bullet := b.add(a, model.ItemTypeBulletListItem, "bullet")
+	child := b.add(bullet, model.ItemTypePage, "Child")
+	inChild := b.add(child, model.ItemTypeParagraph, "inside")
+	deep := b.add(inChild, model.ItemTypePage, "Deep")
+	old := b.add(ws, model.ItemTypePage, "Old")
+	mustInsert(t, db, me, b)
+	ob := newBuilder()
+	theirs := ob.add(workspaceOf(t, db, other).ID, model.ItemTypePage, "Theirs")
+	mustInsert(t, db, other, ob)
+
+	trash := func(user uuid.UUID, id uuid.UUID) {
+		t.Helper()
+		if err := db.ApplyOps(user, []model.Op{{Op: model.OpTrash, ID: id}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	trash(me, child)
+	trash(me, old)
+	trash(other, theirs)
+	if _, err := pool.Exec(context.Background(), "UPDATE items SET trashed_at = NOW() - interval '40 days' WHERE id = $1", old); err != nil {
+		t.Fatal(err)
+	}
+
+	pages, err := db.ListTrash(me)
+	if err != nil || len(pages) != 2 || pages[0].ID != child || pages[1].ID != old {
+		t.Fatalf("trash = %+v (%v), want Child then Old, and not Deep or another user's page", pages, err)
+	}
+
+	// Back to its old place, then into the trash again.
+	pos := 0
+	if err := db.ApplyOps(me, []model.Op{{Op: model.OpRestore, ID: child, ParentID: &bullet, Position: &pos}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := db.GetItem(me, bullet); !slices.Equal(got.ChildIDs, []uuid.UUID{child}) {
+		t.Errorf("bullet children = %v, want Child back", got.ChildIDs)
+	}
+	trash(me, child)
+
+	before := time.Now().Add(-30 * 24 * time.Hour)
+	if n, err := db.EmptyTrash(me, &before); err != nil || n != 1 {
+		t.Fatalf("purge removed %d (%v), want only Old", n, err)
+	}
+	if err := db.DeleteFromTrash(me, deep); !isNotFound(err) {
+		t.Errorf("deleting a page inside a trashed page: %v, want not found", err)
+	}
+	if err := db.DeleteFromTrash(me, theirs); !isNotFound(err) {
+		t.Errorf("deleting another user's page: %v, want not found", err)
+	}
+	if err := db.DeleteFromTrash(me, child); err != nil {
+		t.Fatal(err)
+	}
+	var left int
+	if err := pool.QueryRow(context.Background(), "SELECT count(*) FROM items WHERE id = ANY($1)",
+		[]uuid.UUID{child, inChild, deep, old}).Scan(&left); err != nil || left != 0 {
+		t.Errorf("%d rows left (%v), want the trashed pages and all inside them gone", left, err)
+	}
+	if n, err := db.EmptyTrash(other, nil); err != nil || n != 1 {
+		t.Errorf("other user's empty removed %d (%v), want 1", n, err)
 	}
 }
 

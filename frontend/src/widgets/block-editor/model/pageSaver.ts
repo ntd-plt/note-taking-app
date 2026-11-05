@@ -10,12 +10,24 @@ import { diffOps } from './diffOps'
 
 export const SAVE_DELAY_MS = 1000
 
+// A child page removed from the document and sent to the trash, with the spot it
+// had: its parent (the page itself for a top-level block) and the block before it.
+export interface TrashedBlock {
+  id: string
+  props: Record<string, unknown>
+  parentId: string
+  afterId: string | null
+}
+
 export interface PageSaverOptions {
   saved: Snapshot
   read: () => Snapshot
   send: (ops: Op[], refreshPages: boolean) => Promise<void>
   onError: (err: unknown) => void
   onSavingChange?: (saving: boolean) => void
+  // Called after a save that sent child pages to the trash, with each page
+  // and where it was, so the caller can offer to put it back.
+  onTrashed?: (pages: TrashedBlock[]) => void
   delay?: number
 }
 
@@ -25,6 +37,10 @@ export class PageSaver {
   private timer: ReturnType<typeof setTimeout> | undefined
   private queue: Promise<void> = Promise.resolve()
   private failed = false
+  // Child pages this editor sent to the trash. If one comes back, as undo does
+  // after deleting its block, it is restored to its spot rather than created,
+  // since its id is still taken by the page in the trash.
+  private trashed = new Set<string>()
 
   constructor(private opts: PageSaverOptions) {
     this.saved = opts.saved
@@ -59,7 +75,17 @@ export class PageSaver {
   private async run() {
     if (this.failed) return
     const next = this.opts.read()
-    const ops = [...this.extra, ...diffOps(this.saved, next)]
+    const ops = [...this.extra, ...diffOps(this.saved, next)].map(
+      (op): Op =>
+        op.op === 'create' && op.type === 'page' && this.trashed.has(op.id)
+          ? {
+              op: 'restore',
+              id: op.id,
+              parentId: op.parentId,
+              position: op.position,
+            }
+          : op,
+    )
     if (ops.length === 0) return
     const refresh =
       this.extra.length > 0 ||
@@ -67,6 +93,7 @@ export class PageSaver {
       ops.some(
         (op) => op.op === 'move' && next.nodes.get(op.id)?.type === 'page',
       )
+    const before = this.saved
     this.opts.onSavingChange?.(true)
     try {
       // Batches run in order and each op sees the ones before it, so a long
@@ -76,6 +103,23 @@ export class PageSaver {
       }
       this.saved = next
       this.extra = []
+      const gone: TrashedBlock[] = []
+      for (const op of ops) {
+        if (op.op === 'restore') this.trashed.delete(op.id)
+        if (op.op !== 'trash') continue
+        this.trashed.add(op.id)
+        const node = before.nodes.get(op.id)
+        if (!node) continue
+        const siblings = childList(before, node.parentId)
+        const i = siblings.indexOf(op.id)
+        gone.push({
+          id: op.id,
+          props: node.props,
+          parentId: node.parentId,
+          afterId: i > 0 ? siblings[i - 1] : null,
+        })
+      }
+      if (gone.length > 0) this.opts.onTrashed?.(gone)
     } catch (err) {
       this.failed = true
       clearTimeout(this.timer)

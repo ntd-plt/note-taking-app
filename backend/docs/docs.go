@@ -345,7 +345,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Applies up to 500 create, update, move, delete and trash operations in order, all-or-nothing. Ids are chosen by the client. position is an index into the parent's child_ids when the operation runs, not counting the item itself; without it the item goes at the end, except that a page added to the end of a page goes before its trailing empty paragraph. update merges props key by key: null values, and wrong values for keys the type relies on, are ignored. Rejected: unknown types, other users' items, items inside a trashed page, positions out of range, cycles, delete on a page, trash on a block, changing between page and block, a heading without a level, and props over 64 KB. A rejection names the failing operation in op_index.",
+                "description": "Applies up to 500 create, update, move, delete, trash and restore operations in order, all-or-nothing. restore takes a page out of the trash and puts it under parent_id at position, or at the end of the top level without parent_id; a page inside a trashed page cannot be restored on its own. A batch that moves pages to the trash also removes the user's pages that have been in the trash longer than the retention period. Ids are chosen by the client. position is an index into the parent's child_ids when the operation runs, not counting the item itself; without it the item goes at the end, except that a page added to the end of a page goes before its trailing empty paragraph. update merges props key by key: null values, and wrong values for keys the type relies on, are ignored. Rejected: unknown types, other users' items, items inside a trashed page, positions out of range, cycles, delete on a page, trash on a block, changing between page and block, a heading without a level, and props over 64 KB. A rejection names the failing operation in op_index.",
                 "consumes": [
                     "application/json"
                 ],
@@ -452,6 +452,224 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/trash": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns the pages in the trash, most recently trashed first. Pages inside a trashed page are not listed on their own. Pages past the retention period are left out; they are removed the next time something is moved to the trash.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "List the trash",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_services.TrashResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes every page in the trash, and everything inside them, for good.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Empty the trash",
+                "responses": {
+                    "200": {
+                        "description": "deleted: how many pages were removed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "integer"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/trash/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Removes a page in the trash and everything inside it. This cannot be undone.",
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Delete a page for good",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Page id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/trash/{id}/restore": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Puts the page back at the end of the top level, with everything that was inside it. To restore it somewhere else, send a restore operation to /ops. A page inside a trashed page cannot be restored on its own.",
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Restore a page from the trash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Page id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "500": {
@@ -729,7 +947,8 @@ const docTemplate = `{
                         "update",
                         "move",
                         "delete",
-                        "trash"
+                        "trash",
+                        "restore"
                     ],
                     "allOf": [
                         {
@@ -758,14 +977,16 @@ const docTemplate = `{
                 "update",
                 "move",
                 "delete",
-                "trash"
+                "trash",
+                "restore"
             ],
             "x-enum-varnames": [
                 "OpCreate",
                 "OpUpdate",
                 "OpMove",
                 "OpDelete",
-                "OpTrash"
+                "OpTrash",
+                "OpRestore"
             ]
         },
         "backend_internal_model.Props": {
@@ -862,6 +1083,58 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/backend_internal_model.Item"
                     }
+                }
+            }
+        },
+        "internal_services.TrashResponse": {
+            "type": "object",
+            "properties": {
+                "pages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_services.TrashedPage"
+                    }
+                }
+            }
+        },
+        "internal_services.TrashedPage": {
+            "type": "object",
+            "properties": {
+                "child_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "parent_id": {
+                    "type": "string"
+                },
+                "parent_page_id": {
+                    "type": "string"
+                },
+                "props": {
+                    "$ref": "#/definitions/backend_internal_model.Props"
+                },
+                "purge_at": {
+                    "type": "string"
+                },
+                "trashed_at": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/backend_internal_model.ItemType"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
                 }
             }
         },

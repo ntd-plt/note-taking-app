@@ -127,7 +127,17 @@ function BlockHandle() {
           <GripVertical className="h-4 w-4" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="left" align="start" className="w-48">
+      <DropdownMenuContent
+        side="left"
+        align="start"
+        className="w-48"
+        // Give the keyboard back to the editor, so Ctrl+Z works right after
+        // Delete, Duplicate or Turn into.
+        onCloseAutoFocus={(e) => {
+          e.preventDefault()
+          editor.focus()
+        }}
+      >
         {!isPage && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="text-xs">

@@ -60,6 +60,7 @@ definitions:
         - move
         - delete
         - trash
+        - restore
       parent_id:
         type: string
       position:
@@ -76,6 +77,7 @@ definitions:
     - move
     - delete
     - trash
+    - restore
     type: string
     x-enum-varnames:
     - OpCreate
@@ -83,6 +85,7 @@ definitions:
     - OpMove
     - OpDelete
     - OpTrash
+    - OpRestore
   backend_internal_model.Props:
     additionalProperties: {}
     type: object
@@ -147,6 +150,40 @@ definitions:
         items:
           $ref: '#/definitions/backend_internal_model.Item'
         type: array
+    type: object
+  internal_services.TrashResponse:
+    properties:
+      pages:
+        items:
+          $ref: '#/definitions/internal_services.TrashedPage'
+        type: array
+    type: object
+  internal_services.TrashedPage:
+    properties:
+      child_ids:
+        items:
+          type: string
+        type: array
+      created_at:
+        type: string
+      id:
+        type: string
+      parent_id:
+        type: string
+      parent_page_id:
+        type: string
+      props:
+        $ref: '#/definitions/backend_internal_model.Props'
+      purge_at:
+        type: string
+      trashed_at:
+        type: string
+      type:
+        $ref: '#/definitions/backend_internal_model.ItemType'
+      updated_at:
+        type: string
+      user_id:
+        type: string
     type: object
   internal_services.UpdateUserRequest:
     properties:
@@ -393,16 +430,20 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Applies up to 500 create, update, move, delete and trash operations
-        in order, all-or-nothing. Ids are chosen by the client. position is an index
-        into the parent''s child_ids when the operation runs, not counting the item
-        itself; without it the item goes at the end, except that a page added to the
-        end of a page goes before its trailing empty paragraph. update merges props
-        key by key: null values, and wrong values for keys the type relies on, are
-        ignored. Rejected: unknown types, other users'' items, items inside a trashed
-        page, positions out of range, cycles, delete on a page, trash on a block,
-        changing between page and block, a heading without a level, and props over
-        64 KB. A rejection names the failing operation in op_index.'
+      description: 'Applies up to 500 create, update, move, delete, trash and restore
+        operations in order, all-or-nothing. restore takes a page out of the trash
+        and puts it under parent_id at position, or at the end of the top level without
+        parent_id; a page inside a trashed page cannot be restored on its own. A batch
+        that moves pages to the trash also removes the user''s pages that have been
+        in the trash longer than the retention period. Ids are chosen by the client.
+        position is an index into the parent''s child_ids when the operation runs,
+        not counting the item itself; without it the item goes at the end, except
+        that a page added to the end of a page goes before its trailing empty paragraph.
+        update merges props key by key: null values, and wrong values for keys the
+        type relies on, are ignored. Rejected: unknown types, other users'' items,
+        items inside a trashed page, positions out of range, cycles, delete on a page,
+        trash on a block, changing between page and block, a heading without a level,
+        and props over 64 KB. A rejection names the failing operation in op_index.'
       parameters:
       - description: Operations to apply
         in: body
@@ -483,6 +524,153 @@ paths:
       summary: List pages for the sidebar
       tags:
       - items
+  /trash:
+    delete:
+      description: Removes every page in the trash, and everything inside them, for
+        good.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'deleted: how many pages were removed'
+          schema:
+            additionalProperties:
+              type: integer
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Empty the trash
+      tags:
+      - trash
+    get:
+      description: Returns the pages in the trash, most recently trashed first. Pages
+        inside a trashed page are not listed on their own. Pages past the retention
+        period are left out; they are removed the next time something is moved to
+        the trash.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_services.TrashResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: List the trash
+      tags:
+      - trash
+  /trash/{id}:
+    delete:
+      description: Removes a page in the trash and everything inside it. This cannot
+        be undone.
+      parameters:
+      - description: Page id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a page for good
+      tags:
+      - trash
+  /trash/{id}/restore:
+    post:
+      description: Puts the page back at the end of the top level, with everything
+        that was inside it. To restore it somewhere else, send a restore operation
+        to /ops. A page inside a trashed page cannot be restored on its own.
+      parameters:
+      - description: Page id
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Restore a page from the trash
+      tags:
+      - trash
   /users/me:
     get:
       description: Returns the authenticated user's profile (never includes the password

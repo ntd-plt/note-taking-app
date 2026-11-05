@@ -102,4 +102,6 @@ export const rawApiClient = {
       },
       false,
     ),
+  delete: <T>(path: string, options?: RequestInit) =>
+    request<T>(path, { ...options, method: 'DELETE' }, false),
 }

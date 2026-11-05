@@ -118,4 +118,62 @@ describe('PageSaver', () => {
     const ops = (s.send.mock.calls[0] as unknown[])[0] as Op[]
     expect(ops).toEqual([{ op: 'move', id: 'a', parentId: 'c' }])
   })
+
+  it('restores a page block that comes back after it was trashed (undo)', async () => {
+    const s = setup([p('a'), page('c')])
+    s.edit([p('a')])
+    await s.saver.flush()
+    expect(s.send.mock.calls[0]).toEqual([[{ op: 'trash', id: 'c' }], true])
+    s.edit([page('c'), p('a')])
+    await s.saver.flush()
+    expect(s.send.mock.calls[1]).toEqual([
+      [{ op: 'restore', id: 'c', parentId: 'pg', position: 0 }],
+      true,
+    ])
+    // Once restored it is an ordinary page block again.
+    s.edit([p('a')])
+    await s.saver.flush()
+    expect((s.send.mock.calls[2] as unknown[])[0]).toEqual([
+      { op: 'trash', id: 'c' },
+    ])
+  })
+
+  it('still creates a page block it never trashed', async () => {
+    const s = setup([p('a')])
+    s.edit([p('a'), page('n')])
+    await s.saver.flush()
+    expect((s.send.mock.calls[0] as unknown[])[0]).toMatchObject([
+      { op: 'create', id: 'n', type: 'page' },
+    ])
+  })
+})
+
+describe('PageSaver reporting trashed pages', () => {
+  it('tells where each trashed child page was', async () => {
+    let current = [p('a'), page('c'), p('b', 'b', [page('d')])]
+    const onTrashed = vi.fn()
+    const saver = new PageSaver({
+      saved: fromBlockNote('pg', current),
+      read: () => fromBlockNote('pg', current),
+      send: async () => {},
+      onError: () => {},
+      onTrashed,
+    })
+    current = [p('a')]
+    await saver.flush()
+    expect(onTrashed).toHaveBeenCalledWith([
+      {
+        id: 'c',
+        props: { name: 'c', icon: '📄' },
+        parentId: 'pg',
+        afterId: 'a',
+      },
+      {
+        id: 'd',
+        props: { name: 'd', icon: '📄' },
+        parentId: 'b',
+        afterId: null,
+      },
+    ])
+  })
 })

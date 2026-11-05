@@ -5,11 +5,17 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { applyOps, itemKeys, useItem } from '#/entities/item'
-import type { Op } from '#/entities/item'
+import type { Item, Op } from '#/entities/item'
 import { BlockEditor } from './BlockEditor'
 import { PageHeader } from './PageHeader'
 
-export function PageView({ itemId }: { itemId: string }) {
+export interface PageViewProps {
+  itemId: string
+  // Replaces the default notice shown on a page in the trash.
+  trashBanner?: (page: Item) => React.ReactNode
+}
+
+export function PageView({ itemId, trashBanner }: PageViewProps) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const query = useItem(itemId)
@@ -94,11 +100,12 @@ export function PageView({ itemId }: { itemId: string }) {
       className="flex h-full flex-col overflow-y-auto"
       data-page-view={page.id}
     >
-      {data.inTrash && (
-        <div className="bg-destructive/10 px-6 py-2 text-xs text-destructive">
-          This page is in the trash.
-        </div>
-      )}
+      {data.inTrash &&
+        (trashBanner?.(page) ?? (
+          <div className="bg-destructive/10 px-6 py-2 text-xs text-destructive">
+            This page is in the trash.
+          </div>
+        ))}
       <PageHeader
         key={key}
         page={page}

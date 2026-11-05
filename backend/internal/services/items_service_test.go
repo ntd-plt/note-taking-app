@@ -1,6 +1,7 @@
 package services_test
 
 import (
+	"backend/internal/configs"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -19,7 +20,7 @@ import (
 
 func newItemsRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := services.NewItemsService(db)
+	h := services.NewItemsService(db, configs.DefaultTrashRetention)
 
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -32,6 +33,10 @@ func newItemsRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 	r.GET("/api/v1/pages", h.ListPages)
 	r.POST("/api/v1/ops", h.ApplyOps)
 	r.POST("/api/v1/items/:id/duplicate", h.DuplicateItem)
+	r.GET("/api/v1/trash", h.ListTrash)
+	r.DELETE("/api/v1/trash", h.EmptyTrash)
+	r.POST("/api/v1/trash/:id/restore", h.RestoreFromTrash)
+	r.DELETE("/api/v1/trash/:id", h.DeleteFromTrash)
 	return r
 }
 

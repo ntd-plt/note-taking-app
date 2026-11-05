@@ -223,6 +223,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
   const refresh = (reloadEditor = true) =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
+      queryClient.invalidateQueries({ queryKey: itemKeys.trash }),
       reloadEditor &&
         queryClient.invalidateQueries({ queryKey: itemKeys.items }),
     ])
@@ -259,16 +260,61 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
     }
   }
 
+  // siblingsOf returns a parent's childIds: from /pages for a page or the
+  // workspace, else from the page that holds the parent block.
+  const siblingsOf = async (parentId: string, holderPageId: string | null) => {
+    const known = knownChildIds(parentId, pages)
+    if (known || !holderPageId) return known
+    const opened = await fetchItem(holderPageId)
+    return opened.items.find((i) => i.id === parentId)?.childIds
+  }
+
+  // undoTrash puts the page back where it was. If that spot is gone (its
+  // parent was deleted or trashed meanwhile), it goes to the end of the top
+  // level instead.
+  const undoTrash = async (
+    page: Item,
+    spot: { parentId: string; position?: number },
+    reopen: boolean,
+  ) => {
+    try {
+      await flushOpenEditor()
+      try {
+        await applyOps([{ op: 'restore', id: page.id, ...spot }])
+      } catch {
+        await applyOps([{ op: 'restore', id: page.id }])
+        toast.info(
+          `Its old place is gone; "${pageName(page)}" is at the top level`,
+        )
+      }
+      await refresh()
+      if (reopen) open(page.id)
+    } catch (err) {
+      toast.error(`Couldn't restore the page: ${(err as Error).message}`)
+    }
+  }
+
   // Trashing hides the page and everything under it. If the open page is among
   // them, leave it first so the editor is not reloaded into a trashed page.
+  // Undo in the toast puts it back where it was.
   const trashPage = async (page: Item) => {
     try {
       await flushOpenEditor()
       const leaving = !!currentId && isWithin(currentId, page.id, pages)
+      const reopen = currentId === page.id
+      const parentId = page.parentId!
+      const siblings = await siblingsOf(parentId, page.parentPageId)
+      const at = siblings?.indexOf(page.id) ?? -1
+      const spot = { parentId, position: at >= 0 ? at : undefined }
       await applyOps([{ op: 'trash', id: page.id }])
       if (leaving) await navigate({ to: '/items' })
       await refresh()
-      toast.success(`Moved "${pageName(page)}" to the trash`)
+      toast.success(`Moved "${pageName(page)}" to the trash`, {
+        action: {
+          label: 'Undo',
+          onClick: () => void undoTrash(page, spot, reopen),
+        },
+      })
     } catch (err) {
       toast.error(
         `Couldn't move the page to the trash: ${(err as Error).message}`,
@@ -431,7 +477,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
           {favorites.length > 0 && (
             <SidebarGroup className="mt-4 p-0">
               <div className="px-2 py-1">
-                <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
+                <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-muted-foreground/80">
                   Favorites
                 </SidebarGroupLabel>
               </div>
@@ -458,7 +504,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
 
           <SidebarGroup className="mt-4 flex-1 p-0">
             <div className="flex items-center justify-between px-2 py-1">
-              <SidebarGroupLabel className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
+              <SidebarGroupLabel className="text-[10px] font-bold tracking-wider text-muted-foreground/80">
                 Private
               </SidebarGroupLabel>
               <button
