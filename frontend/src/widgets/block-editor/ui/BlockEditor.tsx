@@ -14,6 +14,7 @@ import { BlockNoteView } from '@blocknote/shadcn'
 import '@blocknote/shadcn/style.css'
 import { FileText } from 'lucide-react'
 import { showUndoToast } from '#/shared/ui/undoToast'
+import { useTheme } from '#/shared/lib/theme'
 import {
   DEFAULT_PAGE_ICON,
   DEFAULT_PAGE_NAME,
@@ -126,6 +127,7 @@ export function BlockEditor({
   onReady,
 }: BlockEditorProps) {
   const pageId = opened.items[0].id
+  const theme = useTheme((s) => s.resolved)
   const [initialContent] = React.useState(() => toBlockNote(opened))
   const editor = useCreateBlockNote({
     schema,
@@ -242,7 +244,7 @@ export function BlockEditor({
       <BlockNoteView
         editor={editor}
         editable={editable}
-        theme="light"
+        theme={theme}
         sideMenu={false}
         slashMenu={false}
         onChange={() => saver.schedule()}

@@ -8,6 +8,7 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import { Toaster } from '@/components/ui/sonner'
+import { useTheme } from '#/shared/lib/theme'
 
 import appCss from '../styles.css?url'
 
@@ -62,11 +63,12 @@ export const Route = createRootRoute({
 })
 
 function App() {
+  const theme = useTheme((s) => s.resolved)
   return (
     <>
       <HeadContent />
       <Outlet />
-      <Toaster />
+      <Toaster theme={theme} />
       <TanStackDevtools
         config={{
           position: 'bottom-right',

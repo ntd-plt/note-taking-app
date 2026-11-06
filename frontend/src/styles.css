@@ -20,6 +20,13 @@ body {
   margin: 0;
 }
 
+/* Set for a moment while the theme changes (see shared/lib/theme.ts), so the
+   colors swap at once instead of each transition fading on its own. */
+.theme-switching,
+.theme-switching * {
+  transition: none !important;
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.147 0.004 49.3);
@@ -53,6 +60,8 @@ body {
   --sidebar-accent-foreground: oklch(0.214 0.009 43.1);
   --sidebar-border: oklch(0.922 0.005 34.3);
   --sidebar-ring: oklch(0.714 0.014 41.2);
+  /* Child-page links in the editor. */
+  --page-link: var(--primary);
 }
 
 .dark {
@@ -87,12 +96,15 @@ body {
   --sidebar-accent-foreground: oklch(0.986 0.002 67.8);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.547 0.021 43.1);
+  /* Dark --primary is a button fill, too dim as text on the dark page. */
+  --page-link: oklch(0.696 0.17 162.48);
 }
 
 @theme inline {
   --font-sans: 'Noto Sans Variable', sans-serif;
   --font-heading: 'Playfair Display Variable', serif;
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-page-link: var(--page-link);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
@@ -144,6 +156,16 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+/* The page editor sits on the page itself, not on a panel, so it takes the
+   page's colors: BlockNote's own editor background (#fff light, #1f1f1f dark)
+   would show as a grey box in dark mode, and its text grey would not match the
+   rest of the page. The extra [data-color-scheme] outranks BlockNote's rule
+   whichever stylesheet loads first. */
+.page-editor.bn-root[data-color-scheme] {
+  --bn-colors-editor-background: var(--background);
+  --bn-colors-editor-text: var(--foreground);
 }
 
 /* Thin scrollbar, used in place of shadcn's no-scrollbar. */
