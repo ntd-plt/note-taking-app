@@ -61,7 +61,7 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
               <NavigationMenuLink asChild>
                 <Link
                   to="/"
-                  className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all"
+                  className="flex items-center gap-1.5 rounded-2xl p-3 text-sm font-medium transition-all"
                 >
                   Home
                 </Link>
@@ -106,7 +106,7 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
               <NavigationMenuLink asChild>
                 <Link
                   to="/profile"
-                  className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all"
+                  className="flex items-center gap-1.5 rounded-2xl p-3 text-sm font-medium transition-all"
                 >
                   Profile
                 </Link>
@@ -116,7 +116,7 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
               <NavigationMenuLink asChild>
                 <Link
                   to="/settings"
-                  className="flex items-center gap-1.5 rounded-none p-3 text-sm font-medium transition-all"
+                  className="flex items-center gap-1.5 rounded-2xl p-3 text-sm font-medium transition-all"
                 >
                   Settings
                 </Link>
