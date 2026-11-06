@@ -85,6 +85,10 @@ import {
 import type { SidebarDrop } from '../model/sidebarDrop'
 
 const ROW_INDENT = 12
+// Where a top-level row starts its icon, so it lines up with the text of the
+// section labels ("Favorites", "Private"): the label's wrapper px-2 (8px) plus
+// SidebarGroupLabel's px-3 (12px), less the row list's px-0.5 (2px).
+const ROW_INSET = 18
 const DRAG_THRESHOLD = 4
 
 function SidebarOpenButton() {
@@ -448,23 +452,6 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
         </SidebarHeader>
 
         <SidebarContent className="px-2 pt-2">
-          <SidebarGroup className="p-0">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  onClick={() => setSearchOpen(true)}
-                  className="w-full text-muted-foreground/90 hover:bg-sidebar-accent/60"
-                >
-                  <Search className="mr-2 h-4 w-4 text-muted-foreground/75" />
-                  <span className="text-xs font-medium">Quick Find</span>
-                  <kbd className="ml-auto inline-flex h-4 select-none items-center gap-0.5 rounded border border-sidebar-border/30 bg-muted px-1.5 font-mono text-[9px] font-medium text-muted-foreground/80">
-                    <span className="text-[10px]">⌘</span>K
-                  </kbd>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroup>
-
           {favorites.length > 0 && (
             <SidebarGroup className="mt-4 p-0">
               <div className="px-2 py-1">
@@ -479,12 +466,14 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
                     role="listitem"
                     onClick={() => open(p.id)}
                     className={cn(
-                      'group/row flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pl-2 pr-1 text-xs text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60',
+                      'group/row flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pr-1 pl-[18px] text-xs text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60',
                       p.id === currentId &&
                         'bg-sidebar-accent font-semibold text-sidebar-foreground',
                     )}
                   >
-                    <span className="shrink-0">{pageIcon(p)}</span>
+                    <span className="flex w-4 shrink-0 justify-center">
+                      {pageIcon(p)}
+                    </span>
                     <span className="flex-1 truncate">{pageName(p)}</span>
                     <PageMenu page={p} actions={actions} />
                   </div>
@@ -636,7 +625,7 @@ function DropLine({ depth }: { depth: number }) {
     <div
       data-drop-line=""
       className="pointer-events-none h-0.5 rounded-full bg-primary"
-      style={{ marginLeft: 8 + depth * ROW_INDENT }}
+      style={{ marginLeft: ROW_INSET + depth * ROW_INDENT }}
     />
   )
 }
@@ -742,35 +731,45 @@ function PageRow({
         data-drop-target={dropOnto || undefined}
         onPointerDown={onPointerDown}
         onClick={onOpen}
-        style={{ paddingLeft: 4 + depth * ROW_INDENT }}
+        style={{ paddingLeft: ROW_INSET + depth * ROW_INDENT }}
         className={cn(
-          'group/row flex h-7 cursor-pointer select-none items-center gap-1 rounded-md pr-1 text-xs text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60',
+          'group/row flex h-7 cursor-pointer select-none items-center gap-1.5 rounded-md pr-1 text-xs text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60',
           active && 'bg-sidebar-accent font-semibold text-sidebar-foreground',
           dragging && 'opacity-50',
           dropOnto && 'bg-primary/10 ring-2 ring-primary/50',
         )}
       >
-        <button
-          type="button"
-          aria-label={expanded ? 'Collapse' : 'Expand'}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggle()
-          }}
-          className={cn(
-            'flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 hover:bg-sidebar-accent',
-            children.length === 0 && 'invisible',
-          )}
-        >
-          <ChevronRight
+        {/* The icon's spot. For a page with children, hovering it (or
+            tabbing to the arrow) swaps the icon for the expand/collapse arrow. */}
+        <span className="group/icon relative flex h-5 w-4 shrink-0 items-center justify-center">
+          <span
             className={cn(
-              'h-3 w-3 transition-transform',
-              expanded && 'rotate-90',
+              children.length > 0 &&
+                'group-hover/icon:opacity-0 group-has-[:focus-visible]/icon:opacity-0',
             )}
-          />
-        </button>
-        <span className="shrink-0">{pageIcon(item)}</span>
+          >
+            {pageIcon(item)}
+          </span>
+          {children.length > 0 && (
+            <button
+              type="button"
+              aria-label={expanded ? 'Collapse' : 'Expand'}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggle()
+              }}
+              className="absolute -inset-0.5 flex items-center justify-center rounded text-muted-foreground opacity-0 outline-none hover:bg-sidebar-accent focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/icon:opacity-100"
+            >
+              <ChevronRight
+                className={cn(
+                  'h-3 w-3 transition-transform',
+                  expanded && 'rotate-90',
+                )}
+              />
+            </button>
+          )}
+        </span>
         <span className="flex-1 truncate">{pageName(item)}</span>
         <button
           type="button"
