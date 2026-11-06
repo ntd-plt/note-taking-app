@@ -38,6 +38,9 @@ describe('SettingsDialog', () => {
     ).toBe('page')
     expect(screen.getByRole('heading', { name: 'Appearance' })).toBeTruthy()
     expect(
+      screen.getByRole('searchbox', { name: 'Search settings' }),
+    ).toBeTruthy()
+    expect(
       screen
         .getByRole('radio', { name: 'System' })
         .getAttribute('aria-checked'),

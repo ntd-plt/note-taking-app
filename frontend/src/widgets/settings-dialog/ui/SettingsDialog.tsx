@@ -2,7 +2,7 @@
 // listed on the left and the chosen one on the right. Only Appearance exists
 // for now. Changes apply at once; there is no Save.
 import type * as React from 'react'
-import { Monitor, Moon, Palette, Sun } from 'lucide-react'
+import { Monitor, Moon, Palette, Search, Sun } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Dialog,
@@ -10,6 +10,11 @@ import {
   DialogDescription,
   DialogTitle,
 } from '#/components/ui/dialog'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from '#/components/ui/input-group'
 import { Separator } from '#/components/ui/separator'
 import { ToggleGroup, ToggleGroupItem } from '#/components/ui/toggle-group'
 import { cn } from '#/lib/utils'
@@ -47,11 +52,22 @@ export function SettingsDialog() {
       <DialogContent className="flex h-[560px] max-h-[calc(100dvh-4rem)] gap-0 overflow-hidden p-0 sm:max-w-3xl">
         <nav
           aria-label="Settings sections"
-          className="flex w-56 shrink-0 flex-col gap-1 border-r border-border bg-sidebar p-4"
+          className="flex w-56 shrink-0 flex-col gap-1 border-r border-border bg-sidebar p-4 dark:bg-black/15"
         >
-          <DialogTitle className="px-3 pt-2 pb-4 font-heading text-xl">
-            Settings
-          </DialogTitle>
+          {/* The dialog's name for screen readers; the search box takes its
+              place on screen. */}
+          <DialogTitle className="sr-only">Settings</DialogTitle>
+          {/* Placeholder: searching settings is not built yet. */}
+          <InputGroup className="mb-3 h-9">
+            <InputGroupInput
+              type="search"
+              placeholder="Search settings"
+              aria-label="Search settings"
+            />
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+          </InputGroup>
           {SECTIONS.map((entry) => {
             const { id, label, icon: Icon } = entry
             const active = entry === current
@@ -62,8 +78,9 @@ export function SettingsDialog() {
                 aria-current={active ? 'page' : undefined}
                 onClick={() => setSection(id)}
                 className={cn(
-                  'flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors outline-none hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50',
-                  active && 'bg-sidebar-accent text-sidebar-accent-foreground',
+                  'flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors outline-none hover:bg-sidebar-accent hover:text-sidebar-foreground dark:hover:bg-accent/60 focus-visible:ring-[3px] focus-visible:ring-ring/50',
+                  active &&
+                    'bg-sidebar-accent text-sidebar-accent-foreground dark:bg-accent',
                 )}
               >
                 <Icon className="size-4" />
@@ -122,14 +139,14 @@ function AppearanceSection() {
           onValueChange={(v) => v && setPreference(v as ThemePreference)}
           aria-labelledby="settings-theme-label"
           spacing={1}
-          className="shrink-0 rounded-4xl bg-muted p-1"
+          className="shrink-0 rounded-4xl bg-foreground/[0.06] p-1"
         >
           {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
             <ToggleGroupItem
               key={value}
               value={value}
               size="sm"
-              className="cursor-pointer gap-1.5 text-muted-foreground hover:bg-transparent data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm"
+              className="cursor-pointer gap-1.5 text-muted-foreground hover:bg-transparent data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm dark:data-[state=on]:bg-accent"
             >
               <Icon />
               {label}

@@ -119,11 +119,11 @@ function AccountMenu() {
         <DropdownMenuTrigger asChild>
           <button className="flex min-w-0 flex-1 items-center justify-between rounded-lg px-2 py-1.5 text-left transition-all hover:bg-sidebar-accent/50 focus:outline-none">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 font-heading font-semibold text-primary shadow-sm ring-1 ring-primary/20">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 font-semibold text-link shadow-sm ring-1 ring-primary/20">
                 {name.substring(0, 2).toUpperCase()}
               </div>
               <span className="text-[10px] font-semibold tracking-wide text-sidebar-foreground">
-                {name} (Free Plan)
+                {name}
               </span>
             </div>
             <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground opacity-60" />
