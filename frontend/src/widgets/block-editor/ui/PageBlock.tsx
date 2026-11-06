@@ -26,7 +26,7 @@ export const pageBlockSpec = createReactBlockSpec(
         className="group/page-link flex w-full items-center gap-2 rounded-md px-1 py-0.5 no-underline! hover:bg-muted/70"
       >
         <span>{block.props.icon || DEFAULT_PAGE_ICON}</span>
-        <span className="truncate font-normal text-primary underline decoration-primary/40 underline-offset-4 group-hover/page-link:decoration-primary">
+        <span className="truncate font-normal text-link underline decoration-link/40 underline-offset-4 group-hover/page-link:decoration-link">
           {block.props.name || DEFAULT_PAGE_NAME}
         </span>
       </Link>

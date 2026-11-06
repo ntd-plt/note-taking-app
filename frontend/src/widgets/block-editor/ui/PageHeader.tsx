@@ -221,7 +221,7 @@ export function PageHeader({
           maxLength={MAX_NAME_LENGTH}
           onChange={(e) => changeName(e.target.value)}
           onBlur={() => void flushName()}
-          className="w-full border-none bg-transparent pt-2 pb-1 font-heading text-4xl font-extrabold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/20 focus:ring-0"
+          className="w-full border-none bg-transparent pt-2 pb-1 font-content text-4xl font-extrabold tracking-tight text-foreground outline-none placeholder:text-muted-foreground/20 focus:ring-0"
           placeholder="Untitled"
         />
 

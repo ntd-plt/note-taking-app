@@ -9,6 +9,8 @@ const Toaster = (props: ToasterProps) => (
         '--normal-bg': 'var(--popover)',
         '--normal-text': 'var(--popover-foreground)',
         '--normal-border': 'var(--border)',
+        // Same corners as the menus and popovers (rounded-2xl).
+        '--border-radius': 'calc(var(--radius) * 1.8)',
       } as React.CSSProperties
     }
     {...props}

@@ -8,6 +8,8 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import { Toaster } from '@/components/ui/sonner'
+import { useTheme } from '#/shared/lib/theme'
+import { SettingsDialog } from '#/widgets/settings-dialog'
 
 import appCss from '../styles.css?url'
 
@@ -43,7 +45,7 @@ export const Route = createRootRoute({
         sizes: '16x16',
         href: '/favicon-16x16.png',
       },
-      { rel: 'manifest', href: '/site.webmanifest', color: '#fffff' },
+      { rel: 'manifest', href: '/manifest.json' },
       { rel: 'icon', href: '/favicon.ico' },
     ],
     scripts: [
@@ -62,11 +64,13 @@ export const Route = createRootRoute({
 })
 
 function App() {
+  const theme = useTheme((s) => s.resolved)
   return (
     <>
       <HeadContent />
       <Outlet />
-      <Toaster />
+      <Toaster theme={theme} />
+      <SettingsDialog />
       <TanStackDevtools
         config={{
           position: 'bottom-right',
