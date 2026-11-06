@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { showUndoToast } from '#/shared/ui/undoToast'
+import { openSettings } from '#/shared/lib/settingsDialog'
 import {
   ChevronRight,
   ChevronsUpDown,
@@ -17,6 +18,7 @@ import {
   PanelLeftClose,
   Plus,
   Search,
+  Settings,
   Star,
   StarOff,
   Trash2,
@@ -134,6 +136,13 @@ function AccountMenu() {
           >
             <User className="mr-2 h-3.5 w-3.5 opacity-60" />
             Profile Settings
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer px-2 py-1.5 text-xs"
+            onClick={() => openSettings()}
+          >
+            <Settings className="mr-2 h-3.5 w-3.5 opacity-60" />
+            Settings
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem

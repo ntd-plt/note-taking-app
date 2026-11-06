@@ -9,6 +9,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import { Toaster } from '@/components/ui/sonner'
 import { useTheme } from '#/shared/lib/theme'
+import { SettingsDialog } from '#/widgets/settings-dialog'
 
 import appCss from '../styles.css?url'
 
@@ -69,6 +70,7 @@ function App() {
       <HeadContent />
       <Outlet />
       <Toaster theme={theme} />
+      <SettingsDialog />
       <TanStackDevtools
         config={{
           position: 'bottom-right',

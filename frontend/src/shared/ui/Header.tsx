@@ -19,6 +19,8 @@ import {
   NavigationMenuTrigger,
 } from '@/components/ui/navigation-menu'
 import { cn } from '@/lib/utils'
+import { openSettings } from '#/shared/lib/settingsDialog'
+import { ThemeMenu } from './ThemeMenu'
 import { LogOut, Settings, User } from 'lucide-react'
 
 interface HeaderProps {
@@ -112,21 +114,25 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
                 </Link>
               </NavigationMenuLink>
             </NavigationMenuItem>
-            <NavigationMenuItem>
-              <NavigationMenuLink asChild>
-                <Link
-                  to="/settings"
-                  className="flex items-center gap-1.5 rounded-2xl p-3 text-sm font-medium transition-all"
-                >
-                  Settings
-                </Link>
-              </NavigationMenuLink>
-            </NavigationMenuItem>
+            {user && (
+              <NavigationMenuItem>
+                <NavigationMenuLink asChild>
+                  <button
+                    type="button"
+                    onClick={() => openSettings()}
+                    className="flex cursor-pointer items-center gap-1.5 rounded-2xl p-3 text-sm font-medium transition-all"
+                  >
+                    Settings
+                  </button>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            )}
           </NavigationMenuList>
         </NavigationMenu>
 
         {/* User Actions */}
         <div className="flex items-center gap-2">
+          <ThemeMenu />
           {user ? (
             <div className="flex items-center gap-3">
               {/* User Dropdown */}
@@ -162,12 +168,10 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
                       Profile
                     </DropdownMenuItem>
                   </Link>
-                  <Link to="/settings">
-                    <DropdownMenuItem>
-                      <Settings className="mr-2 h-3.5 w-3.5 opacity-60" />
-                      Settings
-                    </DropdownMenuItem>
-                  </Link>
+                  <DropdownMenuItem onClick={() => openSettings()}>
+                    <Settings className="mr-2 h-3.5 w-3.5 opacity-60" />
+                    Settings
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={onLogout}>
                     <LogOut className="mr-2 h-3.5 w-3.5 opacity-60" />
@@ -229,18 +233,18 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
               </div>
               Profile
             </Link>
-            <Link
-              to="/settings"
-              className="flex flex-col items-center p-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-              activeProps={{
-                className: 'text-foreground',
-              }}
-            >
-              <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center mb-1">
-                <span className="text-primary font-bold text-xs">S</span>
-              </div>
-              Settings
-            </Link>
+            {user && (
+              <button
+                type="button"
+                onClick={() => openSettings()}
+                className="flex cursor-pointer flex-col items-center p-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center mb-1">
+                  <span className="text-primary font-bold text-xs">S</span>
+                </div>
+                Settings
+              </button>
+            )}
           </nav>
         </div>
       </div>
