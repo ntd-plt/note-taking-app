@@ -1,34 +1,25 @@
-import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Header } from '@/shared'
-import { validateSession, logout } from '#/shared/api'
+import { logout } from '#/shared/api'
+import { endSession, sessionQuery, useSession } from '#/shared/hooks/useSession'
 
 export const Route = createFileRoute('/')({
-  loader: async () => {
-    return await validateSession()
-  },
+  loader: ({ context }) => context.queryClient.ensureQueryData(sessionQuery),
   component: App,
 })
 
 function App() {
-  const router = useRouter()
-  const navigate = useNavigate()
-  const auth = Route.useLoaderData()
+  const queryClient = useQueryClient()
+  const { data: user } = useSession()
 
   const handleLogout = async () => {
-    console.log('Logging out...')
     await logout()
-    router.invalidate()
-    navigate({ to: '/' })
+    endSession(queryClient)
   }
 
-  const userData =
-    auth.isAuthenticated && auth.user
-      ? {
-          name: auth.user.username,
-          email: auth.user.email,
-        }
-      : null
+  const userData = user ? { name: user.username, email: user.email } : null
 
   return (
     <div className="min-h-screen">

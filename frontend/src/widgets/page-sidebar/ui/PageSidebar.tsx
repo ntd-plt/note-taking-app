@@ -13,6 +13,7 @@ import {
   Copy,
   HelpCircle,
   LogOut,
+  MonitorX,
   MoreHorizontal,
   PanelLeft,
   PanelLeftClose,
@@ -24,7 +25,8 @@ import {
   Trash2,
   User,
 } from 'lucide-react'
-import { logout, validateSession } from '#/shared/api'
+import { logout, logoutAll } from '#/shared/api'
+import { endSession, useSession } from '#/shared/hooks/useSession'
 import {
   Sidebar,
   SidebarContent,
@@ -108,15 +110,22 @@ function SidebarOpenButton() {
 
 function AccountMenu() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { toggleSidebar } = useSidebar()
-  const [user, setUser] = React.useState<{ name: string } | null>(null)
-  React.useEffect(() => {
-    void validateSession().then((auth) => {
-      if (auth.isAuthenticated && auth.user)
-        setUser({ name: auth.user.username || auth.user.email.split('@')[0] })
-    })
-  }, [])
-  const name = user?.name ?? 'User'
+  const { data: user } = useSession()
+  const name = user ? user.username || user.email.split('@')[0] : 'User'
+
+  // Ends this browser's session, or every session of the user, then leaves.
+  const signOut = async (everywhere: boolean) => {
+    try {
+      await (everywhere ? logoutAll() : logout())
+    } catch (err) {
+      toast.error(`Couldn't log out: ${(err as Error).message}`)
+      return
+    }
+    endSession(queryClient)
+    void navigate({ to: '/login' })
+  }
   return (
     <div className="flex items-center gap-1">
       <DropdownMenu>
@@ -151,13 +160,17 @@ function AccountMenu() {
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="cursor-pointer px-2 py-1.5 text-xs text-destructive"
-            onClick={async () => {
-              await logout()
-              void navigate({ to: '/login' })
-            }}
+            onClick={() => void signOut(false)}
           >
             <LogOut className="mr-2 h-3.5 w-3.5 opacity-60" />
             Log Out
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="cursor-pointer px-2 py-1.5 text-xs text-destructive"
+            onClick={() => void signOut(true)}
+          >
+            <MonitorX className="mr-2 h-3.5 w-3.5 opacity-60" />
+            Log out of all devices
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

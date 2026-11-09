@@ -1,10 +1,11 @@
 import * as React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '#/mocks/server'
-import { RegisterPage } from './RegisterPage'
+import { sessionQuery } from '#/shared/hooks/useSession'
+import { SignupPage } from './SignupPage'
 
 const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }))
 
@@ -13,28 +14,7 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }))
 
-// jsdom's `localStorage` is undefined in this project's vitest environment
-// (a pre-existing Node/jsdom version mismatch, unrelated to this feature) —
-// register()/login() read/write it directly, so stub it for these tests.
-function createLocalStorageMock(): Storage {
-  let store: Record<string, string> = {}
-  return {
-    getItem: (key: string) => (key in store ? store[key] : null),
-    setItem: (key: string, value: string) => {
-      store[key] = String(value)
-    },
-    removeItem: (key: string) => {
-      delete store[key]
-    },
-    clear: () => {
-      store = {}
-    },
-    key: () => null,
-    length: 0,
-  }
-}
-
-function renderRegisterPage() {
+function renderSignupPage() {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -42,14 +22,15 @@ function renderRegisterPage() {
     },
   })
 
-  return render(
+  render(
     <QueryClientProvider client={queryClient}>
-      <RegisterPage />
+      <SignupPage />
     </QueryClientProvider>,
   )
+  return queryClient
 }
 
-function submitRegisterForm(
+function submitSignupForm(
   overrides: {
     username?: string
     email?: string
@@ -68,22 +49,21 @@ function submitRegisterForm(
   fireEvent.click(screen.getByRole('button', { name: /sign up/i }))
 }
 
-describe('RegisterPage', () => {
+describe('SignupPage', () => {
   beforeEach(() => {
     mockNavigate.mockClear()
-    vi.stubGlobal('localStorage', createLocalStorageMock())
   })
 
-  afterEach(() => {
-    vi.unstubAllGlobals()
-  })
-
-  it('registers successfully and navigates to /items', async () => {
-    renderRegisterPage()
-    submitRegisterForm()
+  it('signs up, records the session and navigates to /items', async () => {
+    const queryClient = renderSignupPage()
+    submitSignupForm()
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/items' })
+    })
+    expect(queryClient.getQueryData(sessionQuery.queryKey)).toMatchObject({
+      username: 'bob',
+      email: 'bob@example.com',
     })
   })
 
@@ -96,8 +76,8 @@ describe('RegisterPage', () => {
         ),
       ),
     )
-    renderRegisterPage()
-    submitRegisterForm()
+    renderSignupPage()
+    submitSignupForm()
 
     await waitFor(() => {
       expect(
@@ -116,8 +96,8 @@ describe('RegisterPage', () => {
         ),
       ),
     )
-    renderRegisterPage()
-    submitRegisterForm()
+    renderSignupPage()
+    submitSignupForm()
 
     await waitFor(() => {
       expect(
@@ -133,8 +113,8 @@ describe('RegisterPage', () => {
         HttpResponse.json({ error: 'internal server error' }, { status: 500 }),
       ),
     )
-    renderRegisterPage()
-    submitRegisterForm()
+    renderSignupPage()
+    submitSignupForm()
 
     await waitFor(() => {
       expect(

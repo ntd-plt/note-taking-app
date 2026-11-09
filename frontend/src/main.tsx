@@ -4,13 +4,28 @@ import { routeTree } from './routeTree.gen'
 import { StrictMode } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { startThemeSync } from './shared/lib/theme'
+import { setUnauthorizedHandler } from './shared/api/client'
+import { endSession } from './shared/hooks/useSession'
 
 startThemeSync()
 
+const queryClient = new QueryClient()
+
 const router = createRouter({
   routeTree,
+  context: { queryClient },
   defaultPreload: 'intent',
   scrollRestoration: true,
+})
+
+// The session ended on the server (expired, or logged out on another device):
+// forget the cached data and go to the login page.
+setUnauthorizedHandler(() => {
+  endSession(queryClient)
+  const path = router.state.location.pathname
+  if (path !== '/login' && path !== '/signup') {
+    void router.navigate({ to: '/login' })
+  }
 })
 
 declare module '@tanstack/react-router' {
@@ -47,7 +62,6 @@ const rootElement = document.getElementById('app')!
 
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement)
-  const queryClient = new QueryClient()
 
   enableMocking().then(() => {
     root.render(

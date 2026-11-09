@@ -33,9 +33,6 @@ src/
 │   ├── state.ts           # Shared in-memory mock database / session state
 │   └── handler.ts         # Central aggregator of all slice-based handlers
 ├── entities/
-│   ├── user/
-│   │   └── api/
-│   │       └── user.handlers.ts   # Mocks for GET /api/me, user profiles, etc.
 │   └── item/
 │       └── api/
 │           ├── item.handlers.ts   # Mocks for /items/:id, /workspace, /pages, /ops, /items/:id/duplicate, /trash*
@@ -44,7 +41,7 @@ src/
 └── features/
     └── auth/
         └── api/
-            └── auth.handlers.ts   # Mocks for POST /api/v1/auth/login, logout, etc.
+            └── auth.handlers.ts   # Mocks for /api/v1/auth/* (login, signup, logout, logout-all) and GET /api/v1/users/me
 ```
 
 ---
@@ -69,7 +66,7 @@ export const tagHandlers = [
 
 ### 2. Handle Shared In-Memory State (If Applicable)
 
-If your mocks need to share state (e.g., simulating logging in, updating a user profile, and then fetching `/api/me` which returns that updated user):
+If your mocks need to share state (e.g., simulating logging in, updating a user profile, and then fetching `/api/v1/users/me` which returns that updated user). The real backend keeps the session in an HttpOnly cookie; the mocks keep the logged-in user in `mockState.currentUser` instead:
 
 - Use the shared state store located at [src/mocks/state.ts](src/mocks/state.ts).
 - Import and mutate/read it in your slice handlers.
@@ -89,13 +86,13 @@ Import your new handlers and spread them into the `handlers` array inside [src/m
 
 ```diff
   // src/mocks/handler.ts
-  import { userHandlers } from '#/entities/user/api/user.handlers'
+  import { itemHandlers } from '#/entities/item/api/item.handlers'
   import { authHandlers } from '#/features/auth/api/auth.handlers'
 + import { tagHandlers } from '#/entities/tag/api/tag.handlers'
 
   export const handlers = [
-    ...userHandlers,
     ...authHandlers,
+    ...itemHandlers,
 +   ...tagHandlers,
   ]
 ```

@@ -15,6 +15,20 @@ export class ApiError extends Error {
   }
 }
 
+// Called when an API call is refused for want of a session (HTTP 401), so the
+// app can drop its cached data and send the user to the login page. Calls that
+// answer "who is logged in?" themselves are left out: the auth endpoints, and
+// GET /users/me, which reports a missing session as "nobody".
+let onUnauthorized: (() => void) | undefined
+
+export function setUnauthorizedHandler(handler: (() => void) | undefined) {
+  onUnauthorized = handler
+}
+
+const reportsNoSessionItself = (path: string, method: string) =>
+  path.startsWith('/api/v1/auth/') ||
+  (path === '/api/v1/users/me' && method === 'GET')
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -28,13 +42,20 @@ async function request<T>(
     headers.set('Content-Type', 'application/json')
   }
 
-  // Inject authentication token if it exists in localStorage
-  const token = localStorage.getItem('auth_token')
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
+  // The session lives in an HttpOnly cookie the browser sends by itself;
+  // 'include' also sends it when VITE_API_URL points at another origin.
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: 'include',
+  })
 
-  const response = await fetch(url, { ...options, headers })
+  if (
+    response.status === 401 &&
+    !reportsNoSessionItself(path, options.method ?? 'GET')
+  ) {
+    onUnauthorized?.()
+  }
 
   if (!response.ok) {
     let errorData

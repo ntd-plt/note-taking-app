@@ -11,18 +11,18 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-import useRegister from '../api/useRegister'
+import useSignup from '../api/useSignup'
 import { PencilIcon } from 'lucide-react'
 import { getAuthErrorMessage } from '#/shared/lib/auth_errors'
 
-export function RegisterPage() {
+export function SignupPage() {
   const navigate = useNavigate()
-  const { mutate, isPending, error } = useRegister()
+  const { mutate, isPending, error } = useSignup()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  async function handleRegister() {
+  async function handleSignup() {
     if (username && email && password) {
       mutate(
         {
@@ -40,7 +40,7 @@ export function RegisterPage() {
   }
 
   return (
-    <form action={handleRegister} className="w-full">
+    <form action={handleSignup} className="w-full">
       <div className="flex min-h-screen items-center justify-center">
         <Card className="w-full max-w-sm">
           <CardHeader>

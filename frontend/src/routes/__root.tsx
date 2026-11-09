@@ -2,8 +2,9 @@ import {
   HeadContent,
   Outlet,
   Scripts,
-  createRootRoute,
+  createRootRouteWithContext,
 } from '@tanstack/react-router'
+import type { QueryClient } from '@tanstack/react-query'
 import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
@@ -13,7 +14,13 @@ import { SettingsDialog } from '#/widgets/settings-dialog'
 
 import appCss from '../styles.css?url'
 
-export const Route = createRootRoute({
+// What every route can reach in beforeLoad and loader: the query client, so
+// guards can read the cached session.
+export interface RouterContext {
+  queryClient: QueryClient
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   component: () => <App />,
   head: () => ({
     meta: [
