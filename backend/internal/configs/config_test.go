@@ -92,3 +92,18 @@ func TestLoadAllowedOrigins(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadRejectsAWildcardOrigin(t *testing.T) {
+	t.Setenv("ALLOWED_ORIGINS", "https://a.example,*")
+	if _, err := Load(); err == nil {
+		t.Error(`ALLOWED_ORIGINS with "*": want an error`)
+	}
+}
+
+func TestSecureCookiesOutsideDevelopment(t *testing.T) {
+	for env, want := range map[string]bool{"development": false, "staging": true, "production": true} {
+		if got := (&Config{AppEnv: env}).SecureCookies(); got != want {
+			t.Errorf("APP_ENV=%s: SecureCookies = %v, want %v", env, got, want)
+		}
+	}
+}

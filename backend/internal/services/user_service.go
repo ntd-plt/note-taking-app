@@ -60,7 +60,7 @@ func (s *UserService) CreateUser(name, email string, passwordHash []byte) (model
 // @Description  Returns the authenticated user's profile (never includes the password hash)
 // @Tags         users
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Success      200  {object}  UserResponse
 // @Failure      401  {object}  map[string]string
 // @Failure      404  {object}  map[string]string
@@ -99,7 +99,7 @@ type UpdateUserRequest struct {
 // @Tags         users
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Param        request  body      UpdateUserRequest  true  "Fields to update"
 // @Success      200      {object}  UserResponse
 // @Failure      400      {object}  map[string]string

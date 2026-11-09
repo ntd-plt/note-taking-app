@@ -5,18 +5,20 @@ import (
 	"backend/internal/database"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
+	"backend/internal/session"
 	"log"
 )
 
 // @title           Note Taking App API
 // @version         1.0
 // @description     API for managing users and their pages and blocks.
+// @description     Authentication: log in with POST /auth/login (or sign up), which sets the session in the HttpOnly "sid" cookie. The browser sends it with every later request, including from this page. State-changing requests from other sites are refused.
 // @BasePath        /api/v1
 
-// @securityDefinitions.apikey  BearerAuth
-// @in                          header
-// @name                        Authorization
-// @description                 Type "Bearer" followed by a space and the JWT access token.
+// @securityDefinitions.apikey  SessionCookie
+// @in                          cookie
+// @name                        sid
+// @description                 Set by POST /auth/login or /auth/signup; the browser sends it by itself.
 
 func main() {
 	cfg, err := configs.Load()
@@ -34,7 +36,11 @@ func main() {
 	itemsDataSource := database.NewPostgreItemsDataSource(pool)
 
 	hasher := hash.NewBcryptHasher()
-	tokenService := services.NewJWTService()
+	sessions := session.NewService(database.NewPostgreSessionStore(pool), session.Config{
+		IdleTTL:     cfg.SessionIdleTTL,
+		AbsoluteTTL: cfg.SessionAbsoluteTTL,
+	})
+	cookie := session.Cookie{Secure: cfg.SecureCookies(), MaxAge: sessions.MaxAge()}
 
 	var emailValidator services.EmailValidator
 	if cfg.DisableEmailVerification {
@@ -45,10 +51,21 @@ func main() {
 	}
 
 	userService := services.NewUserService(userDataSource)
-	authService := services.NewAuthService(userService, hasher, tokenService, emailValidator)
+	authService := services.NewAuthService(userService, hasher, emailValidator, sessions, cookie)
 	itemsService := services.NewItemsService(itemsDataSource, cfg.TrashRetention)
 
-	router := NewRouter(authService, userService, itemsService, tokenService, cfg.IsDevelopment())
+	router, err := NewRouter(RouterDeps{
+		Auth:           authService,
+		Users:          userService,
+		Items:          itemsService,
+		Sessions:       sessions,
+		Cookie:         cookie,
+		AllowedOrigins: cfg.AllowedOrigins,
+		EnableSwagger:  cfg.IsDevelopment(),
+	})
+	if err != nil {
+		panic(err)
+	}
 	if err := router.Run(":8080"); err != nil {
 		panic(err)
 	}

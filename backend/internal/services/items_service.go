@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"backend/internal/database"
+	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/pkg"
 
@@ -76,12 +77,12 @@ func respondError(c *gin.Context, err error) {
 }
 
 func currentUser(c *gin.Context) (uuid.UUID, bool) {
-	userID, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+	userID, ok := middleware.UserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "not logged in"})
 		return uuid.Nil, false
 	}
-	return userID.(uuid.UUID), true
+	return userID, true
 }
 
 func itemIDParam(c *gin.Context) (uuid.UUID, bool) {
@@ -98,7 +99,7 @@ func itemIDParam(c *gin.Context) (uuid.UUID, bool) {
 // @Description  For a page id, returns the page and everything under it as one flat list in document order (child pages included, not their content), plus its ancestor pages. For a block id, returns the page that contains the block, with focus_id set to the block. The workspace root cannot be opened.
 // @Tags         items
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Param        id   path      string  true  "Page or block id"
 // @Success      200  {object}  ItemResponse
 // @Failure      400  {object}  map[string]string
@@ -134,7 +135,7 @@ func (s *ItemsService) GetItem(c *gin.Context) {
 // @Description  Returns the user's hidden workspace item. Its child_ids are the top-level pages; create a top-level page with it as parent_id.
 // @Tags         items
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Success      200  {object}  model.Item
 // @Failure      401  {object}  map[string]string
 // @Failure      404  {object}  map[string]string
@@ -158,7 +159,7 @@ func (s *ItemsService) GetWorkspace(c *gin.Context) {
 // @Description  Returns every page that is not in the trash, in document order. parent_id is the direct parent (a block, a page or the workspace); parent_page_id is the nearest page above, left out for a top-level page.
 // @Tags         items
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Success      200  {array}   model.Item
 // @Failure      401  {object}  map[string]string
 // @Failure      500  {object}  map[string]string

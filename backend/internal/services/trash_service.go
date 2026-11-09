@@ -39,7 +39,7 @@ func (s *ItemsService) purgeExpiredTrash(userID uuid.UUID) {
 // @Description  Returns the pages in the trash, most recently trashed first. Pages inside a trashed page are not listed on their own. Pages past the retention period are left out; they are removed the next time something is moved to the trash.
 // @Tags         trash
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Success      200  {object}  TrashResponse
 // @Failure      401  {object}  map[string]string
 // @Failure      500  {object}  map[string]string
@@ -69,7 +69,7 @@ func (s *ItemsService) ListTrash(c *gin.Context) {
 // @Summary      Restore a page from the trash
 // @Description  Puts the page back at the end of the top level, with everything that was inside it. To restore it somewhere else, send a restore operation to /ops. A page inside a trashed page cannot be restored on its own.
 // @Tags         trash
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Param        id   path  string  true  "Page id"
 // @Success      204  "No Content"
 // @Failure      400  {object}  map[string]any
@@ -98,7 +98,7 @@ func (s *ItemsService) RestoreFromTrash(c *gin.Context) {
 // @Summary      Delete a page for good
 // @Description  Removes a page in the trash and everything inside it. This cannot be undone.
 // @Tags         trash
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Param        id   path  string  true  "Page id"
 // @Success      204  "No Content"
 // @Failure      400  {object}  map[string]string
@@ -131,7 +131,7 @@ func (s *ItemsService) DeleteFromTrash(c *gin.Context) {
 // @Description  Removes every page in the trash, and everything inside them, for good.
 // @Tags         trash
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Success      200  {object}  map[string]int  "deleted: how many pages were removed"
 // @Failure      401  {object}  map[string]string
 // @Failure      500  {object}  map[string]string

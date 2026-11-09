@@ -1,7 +1,7 @@
 # Backend Makefile — setup, migrations, docs, run.
 # All commands assume they're run from the backend/ directory ($ cd backend && make ...).
 #
-# POSTGRES_* / JWT_SECRET are NOT loaded as Make variables (a plain `-include .env`
+# POSTGRES_* are NOT loaded as Make variables (a plain `-include .env`
 # freezes them at parse time, before `env` has a chance to create the file on
 # a fresh clone). Instead, any recipe that needs them sources .env itself at
 # run time via `. ./.env`, after `env` (its prerequisite) has guaranteed the
@@ -20,16 +20,11 @@ help: ## Show this help
 
 ## --- Setup -----------------------------------------------------------------
 
-setup: env tools tidy db-create migrate-up seed-user ## One-shot setup: env file (secret auto-generated), tools, deps, database, migrations, dev user — no manual steps required
+setup: env tools tidy db-create migrate-up seed-user ## One-shot setup: env file, tools, deps, database, migrations, dev user — no manual steps required
 	@echo "Setup complete. Run 'make run' to start the server."
 
-env: ## Create .env from .env.example if missing, auto-generating a JWT secret
+env: ## Create .env from .env.example if missing
 	@test -f .env || cp .env.example .env
-	@if [ -z "$$(grep '^JWT_SECRET=' .env | cut -d'=' -f2-)" ]; then \
-		SECRET=$$(openssl rand -base64 48); \
-		perl -i -pe "s|^JWT_SECRET=.*|JWT_SECRET=$$SECRET|" .env; \
-		echo "Generated a random JWT_SECRET in .env."; \
-	fi
 
 tools: ## Install swag (Swagger generator) and migrate (schema migrations) CLIs
 	go install github.com/swaggo/swag/cmd/swag@latest

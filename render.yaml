@@ -40,10 +40,11 @@ services:
         fromDatabase:
           name: note-taking-db-staging
           property: database
-      - key: JWT_SECRET
-        generateValue: true # Generates a random JWT Secret on deploy
+      # Leave empty while the frontend reaches the API through the Vercel /api
+      # rewrite (same origin). List exact frontend origins here only if the
+      # browser calls this service directly; "*" is refused.
       - key: ALLOWED_ORIGINS
-        value: "*" # Set to your Vercel/Netlify frontend URL in the Render dashboard once deployed
+        value: ""
 
 databases:
   # Managed PostgreSQL Staging Database

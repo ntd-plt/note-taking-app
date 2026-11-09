@@ -3,6 +3,7 @@ package configs
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,8 +17,6 @@ type Config struct {
 	DBPass     string
 	DBName     string
 	ServerPort string
-
-	JWTSecret string
 
 	// AppEnv is "development" or "production". Defaults to "development"
 	// (dev-safe) unless explicitly set otherwise via the APP_ENV env var.
@@ -57,7 +56,6 @@ func Default() *Config {
 		DBPass:     "password",
 		DBName:     "db",
 		ServerPort: "8080",
-		JWTSecret:  "default_secret",
 		AppEnv:     "development",
 
 		TrashRetention: DefaultTrashRetention,
@@ -85,6 +83,10 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	origins := splitList(os.Getenv("ALLOWED_ORIGINS"))
+	if slices.Contains(origins, "*") {
+		return nil, fmt.Errorf("ALLOWED_ORIGINS must list exact origins such as https://app.example.com, not \"*\": the API is called with the session cookie")
+	}
 
 	return &Config{
 		DBHost:     os.Getenv("POSTGRES_HOST"),
@@ -93,7 +95,6 @@ func Load() (*Config, error) {
 		DBPass:     os.Getenv("POSTGRES_PASSWORD"),
 		DBName:     os.Getenv("POSTGRES_DB"),
 		ServerPort: os.Getenv("SERVER_PORT"),
-		JWTSecret:  os.Getenv("JWT_SECRET"),
 		AppEnv:     appEnv,
 
 		DisableEmailVerification: os.Getenv("DISABLE_EMAIL_VERIFICATION") == "true",
@@ -102,7 +103,7 @@ func Load() (*Config, error) {
 
 		SessionIdleTTL:     idleTTL,
 		SessionAbsoluteTTL: absoluteTTL,
-		AllowedOrigins:     splitList(os.Getenv("ALLOWED_ORIGINS")),
+		AllowedOrigins:     origins,
 	}, nil
 }
 
@@ -138,4 +139,10 @@ func (c *Config) IsProduction() bool {
 
 func (c *Config) IsDevelopment() bool {
 	return c.AppEnv == "development"
+}
+
+// SecureCookies reports whether cookies are sent over HTTPS only. Local
+// development runs over plain http, so it is the only place they are not.
+func (c *Config) SecureCookies() bool {
+	return !c.IsDevelopment()
 }

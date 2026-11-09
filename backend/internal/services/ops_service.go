@@ -129,7 +129,7 @@ func respondOpError(c *gin.Context, err error) {
 // @Tags         items
 // @Accept       json
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Param        request  body  ApplyOpsRequest  true  "Operations to apply"
 // @Success      204  "No Content"
 // @Failure      400  {object}  map[string]any
@@ -189,7 +189,7 @@ func movesToTrash(ops []model.Op) bool {
 // @Description  Deep-copies the item and everything under it, child pages included, with new ids, and places the copy right after the original. A copied page is named "Name (Copy N)". Copied pages are not favorites.
 // @Tags         items
 // @Produce      json
-// @Security     BearerAuth
+// @Security     SessionCookie
 // @Param        id   path      string  true  "Page or block id"
 // @Success      201  {object}  model.Item
 // @Failure      400  {object}  map[string]string

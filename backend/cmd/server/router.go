@@ -3,6 +3,7 @@ package main
 import (
 	"backend/internal/middleware"
 	"backend/internal/services"
+	"backend/internal/session"
 
 	_ "backend/docs"
 
@@ -13,13 +14,30 @@ import (
 
 const maxRequestBodyBytes = 2 << 20
 
-func NewRouter(authService *services.AuthService, userService *services.UserService, itemsService *services.ItemsService, tokenService *services.JWTService, enableSwagger bool) *gin.Engine {
-	router := gin.Default()
+// RouterDeps is what the HTTP routes are built from.
+type RouterDeps struct {
+	Auth     *services.AuthService
+	Users    *services.UserService
+	Items    *services.ItemsService
+	Sessions middleware.SessionLookup
+	Cookie   session.Cookie
+	// AllowedOrigins may call the API cross-origin with the session cookie.
+	AllowedOrigins []string
+	EnableSwagger  bool
+}
 
-	router.Use(middleware.CORS())
+func NewRouter(d RouterDeps) (*gin.Engine, error) {
+	csrf, err := middleware.CSRF(d.AllowedOrigins)
+	if err != nil {
+		return nil, err
+	}
+
+	router := gin.Default()
+	router.Use(middleware.CORS(d.AllowedOrigins))
+	router.Use(csrf)
 	router.Use(middleware.MaxBodyBytes(maxRequestBodyBytes))
 
-	if enableSwagger {
+	if d.EnableSwagger {
 		router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	}
 
@@ -27,27 +45,29 @@ func NewRouter(authService *services.AuthService, userService *services.UserServ
 
 	authGroup := v1.Group("/auth")
 	{
-		authGroup.POST("/login", authService.Login)
-		authGroup.POST("/signup", authService.Signup)
-		authGroup.POST("/refresh-token", authService.RefreshToken)
+		authGroup.POST("/login", d.Auth.Login)
+		authGroup.POST("/signup", d.Auth.Signup)
+		authGroup.POST("/logout", d.Auth.Logout)
 	}
 
 	protected := v1.Group("")
-	protected.Use(middleware.Auth(tokenService))
+	protected.Use(middleware.RequireSession(d.Sessions, d.Cookie))
 	{
-		protected.GET("/users/me", userService.GetUser)
-		protected.PUT("/users/me", userService.UpdateUser)
+		protected.POST("/auth/logout-all", d.Auth.LogoutAll)
 
-		protected.GET("/items/:id", itemsService.GetItem)
-		protected.POST("/items/:id/duplicate", itemsService.DuplicateItem)
-		protected.GET("/workspace", itemsService.GetWorkspace)
-		protected.GET("/pages", itemsService.ListPages)
-		protected.POST("/ops", itemsService.ApplyOps)
+		protected.GET("/users/me", d.Users.GetUser)
+		protected.PUT("/users/me", d.Users.UpdateUser)
 
-		protected.GET("/trash", itemsService.ListTrash)
-		protected.DELETE("/trash", itemsService.EmptyTrash)
-		protected.POST("/trash/:id/restore", itemsService.RestoreFromTrash)
-		protected.DELETE("/trash/:id", itemsService.DeleteFromTrash)
+		protected.GET("/items/:id", d.Items.GetItem)
+		protected.POST("/items/:id/duplicate", d.Items.DuplicateItem)
+		protected.GET("/workspace", d.Items.GetWorkspace)
+		protected.GET("/pages", d.Items.ListPages)
+		protected.POST("/ops", d.Items.ApplyOps)
+
+		protected.GET("/trash", d.Items.ListTrash)
+		protected.DELETE("/trash", d.Items.EmptyTrash)
+		protected.POST("/trash/:id/restore", d.Items.RestoreFromTrash)
+		protected.DELETE("/trash/:id", d.Items.DeleteFromTrash)
 	}
-	return router
+	return router, nil
 }

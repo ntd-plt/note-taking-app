@@ -2,14 +2,18 @@ package services
 
 import (
 	"backend/internal/errors"
+	"backend/internal/model"
 	"backend/internal/pkg"
 	"backend/internal/pkg/hash"
+	"backend/internal/session"
 	"context"
 	stderrors "errors"
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // normalizeEmail trims whitespace and lowercases an email address so that
@@ -19,32 +23,45 @@ func normalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
+// AuthSessions starts and ends login sessions.
+type AuthSessions interface {
+	Create(ctx context.Context, userID uuid.UUID, userAgent string) (string, session.Session, error)
+	Delete(ctx context.Context, id string) error
+	DeleteAllForUser(ctx context.Context, userID uuid.UUID) error
+	PurgeExpired(ctx context.Context, userID uuid.UUID) error
+}
+
 type AuthService struct {
 	userService    *UserService
 	hasher         hash.Hasher
-	tokenService   TokenService
 	emailValidator EmailValidator
+	sessions       AuthSessions
+	cookie         session.Cookie
 }
 
-func NewAuthService(userService *UserService, hasher hash.Hasher, tokenService TokenService, emailValidator EmailValidator) *AuthService {
+func NewAuthService(userService *UserService, hasher hash.Hasher, emailValidator EmailValidator, sessions AuthSessions, cookie session.Cookie) *AuthService {
 	return &AuthService{
 		userService:    userService,
 		hasher:         hasher,
-		tokenService:   tokenService,
 		emailValidator: emailValidator,
+		sessions:       sessions,
+		cookie:         cookie,
 	}
 }
 
 // Login godoc
 // @Summary      Log in
-// @Description  Authenticates a user and returns access/refresh tokens
+// @Description  Checks the email and password, starts a session and sets it in the sid cookie (HttpOnly, SameSite=Lax). Returns the user.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
 // @Param        request  body      pkg.LoginRequest  true  "Login credentials"
-// @Success      200      {object}  pkg.AuthResponse
+// @Success      200      {object}  UserResponse
+// @Header       200      {string}  Set-Cookie  "sid=<session id>"
 // @Failure      400      {object}  map[string]string
 // @Failure      401      {object}  map[string]string
+// @Failure      403      {object}  map[string]string
+// @Failure      500      {object}  map[string]string
 // @Router       /auth/login [post]
 func (s *AuthService) Login(c *gin.Context) {
 	var req pkg.LoginRequest
@@ -53,40 +70,40 @@ func (s *AuthService) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := s.login(req.Email, req.Password)
+	user, err := s.login(req.Email, req.Password)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
-
-	c.JSON(http.StatusOK, pkg.NewAuthResponse(token.AccessToken, token.RefreshToken))
-}
-
-func (s *AuthService) Logout() error {
-	return nil
+	if !s.startSession(c, user) {
+		return
+	}
+	c.JSON(http.StatusOK, newUserResponse(user))
 }
 
 // Signup godoc
 // @Summary      Sign up
-// @Description  Creates a new user account and returns access/refresh tokens
+// @Description  Creates an account, starts a session and sets it in the sid cookie (HttpOnly, SameSite=Lax). Returns the new user.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
-// @Param        request  body      pkg.SignupResponse  true  "Signup details"
-// @Success      200      {object}  pkg.AuthResponse
+// @Param        request  body      pkg.SignupRequest  true  "Signup details"
+// @Success      201      {object}  UserResponse
+// @Header       201      {string}  Set-Cookie  "sid=<session id>"
 // @Failure      400      {object}  map[string]string
+// @Failure      403      {object}  map[string]string
 // @Failure      409      {object}  map[string]string
 // @Failure      422      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /auth/signup [post]
 func (s *AuthService) Signup(c *gin.Context) {
-	var req pkg.SignupResponse
+	var req pkg.SignupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	err := s.signup(c.Request.Context(), req.Name, req.Email, req.Password)
+	user, err := s.signup(c.Request.Context(), req.Name, req.Email, req.Password)
 	if err != nil {
 		if stderrors.Is(err, errors.ErrEmailAlreadyExists) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -99,110 +116,119 @@ func (s *AuthService) Signup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
+	if !s.startSession(c, user) {
+		return
+	}
+	c.JSON(http.StatusCreated, newUserResponse(user))
+}
 
-	token, err := s.login(req.Email, req.Password)
-	if err != nil {
+// Logout godoc
+// @Summary      Log out
+// @Description  Ends the session in the sid cookie and clears the cookie. Succeeds without a session too.
+// @Tags         auth
+// @Success      204  "No Content"
+// @Failure      403  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Router       /auth/logout [post]
+func (s *AuthService) Logout(c *gin.Context) {
+	s.cookie.Clear(c.Writer)
+	if id := s.cookie.Read(c.Request); id != "" {
+		if err := s.sessions.Delete(c.Request.Context(), id); err != nil {
+			log.Printf("ending a session: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			return
+		}
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// LogoutAll godoc
+// @Summary      Log out of all devices
+// @Description  Ends every session of the logged-in user, on every device, and clears the sid cookie.
+// @Tags         auth
+// @Success      204  "No Content"
+// @Failure      401  {object}  map[string]string
+// @Failure      403  {object}  map[string]string
+// @Failure      500  {object}  map[string]string
+// @Security     SessionCookie
+// @Router       /auth/logout-all [post]
+func (s *AuthService) LogoutAll(c *gin.Context) {
+	userID, ok := currentUser(c)
+	if !ok {
+		return
+	}
+	if err := s.sessions.DeleteAllForUser(c.Request.Context(), userID); err != nil {
+		log.Printf("ending the sessions of %s: %v", userID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
-
-	c.JSON(http.StatusOK, pkg.NewAuthResponse(token.AccessToken, token.RefreshToken))
+	s.cookie.Clear(c.Writer)
+	c.Status(http.StatusNoContent)
 }
 
-// RefreshToken godoc
-// @Summary      Refresh access token
-// @Description  Exchanges a refresh token for a new access token
-// @Tags         auth
-// @Accept       json
-// @Produce      json
-// @Param        request  body      pkg.RefreshTokenRequest  true  "Refresh token"
-// @Success      200      {object}  pkg.AuthResponse
-// @Failure      400      {object}  map[string]string
-// @Failure      401      {object}  map[string]string
-// @Router       /auth/refresh-token [post]
-func (s *AuthService) RefreshToken(c *gin.Context) {
-	var req pkg.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+// startSession logs the user in on this browser: it ends the session the browser
+// already had, if any, so every login gets a fresh id, then sets the new one in the
+// cookie. It reports false after writing an error response.
+func (s *AuthService) startSession(c *gin.Context, user model.User) bool {
+	ctx := c.Request.Context()
+	if old := s.cookie.Read(c.Request); old != "" {
+		if err := s.sessions.Delete(ctx, old); err != nil {
+			log.Printf("ending the previous session: %v", err)
+		}
 	}
-
-	token, err := s.refreshToken(req.Token)
+	if err := s.sessions.PurgeExpired(ctx, user.ID); err != nil {
+		log.Printf("purging the expired sessions of %s: %v", user.ID, err)
+	}
+	id, _, err := s.sessions.Create(ctx, user.ID, c.Request.UserAgent())
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
+		log.Printf("starting a session for %s: %v", user.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		return false
 	}
-
-	c.JSON(http.StatusOK, pkg.NewAuthResponse(token, ""))
+	s.cookie.Set(c.Writer, id)
+	return true
 }
 
-func (s *AuthService) login(email, password string) (*pkg.AuthResponse, error) {
-	email = normalizeEmail(email)
-
-	u, err := s.userService.GetUserByEmail(email)
+func (s *AuthService) login(email, password string) (model.User, error) {
+	u, err := s.userService.GetUserByEmail(normalizeEmail(email))
 	if err != nil {
-		return nil, err
+		return model.User{}, err
 	}
 	if err := s.hasher.Compare(u.PasswordHash, []byte(password)); err != nil {
-		return nil, errors.ErrWrongPasswordOrEmail
+		return model.User{}, errors.ErrWrongPasswordOrEmail
 	}
-
-	accessToken, err := s.tokenService.GenerateAccessToken(u.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	refreshToken, err := s.tokenService.GenerateRefreshToken(u.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return pkg.NewAuthResponse(accessToken, refreshToken), nil
+	return u, nil
 }
 
-func (s *AuthService) signup(ctx context.Context, name, email, password string) error {
+func (s *AuthService) signup(ctx context.Context, name, email, password string) (model.User, error) {
 	email = normalizeEmail(email)
 
 	_, err := s.userService.GetUserByEmail(email)
 	if err == nil {
-		return errors.ErrEmailAlreadyExists
+		return model.User{}, errors.ErrEmailAlreadyExists
 	}
 	var notFoundError *pkg.NotFoundError
 	if !stderrors.As(err, &notFoundError) {
-		return err
+		return model.User{}, err
 	}
 
 	result, verifyErr := s.emailValidator.Verify(ctx, email)
 	if verifyErr == nil && (result.Classification == EmailVerificationUndeliverable || result.IsDisposable) {
-		return errors.ErrInvalidEmailAddress
+		return model.User{}, errors.ErrInvalidEmailAddress
 	}
 
 	passwordHash, err := s.hasher.Hash([]byte(password))
 	if err != nil {
-		return err
+		return model.User{}, err
 	}
 
-	if _, err := s.userService.CreateUser(name, email, passwordHash); err != nil {
+	user, err := s.userService.CreateUser(name, email, passwordHash)
+	if err != nil {
 		var alreadyExists *pkg.AlreadyExistsError
 		if stderrors.As(err, &alreadyExists) {
-			return errors.ErrEmailAlreadyExists
+			return model.User{}, errors.ErrEmailAlreadyExists
 		}
-		return err
+		return model.User{}, err
 	}
-
-	return nil
-}
-
-func (s *AuthService) refreshToken(token string) (string, error) {
-	userID, err := s.tokenService.ValidateRefreshToken(token)
-	if err != nil {
-		return "", err
-	}
-
-	accessToken, err := s.tokenService.GenerateAccessToken(userID)
-	if err != nil {
-		return "", err
-	}
-
-	return accessToken, nil
+	return user, nil
 }

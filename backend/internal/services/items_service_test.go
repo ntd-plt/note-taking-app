@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/services"
 	"backend/internal/testutil"
@@ -25,7 +26,7 @@ func newItemsRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
 		if userID != nil {
-			c.Set("userID", *userID)
+			middleware.SetUserID(c, *userID)
 		}
 	})
 	r.GET("/api/v1/items/:id", h.GetItem)
