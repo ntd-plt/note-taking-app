@@ -40,7 +40,7 @@ func RequireSession(sessions SessionLookup, cookie session.Cookie) gin.HandlerFu
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 			return
 		}
-		SetUserID(c, sess.UserID)
+		c.Set(userIDKey, sess.UserID)
 		c.Next()
 	}
 }
@@ -53,10 +53,4 @@ func UserID(c *gin.Context) (uuid.UUID, bool) {
 	}
 	id, ok := v.(uuid.UUID)
 	return id, ok
-}
-
-// SetUserID marks the request as made by the user. RequireSession calls it; tests
-// use it to stand in for a session.
-func SetUserID(c *gin.Context, id uuid.UUID) {
-	c.Set(userIDKey, id)
 }

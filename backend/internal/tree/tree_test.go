@@ -17,13 +17,13 @@ import (
 
 type fixture struct {
 	t    *testing.T
-	db   *testutil.FakeDatabase
+	db   *testutil.FakeItemStore
 	user uuid.UUID
 	ws   uuid.UUID
 }
 
 func newFixture(t *testing.T) *fixture {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	user := uuid.New()
 	return &fixture{t: t, db: db, user: user, ws: db.Workspace(user).ID}
 }

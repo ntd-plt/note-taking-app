@@ -9,7 +9,7 @@ import (
 )
 
 func TestRequestBodiesRejectUnknownFields(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	user := addUser(db, "alice@example.com", "secret123")
 	auth := newAuthRouter(db).r
 	users := newUsersRouter(db, user)
@@ -21,15 +21,15 @@ func TestRequestBodiesRejectUnknownFields(t *testing.T) {
 		send  func() (int, string)
 	}{
 		{"login typo", 400, "pasword", func() (int, string) {
-			w := doJSON(t, auth, http.MethodPost, "/auth/login", `{"email":"alice@example.com","password":"secret123","pasword":"x"}`)
+			w := doJSON(t, auth, http.MethodPost, "/api/v1/auth/login", `{"email":"alice@example.com","password":"secret123","pasword":"x"}`)
 			return w.Code, w.Body.String()
 		}},
 		{"signup extra", 400, "remember_me", func() (int, string) {
-			w := doJSON(t, auth, http.MethodPost, "/auth/signup", `{"name":"Bob","email":"bob@example.com","password":"secret123","remember_me":true}`)
+			w := doJSON(t, auth, http.MethodPost, "/api/v1/auth/signup", `{"name":"Bob","email":"bob@example.com","password":"secret123","remember_me":true}`)
 			return w.Code, w.Body.String()
 		}},
 		{"profile typo", 400, "nmae", func() (int, string) {
-			w := doJSON(t, users, http.MethodPut, "/users/me", `{"nmae":"Alice"}`)
+			w := doJSON(t, users, http.MethodPut, "/api/v1/users/me", `{"nmae":"Alice"}`)
 			return w.Code, w.Body.String()
 		}},
 	}
@@ -45,9 +45,9 @@ func TestRequestBodiesRejectUnknownFields(t *testing.T) {
 }
 
 func TestRequestBodiesRejectTrailingData(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	addUser(db, "alice@example.com", "secret123")
-	w := doJSON(t, newAuthRouter(db).r, http.MethodPost, "/auth/login", `{"email":"alice@example.com","password":"secret123"} {"x":1}`)
+	w := doJSON(t, newAuthRouter(db).r, http.MethodPost, "/api/v1/auth/login", `{"email":"alice@example.com","password":"secret123"} {"x":1}`)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400; body %s", w.Code, w.Body.String())
 	}

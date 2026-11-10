@@ -12,57 +12,36 @@ import (
 
 	"backend/internal/apperr"
 	"backend/internal/handlers"
-	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/services"
 	"backend/internal/session"
 	"backend/internal/testutil"
-
-	"github.com/gin-gonic/gin"
 )
 
-var testSessionConfig = session.Config{IdleTTL: 7 * 24 * time.Hour, AbsoluteTTL: 30 * 24 * time.Hour}
-
-var testCookie = session.Cookie{Secure: true, MaxAge: testSessionConfig.AbsoluteTTL}
-
 type authFixture struct {
-	r        *gin.Engine
+	r        http.Handler
 	hasher   *testutil.FakeHasher
-	db       *testutil.FakeDatabase
+	db       *testutil.FakeUserStore
 	store    *testutil.FakeSessionStore
 	sessions *session.Service
 }
 
-func newAuthRouter(db *testutil.FakeDatabase) *authFixture {
+func newAuthRouter(db *testutil.FakeUserStore) *authFixture {
 	return newAuthRouterWithValidator(db, &testutil.FakeEmailValidator{})
 }
 
-func newAuthRouterWithValidator(db *testutil.FakeDatabase, ev *testutil.FakeEmailValidator) *authFixture {
-	gin.SetMode(gin.TestMode)
-	store := testutil.NewFakeSessionStore()
-	sessions := session.NewService(store, testSessionConfig)
-	hasher := &testutil.FakeHasher{}
-	authService := handlers.NewAuthHandler(services.NewAuthService(db, hasher, ev), sessions, testCookie)
-
-	r := gin.New()
-	r.POST("/auth/login", authService.Login)
-	r.POST("/auth/signup", authService.Signup)
-	r.POST("/auth/logout", authService.Logout)
-	r.POST("/auth/logout-all", middleware.RequireSession(sessions, testCookie), authService.LogoutAll)
-	r.GET("/me", middleware.RequireSession(sessions, testCookie), func(c *gin.Context) {
-		id, _ := middleware.UserID(c)
-		c.String(http.StatusOK, id.String())
-	})
-	return &authFixture{r: r, hasher: hasher, db: db, store: store, sessions: sessions}
+func newAuthRouterWithValidator(db *testutil.FakeUserStore, ev *testutil.FakeEmailValidator) *authFixture {
+	app := newApp(appConfig{users: db, validator: ev})
+	return &authFixture{r: app.r, hasher: app.hasher, db: db, store: app.store, sessions: app.sessions}
 }
 
-func addUser(db *testutil.FakeDatabase, email, password string) model.User {
+func addUser(db *testutil.FakeUserStore, email, password string) model.User {
 	u := *model.New().WithEmail(email).WithPasswordHash([]byte("hashed:" + password))
 	db.Users[u.ID] = u
 	return u
 }
 
-func doJSON(t *testing.T, r *gin.Engine, method, path string, body any, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+func doJSON(t *testing.T, r http.Handler, method, path string, body any, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
 	if body != nil {
@@ -123,19 +102,19 @@ func wantLoggedIn(t *testing.T, f *authFixture, w *httptest.ResponseRecorder, em
 	if want := int(testSessionConfig.AbsoluteTTL / time.Second); c.MaxAge != want {
 		t.Errorf("cookie Max-Age = %d, want %d", c.MaxAge, want)
 	}
-	me := doJSON(t, f.r, http.MethodGet, "/me", nil, c)
-	if me.Code != http.StatusOK || me.Body.String() != resp.ID {
-		t.Errorf("GET /me with the cookie = %d %q, want 200 %q", me.Code, me.Body.String(), resp.ID)
+	me := doJSON(t, f.r, http.MethodGet, "/api/v1/users/me", nil, c)
+	if me.Code != http.StatusOK || !strings.Contains(me.Body.String(), resp.ID) {
+		t.Errorf("GET /users/me with the cookie = %d %q, want 200 with %q", me.Code, me.Body.String(), resp.ID)
 	}
 	return c
 }
 
 func TestLoginEndpointSuccess(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	user := addUser(db, "alice@example.com", "secret123")
 	f := newAuthRouter(db)
 
-	w := doJSON(t, f.r, http.MethodPost, "/auth/login", handlers.LoginRequest{
+	w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{
 		Email:    "Alice@Example.com",
 		Password: "secret123",
 	})
@@ -150,11 +129,11 @@ func TestLoginEndpointSuccess(t *testing.T) {
 }
 
 func TestLoginEndpointWrongPassword(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	addUser(db, "alice@example.com", "secret123")
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/login", handlers.LoginRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{
 		Email:    "alice@example.com",
 		Password: "wrong-password",
 	})
@@ -166,10 +145,10 @@ func TestLoginEndpointWrongPassword(t *testing.T) {
 }
 
 func TestLoginEndpointUnknownEmail(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/login", handlers.LoginRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{
 		Email:    "nobody@example.com",
 		Password: "secret123",
 	})
@@ -181,10 +160,10 @@ func TestLoginEndpointUnknownEmail(t *testing.T) {
 }
 
 func TestLoginEndpointMalformedBody(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/login", "{not json")
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/login", "{not json")
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
@@ -192,10 +171,10 @@ func TestLoginEndpointMalformedBody(t *testing.T) {
 }
 
 func TestLoginEndpointEmptyEmail(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/login", handlers.LoginRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{
 		Email:    "",
 		Password: "secret123",
 	})
@@ -206,11 +185,11 @@ func TestLoginEndpointEmptyEmail(t *testing.T) {
 }
 
 func TestLoginEndpointEmptyPassword(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	addUser(db, "alice@example.com", "secret123")
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/login", handlers.LoginRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{
 		Email:    "alice@example.com",
 		Password: "",
 	})
@@ -221,12 +200,12 @@ func TestLoginEndpointEmptyPassword(t *testing.T) {
 }
 
 func TestLoginEndpointSessionStoreFails(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	addUser(db, "alice@example.com", "secret123")
 	f := newAuthRouter(db)
 	f.store.Err = errors.New("connection refused")
 
-	w := doJSON(t, f.r, http.MethodPost, "/auth/login", handlers.LoginRequest{
+	w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{
 		Email:    "alice@example.com",
 		Password: "secret123",
 	})
@@ -241,19 +220,19 @@ func TestLoginEndpointSessionStoreFails(t *testing.T) {
 }
 
 func TestLoginReplacesTheBrowsersPreviousSession(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	user := addUser(db, "alice@example.com", "secret123")
 	f := newAuthRouter(db)
 	login := handlers.LoginRequest{Email: "alice@example.com", Password: "secret123"}
 
-	first := sessionCookie(t, doJSON(t, f.r, http.MethodPost, "/auth/login", login))
-	w := doJSON(t, f.r, http.MethodPost, "/auth/login", login, first)
+	first := sessionCookie(t, doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", login))
+	w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", login, first)
 	second := sessionCookie(t, w)
 
 	if first.Value == second.Value {
 		t.Error("logging in again kept the same session id")
 	}
-	if me := doJSON(t, f.r, http.MethodGet, "/me", nil, first); me.Code != http.StatusUnauthorized {
+	if me := doJSON(t, f.r, http.MethodGet, "/api/v1/users/me", nil, first); me.Code != http.StatusUnauthorized {
 		t.Errorf("old session: GET /me = %d, want 401", me.Code)
 	}
 	if n := len(f.store.ForUser(user.ID)); n != 1 {
@@ -262,10 +241,10 @@ func TestLoginReplacesTheBrowsersPreviousSession(t *testing.T) {
 }
 
 func TestSignupEndpointSuccessLogsTheUserIn(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	f := newAuthRouter(db)
 
-	w := doJSON(t, f.r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "bob@example.com",
 		Password: "secret123",
@@ -281,11 +260,11 @@ func TestSignupEndpointSuccessLogsTheUserIn(t *testing.T) {
 }
 
 func TestSignupEndpointSessionStoreFails(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	f := newAuthRouter(db)
 	f.store.Err = errors.New("connection refused")
 
-	w := doJSON(t, f.r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "bob@example.com",
 		Password: "secret123",
@@ -298,11 +277,11 @@ func TestSignupEndpointSessionStoreFails(t *testing.T) {
 }
 
 func TestSignupEndpointDuplicateEmail(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	addUser(db, "alice@example.com", "secret123")
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Alice Again",
 		Email:    "alice@example.com",
 		Password: "other-password",
@@ -314,14 +293,14 @@ func TestSignupEndpointDuplicateEmail(t *testing.T) {
 }
 
 func TestSignupEndpointDuplicateEmailRace(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	// Simulates the DB-level unique-violation translated by
 	// PostgreUserDataSource.AddUser when two signups for the same email race
 	// each other and both pass the pre-check.
-	db.Errs["AddUser"] = apperr.New(apperr.Conflict, "user with this email already exists")
+	db.Fail.AddUser = apperr.New(apperr.Conflict, "user with this email already exists")
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "bob@example.com",
 		Password: "secret123",
@@ -333,11 +312,11 @@ func TestSignupEndpointDuplicateEmailRace(t *testing.T) {
 }
 
 func TestSignupEndpointDuplicateCheckDBErrorDoesNotCreateUser(t *testing.T) {
-	db := testutil.NewFakeDatabase()
-	db.Errs["GetUserByEmail"] = errors.New("connection pool exhausted")
+	db := testutil.NewFakeUserStore()
+	db.Fail.GetUserByEmail = errors.New("connection pool exhausted")
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "bob@example.com",
 		Password: "secret123",
@@ -352,12 +331,12 @@ func TestSignupEndpointDuplicateCheckDBErrorDoesNotCreateUser(t *testing.T) {
 }
 
 func TestSignupEndpointUndeliverableEmail(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouterWithValidator(db, &testutil.FakeEmailValidator{
 		Classification: services.EmailVerificationUndeliverable,
 	}).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "bob@example.com",
 		Password: "secret123",
@@ -372,12 +351,12 @@ func TestSignupEndpointUndeliverableEmail(t *testing.T) {
 }
 
 func TestSignupEndpointDisposableEmail(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouterWithValidator(db, &testutil.FakeEmailValidator{
 		IsDisposable: true,
 	}).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "bob@example.com",
 		Password: "secret123",
@@ -389,12 +368,12 @@ func TestSignupEndpointDisposableEmail(t *testing.T) {
 }
 
 func TestSignupEndpointValidatorErrorFailsOpen(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouterWithValidator(db, &testutil.FakeEmailValidator{
 		Err: errors.New("email validator timeout"),
 	}).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "bob@example.com",
 		Password: "secret123",
@@ -407,10 +386,10 @@ func TestSignupEndpointValidatorErrorFailsOpen(t *testing.T) {
 }
 
 func TestSignupEndpointMalformedBody(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", "{not json")
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", "{not json")
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
@@ -418,10 +397,10 @@ func TestSignupEndpointMalformedBody(t *testing.T) {
 }
 
 func TestSignupEndpointMalformedEmailFormat(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "not-an-email",
 		Password: "secret123",
@@ -436,10 +415,10 @@ func TestSignupEndpointMalformedEmailFormat(t *testing.T) {
 }
 
 func TestSignupEndpointEmptyEmail(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "",
 		Password: "secret123",
@@ -451,10 +430,10 @@ func TestSignupEndpointEmptyEmail(t *testing.T) {
 }
 
 func TestSignupEndpointMissingEmailField(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", map[string]string{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", map[string]string{
 		"name":     "Bob",
 		"password": "secret123",
 	})
@@ -465,10 +444,10 @@ func TestSignupEndpointMissingEmailField(t *testing.T) {
 }
 
 func TestSignupEndpointEmailMissingDomain(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "bob@",
 		Password: "secret123",
@@ -480,11 +459,11 @@ func TestSignupEndpointEmailMissingDomain(t *testing.T) {
 }
 
 func TestSignupEndpointOverlongEmailRejected(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	r := newAuthRouter(db).r
 
 	overlongEmail := strings.Repeat("a", 260) + "@example.com"
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    overlongEmail,
 		Password: "secret123",
@@ -496,11 +475,11 @@ func TestSignupEndpointOverlongEmailRejected(t *testing.T) {
 }
 
 func TestSignupEndpointCaseInsensitiveDuplicateEmail(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	addUser(db, "bob@example.com", "secret123")
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob Again",
 		Email:    "Bob@Example.com",
 		Password: "other-password",
@@ -512,11 +491,11 @@ func TestSignupEndpointCaseInsensitiveDuplicateEmail(t *testing.T) {
 }
 
 func TestSignupEndpointInternalErrorDoesNotLeakDetails(t *testing.T) {
-	db := testutil.NewFakeDatabase()
-	db.Errs["AddUser"] = errors.New(`pq: duplicate key value violates unique constraint "users_email_key"`)
+	db := testutil.NewFakeUserStore()
+	db.Fail.AddUser = errors.New(`pq: duplicate key value violates unique constraint "users_email_key"`)
 	r := newAuthRouter(db).r
 
-	w := doJSON(t, r, http.MethodPost, "/auth/signup", handlers.SignupRequest{
+	w := doJSON(t, r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{
 		Name:     "Bob",
 		Email:    "bob@example.com",
 		Password: "secret123",
@@ -531,12 +510,12 @@ func TestSignupEndpointInternalErrorDoesNotLeakDetails(t *testing.T) {
 }
 
 func TestLogoutEndsTheSession(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	user := addUser(db, "alice@example.com", "secret123")
 	f := newAuthRouter(db)
-	c := sessionCookie(t, doJSON(t, f.r, http.MethodPost, "/auth/login", handlers.LoginRequest{Email: "alice@example.com", Password: "secret123"}))
+	c := sessionCookie(t, doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{Email: "alice@example.com", Password: "secret123"}))
 
-	w := doJSON(t, f.r, http.MethodPost, "/auth/logout", nil, c)
+	w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/logout", nil, c)
 
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusNoContent, w.Body.String())
@@ -544,7 +523,7 @@ func TestLogoutEndsTheSession(t *testing.T) {
 	if cleared := sessionCookie(t, w); cleared.MaxAge >= 0 || cleared.Value != "" {
 		t.Errorf("cookie = %+v, want it cleared", cleared)
 	}
-	if me := doJSON(t, f.r, http.MethodGet, "/me", nil, c); me.Code != http.StatusUnauthorized {
+	if me := doJSON(t, f.r, http.MethodGet, "/api/v1/users/me", nil, c); me.Code != http.StatusUnauthorized {
 		t.Errorf("after logout: GET /me = %d, want 401", me.Code)
 	}
 	if n := len(f.store.ForUser(user.ID)); n != 0 {
@@ -553,48 +532,48 @@ func TestLogoutEndsTheSession(t *testing.T) {
 }
 
 func TestLogoutWithoutASessionSucceeds(t *testing.T) {
-	f := newAuthRouter(testutil.NewFakeDatabase())
+	f := newAuthRouter(testutil.NewFakeUserStore())
 	stale := &http.Cookie{Name: session.CookieName, Value: "not-a-session"}
 	for _, cookies := range [][]*http.Cookie{nil, {stale}} {
-		if w := doJSON(t, f.r, http.MethodPost, "/auth/logout", nil, cookies...); w.Code != http.StatusNoContent {
+		if w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/logout", nil, cookies...); w.Code != http.StatusNoContent {
 			t.Errorf("cookies %v: status = %d, want %d", cookies, w.Code, http.StatusNoContent)
 		}
 	}
 }
 
 func TestLogoutStoreErrorIsReported(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	addUser(db, "alice@example.com", "secret123")
 	f := newAuthRouter(db)
-	c := sessionCookie(t, doJSON(t, f.r, http.MethodPost, "/auth/login", handlers.LoginRequest{Email: "alice@example.com", Password: "secret123"}))
+	c := sessionCookie(t, doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{Email: "alice@example.com", Password: "secret123"}))
 	f.store.Err = errors.New("boom")
 
-	if w := doJSON(t, f.r, http.MethodPost, "/auth/logout", nil, c); w.Code != http.StatusInternalServerError {
+	if w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/logout", nil, c); w.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusInternalServerError)
 	}
 }
 
 func TestLogoutAllEndsEveryDevice(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	alice := addUser(db, "alice@example.com", "secret123")
 	addUser(db, "carol@example.com", "secret123")
 	f := newAuthRouter(db)
 	login := func(email string) *http.Cookie {
-		return sessionCookie(t, doJSON(t, f.r, http.MethodPost, "/auth/login", handlers.LoginRequest{Email: email, Password: "secret123"}))
+		return sessionCookie(t, doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{Email: email, Password: "secret123"}))
 	}
 	laptop, phone, carol := login("alice@example.com"), login("alice@example.com"), login("carol@example.com")
 
-	w := doJSON(t, f.r, http.MethodPost, "/auth/logout-all", nil, laptop)
+	w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/logout-all", nil, laptop)
 
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusNoContent, w.Body.String())
 	}
 	for name, c := range map[string]*http.Cookie{"laptop": laptop, "phone": phone} {
-		if me := doJSON(t, f.r, http.MethodGet, "/me", nil, c); me.Code != http.StatusUnauthorized {
+		if me := doJSON(t, f.r, http.MethodGet, "/api/v1/users/me", nil, c); me.Code != http.StatusUnauthorized {
 			t.Errorf("%s: GET /me = %d, want 401", name, me.Code)
 		}
 	}
-	if me := doJSON(t, f.r, http.MethodGet, "/me", nil, carol); me.Code != http.StatusOK {
+	if me := doJSON(t, f.r, http.MethodGet, "/api/v1/users/me", nil, carol); me.Code != http.StatusOK {
 		t.Errorf("another user's session: GET /me = %d, want 200", me.Code)
 	}
 	if n := len(f.store.ForUser(alice.ID)); n != 0 {
@@ -603,20 +582,20 @@ func TestLogoutAllEndsEveryDevice(t *testing.T) {
 }
 
 func TestLogoutAllNeedsASession(t *testing.T) {
-	f := newAuthRouter(testutil.NewFakeDatabase())
-	if w := doJSON(t, f.r, http.MethodPost, "/auth/logout-all", nil); w.Code != http.StatusUnauthorized {
+	f := newAuthRouter(testutil.NewFakeUserStore())
+	if w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/logout-all", nil); w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 	}
 }
 
 func TestLoginAnswersUnknownEmailAndWrongPasswordAlike(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	addUser(db, "alice@example.com", "secret123")
 	f := newAuthRouter(db)
 
-	wrong := doJSON(t, f.r, http.MethodPost, "/auth/login", handlers.LoginRequest{Email: "alice@example.com", Password: "nope-nope"})
+	wrong := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{Email: "alice@example.com", Password: "nope-nope"})
 	comparesForKnown := f.hasher.Compares
-	unknown := doJSON(t, f.r, http.MethodPost, "/auth/login", handlers.LoginRequest{Email: "nobody@example.com", Password: "nope-nope"})
+	unknown := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{Email: "nobody@example.com", Password: "nope-nope"})
 
 	if wrong.Code != http.StatusUnauthorized || unknown.Code != http.StatusUnauthorized {
 		t.Fatalf("statuses = %d / %d, want 401 / 401", wrong.Code, unknown.Code)
@@ -634,11 +613,11 @@ func TestLoginAnswersUnknownEmailAndWrongPasswordAlike(t *testing.T) {
 }
 
 func TestLoginDatabaseErrorIsA500WithoutDetails(t *testing.T) {
-	db := testutil.NewFakeDatabase()
-	db.Errs["GetUserByEmail"] = errors.New("pq: connection refused")
+	db := testutil.NewFakeUserStore()
+	db.Fail.GetUserByEmail = errors.New("pq: connection refused")
 	f := newAuthRouter(db)
 
-	w := doJSON(t, f.r, http.MethodPost, "/auth/login", handlers.LoginRequest{Email: "alice@example.com", Password: "secret123"})
+	w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/login", handlers.LoginRequest{Email: "alice@example.com", Password: "secret123"})
 
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500; body: %s", w.Code, w.Body.String())
@@ -666,8 +645,8 @@ func TestSignupAccountRules(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f := newAuthRouter(testutil.NewFakeDatabase())
-			w := doJSON(t, f.r, http.MethodPost, "/auth/signup", tc.req)
+			f := newAuthRouter(testutil.NewFakeUserStore())
+			w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/signup", tc.req)
 			if w.Code != tc.want {
 				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
 			}
@@ -682,10 +661,10 @@ func TestSignupAccountRules(t *testing.T) {
 }
 
 func TestSignupStoresTheTrimmedName(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	f := newAuthRouter(db)
 
-	w := doJSON(t, f.r, http.MethodPost, "/auth/signup", handlers.SignupRequest{Name: "  Bob  ", Email: "bob@example.com", Password: "secret123"})
+	w := doJSON(t, f.r, http.MethodPost, "/api/v1/auth/signup", handlers.SignupRequest{Name: "  Bob  ", Email: "bob@example.com", Password: "secret123"})
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())

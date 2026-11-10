@@ -12,11 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
-func seedFake(t *testing.T, nodes []node) (*testutil.FakeDatabase, uuid.UUID, []model.Item) {
+func seedFake(t *testing.T, nodes []node) (*testutil.FakeItemStore, uuid.UUID, []model.Item) {
 	t.Helper()
-	db := testutil.NewFakeDatabase()
+	users, db := testutil.NewFakeStores()
 	user := model.New()
-	if err := db.AddUser(ctx, *user); err != nil {
+	if err := users.AddUser(ctx, *user); err != nil {
 		t.Fatal(err)
 	}
 	rows, _ := buildItems(db.Workspace(user.ID).ID, nodes)

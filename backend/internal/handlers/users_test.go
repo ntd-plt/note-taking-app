@@ -7,24 +7,15 @@ import (
 	"testing"
 
 	"backend/internal/handlers"
-	"backend/internal/middleware"
 	"backend/internal/model"
-	"backend/internal/services"
 	"backend/internal/testutil"
-
-	"github.com/gin-gonic/gin"
 )
 
-func newUsersRouter(db *testutil.FakeDatabase, user model.User) *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	h := handlers.NewUserHandler(services.NewUserService(db))
-	r := gin.New()
-	r.Use(func(c *gin.Context) { middleware.SetUserID(c, user.ID) })
-	r.PUT("/users/me", h.UpdateUser)
-	return r
+func newUsersRouter(db *testutil.FakeUserStore, user model.User) http.Handler {
+	return newApp(appConfig{users: db}).as(user.ID)
 }
 
-func storedUser(t *testing.T, db *testutil.FakeDatabase, user model.User) model.User {
+func storedUser(t *testing.T, db *testutil.FakeUserStore, user model.User) model.User {
 	t.Helper()
 	u, err := db.GetUserByID(ctx, user.ID)
 	if err != nil {
@@ -34,11 +25,11 @@ func storedUser(t *testing.T, db *testutil.FakeDatabase, user model.User) model.
 }
 
 func TestUpdateUserChangesTheTrimmedName(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	user := addUser(db, "alice@example.com", "secret123")
 	r := newUsersRouter(db, user)
 
-	w := doJSON(t, r, http.MethodPut, "/users/me", map[string]string{"name": "  Alice Liddell  "})
+	w := doJSON(t, r, http.MethodPut, "/api/v1/users/me", map[string]string{"name": "  Alice Liddell  "})
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
@@ -57,11 +48,11 @@ func TestUpdateUserChangesTheTrimmedName(t *testing.T) {
 
 func TestUpdateUserRefusesABadName(t *testing.T) {
 	for _, name := range []string{"   ", strings.Repeat("n", 51)} {
-		db := testutil.NewFakeDatabase()
+		db := testutil.NewFakeUserStore()
 		user := addUser(db, "alice@example.com", "secret123")
 		before := storedUser(t, db, user).Name
 
-		w := doJSON(t, newUsersRouter(db, user), http.MethodPut, "/users/me", map[string]string{"name": name})
+		w := doJSON(t, newUsersRouter(db, user), http.MethodPut, "/api/v1/users/me", map[string]string{"name": name})
 
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("name %q: status = %d, want 400", name, w.Code)
@@ -76,7 +67,7 @@ func TestUpdateUserRefusesABadName(t *testing.T) {
 }
 
 func TestUpdateUserRefusesAnEmailChange(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	user := addUser(db, "alice@example.com", "secret123")
 	r := newUsersRouter(db, user)
 
@@ -84,7 +75,7 @@ func TestUpdateUserRefusesAnEmailChange(t *testing.T) {
 		{"email": "new@example.com"},
 		{"name": "Alice", "email": "alice@example.com"},
 	} {
-		w := doJSON(t, r, http.MethodPut, "/users/me", body)
+		w := doJSON(t, r, http.MethodPut, "/api/v1/users/me", body)
 		if w.Code != http.StatusBadRequest {
 			t.Errorf("%v: status = %d, want 400", body, w.Code)
 		}

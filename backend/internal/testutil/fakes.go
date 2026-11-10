@@ -18,30 +18,36 @@ var (
 	ErrUserNotFound error = apperr.NotFoundf("user")
 )
 
-// Set Errs["MethodName"] to force that method to fail.
-type FakeDatabase struct {
+// FakeUserStore is an in-memory user table. Set a field of Fail to make that
+// method fail. When linked to an item store, AddUser also creates the user's
+// workspace, as Postgres does.
+type FakeUserStore struct {
 	Users map[uuid.UUID]model.User
-	Items map[uuid.UUID]model.Item
-	Errs  map[string]error
+	Fail  UserFailures
+	items *FakeItemStore
 }
 
-var (
-	_ services.UserStore  = (*FakeDatabase)(nil)
-	_ services.PageReader = (*FakeDatabase)(nil)
-	_ services.TreeWriter = (*FakeDatabase)(nil)
-	_ services.TrashStore = (*FakeDatabase)(nil)
-)
-
-func NewFakeDatabase() *FakeDatabase {
-	return &FakeDatabase{
-		Users: make(map[uuid.UUID]model.User),
-		Items: make(map[uuid.UUID]model.Item),
-		Errs:  make(map[string]error),
-	}
+type UserFailures struct {
+	GetUserByEmail, GetUserByID, AddUser, UpdateUser error
 }
 
-func (f *FakeDatabase) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
-	if err := f.Errs["GetUserByEmail"]; err != nil {
+var _ services.UserStore = (*FakeUserStore)(nil)
+
+func NewFakeUserStore() *FakeUserStore {
+	return &FakeUserStore{Users: map[uuid.UUID]model.User{}}
+}
+
+// NewFakeStores returns a user store and an item store linked like the real
+// database: adding a user creates their workspace.
+func NewFakeStores() (*FakeUserStore, *FakeItemStore) {
+	items := NewFakeItemStore()
+	users := NewFakeUserStore()
+	users.items = items
+	return users, items
+}
+
+func (f *FakeUserStore) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
+	if err := f.Fail.GetUserByEmail; err != nil {
 		return model.User{}, err
 	}
 	for _, u := range f.Users {
@@ -52,8 +58,8 @@ func (f *FakeDatabase) GetUserByEmail(ctx context.Context, email string) (model.
 	return model.User{}, ErrUserNotFound
 }
 
-func (f *FakeDatabase) GetUserByID(ctx context.Context, id uuid.UUID) (model.User, error) {
-	if err := f.Errs["GetUserByID"]; err != nil {
+func (f *FakeUserStore) GetUserByID(ctx context.Context, id uuid.UUID) (model.User, error) {
+	if err := f.Fail.GetUserByID; err != nil {
 		return model.User{}, err
 	}
 	u, ok := f.Users[id]
@@ -63,17 +69,19 @@ func (f *FakeDatabase) GetUserByID(ctx context.Context, id uuid.UUID) (model.Use
 	return u, nil
 }
 
-func (f *FakeDatabase) AddUser(ctx context.Context, user model.User) error {
-	if err := f.Errs["AddUser"]; err != nil {
+func (f *FakeUserStore) AddUser(ctx context.Context, user model.User) error {
+	if err := f.Fail.AddUser; err != nil {
 		return err
 	}
 	f.Users[user.ID] = user
-	f.addWorkspace(user.ID)
+	if f.items != nil {
+		f.items.addWorkspace(user.ID)
+	}
 	return nil
 }
 
-func (f *FakeDatabase) UpdateUser(ctx context.Context, user model.User) error {
-	if err := f.Errs["UpdateUser"]; err != nil {
+func (f *FakeUserStore) UpdateUser(ctx context.Context, user model.User) error {
+	if err := f.Fail.UpdateUser; err != nil {
 		return err
 	}
 	if _, ok := f.Users[user.ID]; !ok {

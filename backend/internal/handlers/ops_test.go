@@ -16,7 +16,7 @@ import (
 func opsBody(ops ...string) string { return `{"ops":[` + strings.Join(ops, ",") + `]}` }
 
 func TestApplyOpsSavesABatch(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	r := newItemsRouter(db, &tr.userID)
 	page, first, second := uuid.New(), uuid.New(), uuid.New()
@@ -41,7 +41,7 @@ func TestApplyOpsSavesABatch(t *testing.T) {
 }
 
 func TestApplyOpsRejectsBadShapes(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	page := tr.page(tr.root, "Page")
 	r := newItemsRouter(db, &tr.userID)
@@ -86,7 +86,7 @@ func TestApplyOpsRejectsBadShapes(t *testing.T) {
 }
 
 func TestApplyOpsReportsTreeRejections(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	page := tr.page(tr.root, "Page")
 	block := tr.block(page, model.ItemTypeParagraph, "x")
@@ -117,17 +117,17 @@ func TestApplyOpsReportsTreeRejections(t *testing.T) {
 }
 
 func TestApplyOpsAuthAndErrors(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	body := opsBody(fmt.Sprintf(`{"op":"delete","id":"%s"}`, uuid.New()))
 	wantStatus(t, doJSON(t, newItemsRouter(db, nil), http.MethodPost, "/api/v1/ops", body), http.StatusUnauthorized)
 
-	db.Errs["ApplyOps"] = errors.New("boom")
+	db.Fail.ApplyOps = errors.New("boom")
 	wantStatus(t, doJSON(t, newItemsRouter(db, &tr.userID), http.MethodPost, "/api/v1/ops", body), http.StatusInternalServerError)
 }
 
 func TestDuplicateItemEndpoint(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	page := tr.page(tr.root, "Page")
 	tr.block(page, model.ItemTypeParagraph, "x")

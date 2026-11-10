@@ -16,8 +16,8 @@ import (
 
 var ctx = context.Background()
 
-func newAuth() (*services.AuthService, *testutil.FakeDatabase, *testutil.FakeHasher) {
-	db := testutil.NewFakeDatabase()
+func newAuth() (*services.AuthService, *testutil.FakeUserStore, *testutil.FakeHasher) {
+	db := testutil.NewFakeUserStore()
 	hasher := &testutil.FakeHasher{}
 	return services.NewAuthService(db, hasher, &testutil.FakeEmailValidator{}), db, hasher
 }
@@ -73,7 +73,7 @@ func TestSignupAppliesTheAccountRules(t *testing.T) {
 }
 
 func TestRename(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeUserStore()
 	users := services.NewUserService(db)
 	u := *model.New().WithEmail("alice@example.com").WithUsername("Alice")
 	if err := db.AddUser(ctx, u); err != nil {
@@ -91,7 +91,7 @@ func TestRename(t *testing.T) {
 }
 
 func TestApplyOpsChecksTheBatchBeforeRunningIt(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	ops := services.NewOpsService(db, services.NewTrashService(db, time.Hour))
 	user := uuid.New()
 	ws := db.Workspace(user)
@@ -119,7 +119,7 @@ func TestApplyOpsChecksTheBatchBeforeRunningIt(t *testing.T) {
 
 // trashedAgo moves a trashed page's trashed_at into the past: the data gets old
 // instead of the clock moving forward.
-func trashedAgo(db *testutil.FakeDatabase, id uuid.UUID, ago time.Duration) {
+func trashedAgo(db *testutil.FakeItemStore, id uuid.UUID, ago time.Duration) {
 	it := db.Items[id]
 	at := time.Now().Add(-ago)
 	it.TrashedAt = &at
@@ -128,7 +128,7 @@ func trashedAgo(db *testutil.FakeDatabase, id uuid.UUID, ago time.Duration) {
 
 func TestTrashRetentionKeepsRecentPagesAndRemovesOldOnes(t *testing.T) {
 	const day = 24 * time.Hour
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	user := uuid.New()
 	ws := db.Workspace(user)
 	trash := services.NewTrashService(db, 30*day)

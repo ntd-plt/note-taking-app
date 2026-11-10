@@ -70,16 +70,17 @@ func run() error {
 
 	trashService := services.NewTrashService(itemsDataSource, cfg.TrashRetention)
 
-	router, err := NewRouter(RouterDeps{
-		Auth:           handlers.NewAuthHandler(services.NewAuthService(userDataSource, hasher, emailValidator), sessions, cookie),
-		Users:          handlers.NewUserHandler(services.NewUserService(userDataSource)),
-		Pages:          handlers.NewPagesHandler(services.NewPagesService(itemsDataSource)),
-		Ops:            handlers.NewOpsHandler(services.NewOpsService(itemsDataSource, trashService)),
-		Trash:          handlers.NewTrashHandler(trashService),
-		Sessions:       sessions,
-		Cookie:         cookie,
-		AllowedOrigins: cfg.AllowedOrigins,
-		EnableSwagger:  cfg.IsDevelopment(),
+	router, err := handlers.NewRouter(handlers.RouterDeps{
+		Auth:            handlers.NewAuthHandler(services.NewAuthService(userDataSource, hasher, emailValidator), sessions, cookie),
+		Users:           handlers.NewUserHandler(services.NewUserService(userDataSource)),
+		Pages:           handlers.NewPagesHandler(services.NewPagesService(itemsDataSource)),
+		Ops:             handlers.NewOpsHandler(services.NewOpsService(itemsDataSource, trashService)),
+		Trash:           handlers.NewTrashHandler(trashService),
+		Sessions:        sessions,
+		Cookie:          cookie,
+		AllowedOrigins:  cfg.AllowedOrigins,
+		RequestDeadline: writeTimeout,
+		EnableSwagger:   cfg.IsDevelopment(),
 	})
 	if err != nil {
 		return err

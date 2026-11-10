@@ -14,10 +14,10 @@ import (
 	"github.com/google/uuid"
 )
 
-// fakeTreeStore is a tree.Store over the fake's item map. FakeDatabase restores a
+// fakeTreeStore is a tree.Store over the fake item map. FakeItemStore restores a
 // snapshot of the map when a batch fails, which stands in for a rollback.
 type fakeTreeStore struct {
-	f      *FakeDatabase
+	f      *FakeItemStore
 	userID uuid.UUID
 }
 
@@ -109,7 +109,7 @@ func (s *fakeTreeStore) CheckChildIDs(parentIDs []uuid.UUID) error {
 	return nil
 }
 
-func (f *FakeDatabase) inTree(ctx context.Context, userID uuid.UUID, fn func(s tree.Store, workspaceID uuid.UUID, now time.Time) error) error {
+func (f *FakeItemStore) inTree(ctx context.Context, userID uuid.UUID, fn func(s tree.Store, workspaceID uuid.UUID, now time.Time) error) error {
 	// Like a Postgres transaction, nothing runs once the request is canceled.
 	if err := ctx.Err(); err != nil {
 		return err
@@ -126,8 +126,8 @@ func (f *FakeDatabase) inTree(ctx context.Context, userID uuid.UUID, fn func(s t
 	return nil
 }
 
-func (f *FakeDatabase) ApplyOps(ctx context.Context, userID uuid.UUID, ops []model.Op) error {
-	if err := f.Errs["ApplyOps"]; err != nil {
+func (f *FakeItemStore) ApplyOps(ctx context.Context, userID uuid.UUID, ops []model.Op) error {
+	if err := f.Fail.ApplyOps; err != nil {
 		return err
 	}
 	return f.inTree(ctx, userID, func(s tree.Store, workspaceID uuid.UUID, now time.Time) error {
@@ -135,8 +135,8 @@ func (f *FakeDatabase) ApplyOps(ctx context.Context, userID uuid.UUID, ops []mod
 	})
 }
 
-func (f *FakeDatabase) ListTrash(ctx context.Context, userID uuid.UUID) ([]model.Item, error) {
-	if err := f.Errs["ListTrash"]; err != nil {
+func (f *FakeItemStore) ListTrash(ctx context.Context, userID uuid.UUID) ([]model.Item, error) {
+	if err := f.Fail.ListTrash; err != nil {
 		return nil, err
 	}
 	var pages []model.Item
@@ -148,8 +148,8 @@ func (f *FakeDatabase) ListTrash(ctx context.Context, userID uuid.UUID) ([]model
 	return pages, err
 }
 
-func (f *FakeDatabase) DeleteFromTrash(ctx context.Context, userID, id uuid.UUID) error {
-	if err := f.Errs["DeleteFromTrash"]; err != nil {
+func (f *FakeItemStore) DeleteFromTrash(ctx context.Context, userID, id uuid.UUID) error {
+	if err := f.Fail.DeleteFromTrash; err != nil {
 		return err
 	}
 	return f.inTree(ctx, userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
@@ -157,8 +157,8 @@ func (f *FakeDatabase) DeleteFromTrash(ctx context.Context, userID, id uuid.UUID
 	})
 }
 
-func (f *FakeDatabase) EmptyTrash(ctx context.Context, userID uuid.UUID, before *time.Time) (int, error) {
-	if err := f.Errs["EmptyTrash"]; err != nil {
+func (f *FakeItemStore) EmptyTrash(ctx context.Context, userID uuid.UUID, before *time.Time) (int, error) {
+	if err := f.Fail.EmptyTrash; err != nil {
 		return 0, err
 	}
 	var n int
@@ -170,8 +170,8 @@ func (f *FakeDatabase) EmptyTrash(ctx context.Context, userID uuid.UUID, before 
 	return n, err
 }
 
-func (f *FakeDatabase) Duplicate(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
-	if err := f.Errs["Duplicate"]; err != nil {
+func (f *FakeItemStore) Duplicate(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
+	if err := f.Fail.Duplicate; err != nil {
 		return model.Item{}, err
 	}
 	var copied model.Item

@@ -1,7 +1,6 @@
 package handlers_test
 
 import (
-	"backend/internal/configs"
 	"backend/internal/handlers"
 	"encoding/json"
 	"errors"
@@ -11,50 +10,30 @@ import (
 	"testing"
 	"time"
 
-	"backend/internal/middleware"
 	"backend/internal/model"
-	"backend/internal/services"
 	"backend/internal/testutil"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-func newItemsRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	trashSvc := services.NewTrashService(db, configs.DefaultTrashRetention)
-	pages := handlers.NewPagesHandler(services.NewPagesService(db))
-	ops := handlers.NewOpsHandler(services.NewOpsService(db, trashSvc))
-	trash := handlers.NewTrashHandler(trashSvc)
-
-	r := gin.New()
-	r.Use(func(c *gin.Context) {
-		if userID != nil {
-			middleware.SetUserID(c, *userID)
-		}
-	})
-	r.GET("/api/v1/items/:id", pages.GetItem)
-	r.GET("/api/v1/workspace", pages.GetWorkspace)
-	r.GET("/api/v1/pages", pages.ListPages)
-	r.POST("/api/v1/ops", ops.ApplyOps)
-	r.POST("/api/v1/items/:id/duplicate", ops.DuplicateItem)
-	r.GET("/api/v1/trash", trash.ListTrash)
-	r.DELETE("/api/v1/trash", trash.EmptyTrash)
-	r.POST("/api/v1/trash/:id/restore", trash.RestoreFromTrash)
-	r.DELETE("/api/v1/trash/:id", trash.DeleteFromTrash)
-	return r
+func newItemsRouter(db *testutil.FakeItemStore, userID *uuid.UUID) http.Handler {
+	app := newApp(appConfig{items: db})
+	if userID == nil {
+		return app.r
+	}
+	return app.as(*userID)
 }
 
 // tree adds items for one user to a fake database through ApplyOps, each appended
 // to its parent.
 type tree struct {
 	t      *testing.T
-	db     *testutil.FakeDatabase
+	db     *testutil.FakeItemStore
 	userID uuid.UUID
 	root   uuid.UUID
 }
 
-func newTree(t *testing.T, db *testutil.FakeDatabase) *tree {
+func newTree(t *testing.T, db *testutil.FakeItemStore) *tree {
 	userID := uuid.New()
 	return &tree{t: t, db: db, userID: userID, root: db.Workspace(userID).ID}
 }
@@ -129,7 +108,7 @@ func pageNames(items []model.Item) []string {
 }
 
 func TestGetItemReturnsPageBlocksInOrderAndStopsAtChildPages(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	page := tr.page(tr.root, "Page")
 	h := tr.block(page, model.ItemTypeHeading, "Title")
@@ -164,7 +143,7 @@ func TestGetItemReturnsPageBlocksInOrderAndStopsAtChildPages(t *testing.T) {
 }
 
 func TestGetItemForBlockOpensItsPageWithFocus(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	top := tr.page(tr.root, "Top")
 	list := tr.block(top, model.ItemTypeToggleListItem, "Toggle")
@@ -189,7 +168,7 @@ func TestGetItemForBlockOpensItsPageWithFocus(t *testing.T) {
 }
 
 func TestGetItemInsideTrashedPage(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	trashed := tr.page(tr.root, "Trashed")
 	child := tr.page(trashed, "Child")
@@ -203,7 +182,7 @@ func TestGetItemInsideTrashedPage(t *testing.T) {
 }
 
 func TestGetItemNotFound(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	page := tr.page(tr.root, "Mine")
 	other := newTree(t, db)
@@ -222,24 +201,24 @@ func TestGetItemNotFound(t *testing.T) {
 }
 
 func TestGetItemBadRequestAndAuth(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	userID := uuid.New()
 	wantStatus(t, doJSON(t, newItemsRouter(db, &userID), http.MethodGet, "/api/v1/items/nope", nil), http.StatusBadRequest)
 	wantStatus(t, doJSON(t, newItemsRouter(db, nil), http.MethodGet, itemPath(uuid.New()), nil), http.StatusUnauthorized)
 }
 
 func TestGetItemDatabaseError(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	page := tr.page(tr.root, "Page")
-	db.Errs["GetPageTree"] = errors.New("boom")
+	db.Fail.GetPageTree = errors.New("boom")
 
 	w := doJSON(t, newItemsRouter(db, &tr.userID), http.MethodGet, itemPath(page), nil)
 	wantStatus(t, w, http.StatusInternalServerError)
 }
 
 func TestListPagesInDocumentOrderWithParents(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	a := tr.page(tr.root, "A")
 	bullet := tr.block(a, model.ItemTypeBulletListItem, "Bullet")
@@ -271,7 +250,7 @@ func TestListPagesInDocumentOrderWithParents(t *testing.T) {
 }
 
 func TestGetWorkspace(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	a := tr.page(tr.root, "A")
 	r := newItemsRouter(db, &tr.userID)
@@ -283,13 +262,13 @@ func TestGetWorkspace(t *testing.T) {
 		t.Errorf("workspace = %+v, want %v holding A", ws, tr.root)
 	}
 
-	db.Errs["GetWorkspace"] = errors.New("boom")
+	db.Fail.GetWorkspace = errors.New("boom")
 	wantStatus(t, doJSON(t, r, http.MethodGet, "/api/v1/workspace", nil), http.StatusInternalServerError)
 	wantStatus(t, doJSON(t, newItemsRouter(db, nil), http.MethodGet, "/api/v1/workspace", nil), http.StatusUnauthorized)
 }
 
 func TestListPagesEmptyAndErrors(t *testing.T) {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	tr := newTree(t, db)
 	r := newItemsRouter(db, &tr.userID)
 
@@ -299,7 +278,7 @@ func TestListPagesEmptyAndErrors(t *testing.T) {
 		t.Errorf("body = %s, want []", w.Body.String())
 	}
 
-	db.Errs["ListPages"] = errors.New("boom")
+	db.Fail.ListPages = errors.New("boom")
 	wantStatus(t, doJSON(t, r, http.MethodGet, "/api/v1/pages", nil), http.StatusInternalServerError)
 	wantStatus(t, doJSON(t, newItemsRouter(db, nil), http.MethodGet, "/api/v1/pages", nil), http.StatusUnauthorized)
 }

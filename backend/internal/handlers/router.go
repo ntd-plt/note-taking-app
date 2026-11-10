@@ -1,9 +1,9 @@
-package main
+package handlers
 
 import (
-	"backend/internal/handlers"
 	"backend/internal/middleware"
 	"backend/internal/session"
+	"time"
 
 	_ "backend/docs"
 
@@ -14,22 +14,20 @@ import (
 
 const maxRequestBodyBytes = 2 << 20
 
-// requestDeadline is the longest a request may work before its context is
-// canceled. It matches the server's write timeout.
-const requestDeadline = writeTimeout
-
 // RouterDeps is what the HTTP routes are built from.
 type RouterDeps struct {
-	Auth     *handlers.AuthHandler
-	Users    *handlers.UserHandler
-	Pages    *handlers.PagesHandler
-	Ops      *handlers.OpsHandler
-	Trash    *handlers.TrashHandler
+	Auth     *AuthHandler
+	Users    *UserHandler
+	Pages    *PagesHandler
+	Ops      *OpsHandler
+	Trash    *TrashHandler
 	Sessions middleware.SessionLookup
 	Cookie   session.Cookie
 	// AllowedOrigins may call the API cross-origin with the session cookie.
 	AllowedOrigins []string
-	EnableSwagger  bool
+	// RequestDeadline caps how long one request may work; zero means no cap.
+	RequestDeadline time.Duration
+	EnableSwagger   bool
 }
 
 func NewRouter(d RouterDeps) (*gin.Engine, error) {
@@ -42,7 +40,9 @@ func NewRouter(d RouterDeps) (*gin.Engine, error) {
 	router.Use(middleware.CORS(d.AllowedOrigins))
 	router.Use(csrf)
 	router.Use(middleware.MaxBodyBytes(maxRequestBodyBytes))
-	router.Use(middleware.Deadline(requestDeadline))
+	if d.RequestDeadline > 0 {
+		router.Use(middleware.Deadline(d.RequestDeadline))
+	}
 
 	if d.EnableSwagger {
 		router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
