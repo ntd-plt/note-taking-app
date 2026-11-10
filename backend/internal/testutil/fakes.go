@@ -5,7 +5,6 @@ package testutil
 
 import (
 	"backend/internal/apperr"
-	"backend/internal/database"
 	"backend/internal/model"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
@@ -27,8 +26,10 @@ type FakeDatabase struct {
 }
 
 var (
-	_ database.UserDataSource  = (*FakeDatabase)(nil)
-	_ database.ItemsDataSource = (*FakeDatabase)(nil)
+	_ services.UserStore  = (*FakeDatabase)(nil)
+	_ services.PageReader = (*FakeDatabase)(nil)
+	_ services.TreeWriter = (*FakeDatabase)(nil)
+	_ services.TrashStore = (*FakeDatabase)(nil)
 )
 
 func NewFakeDatabase() *FakeDatabase {

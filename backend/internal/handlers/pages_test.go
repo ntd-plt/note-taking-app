@@ -22,8 +22,10 @@ import (
 
 func newItemsRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	svc := services.NewItemsService(db, configs.DefaultTrashRetention)
-	pages, ops, trash := handlers.NewPagesHandler(svc), handlers.NewOpsHandler(svc), handlers.NewTrashHandler(svc)
+	trashSvc := services.NewTrashService(db, configs.DefaultTrashRetention)
+	pages := handlers.NewPagesHandler(services.NewPagesService(db))
+	ops := handlers.NewOpsHandler(services.NewOpsService(db, trashSvc))
+	trash := handlers.NewTrashHandler(trashSvc)
 
 	r := gin.New()
 	r.Use(func(c *gin.Context) {

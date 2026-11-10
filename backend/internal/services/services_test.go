@@ -19,7 +19,7 @@ var ctx = context.Background()
 func newAuth() (*services.AuthService, *testutil.FakeDatabase, *testutil.FakeHasher) {
 	db := testutil.NewFakeDatabase()
 	hasher := &testutil.FakeHasher{}
-	return services.NewAuthService(services.NewUserService(db), hasher, &testutil.FakeEmailValidator{}), db, hasher
+	return services.NewAuthService(db, hasher, &testutil.FakeEmailValidator{}), db, hasher
 }
 
 func TestLoginTreatsUnknownEmailLikeWrongPassword(t *testing.T) {
@@ -75,8 +75,8 @@ func TestSignupAppliesTheAccountRules(t *testing.T) {
 func TestRename(t *testing.T) {
 	db := testutil.NewFakeDatabase()
 	users := services.NewUserService(db)
-	u, err := users.CreateUser(ctx, "Alice", "alice@example.com", []byte("h"))
-	if err != nil {
+	u := *model.New().WithEmail("alice@example.com").WithUsername("Alice")
+	if err := db.AddUser(ctx, u); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := users.Rename(ctx, u.ID, "  Alice L.  "); err != nil || got.Name != "Alice L." {
@@ -92,27 +92,27 @@ func TestRename(t *testing.T) {
 
 func TestApplyOpsChecksTheBatchBeforeRunningIt(t *testing.T) {
 	db := testutil.NewFakeDatabase()
-	items := services.NewItemsService(db, time.Hour)
+	ops := services.NewOpsService(db, services.NewTrashService(db, time.Hour))
 	user := uuid.New()
 	ws := db.Workspace(user)
 	page := model.ItemTypePage
 
-	if err := items.ApplyOps(ctx, user, nil); !apperr.Is(err, apperr.Invalid) {
+	if err := ops.ApplyOps(ctx, user, nil); !apperr.Is(err, apperr.Invalid) {
 		t.Errorf("empty batch: err = %v, want Invalid", err)
 	}
-	if err := items.ApplyOps(ctx, user, make([]model.Op, services.MaxOpsPerBatch+1)); !apperr.Is(err, apperr.TooLarge) {
+	if err := ops.ApplyOps(ctx, user, make([]model.Op, services.MaxOpsPerBatch+1)); !apperr.Is(err, apperr.TooLarge) {
 		t.Errorf("oversized batch: err = %v, want TooLarge", err)
 	}
-	ops := []model.Op{
+	batch := []model.Op{
 		{Op: model.OpCreate, ID: uuid.New(), Type: &page, ParentID: &ws.ID},
 		{Op: model.OpMove, ID: uuid.New()},
 	}
-	err := items.ApplyOps(ctx, user, ops)
+	err := ops.ApplyOps(ctx, user, batch)
 	e, ok := apperr.As(err)
 	if !ok || e.OpIndex == nil || *e.OpIndex != 1 {
 		t.Errorf("bad second op: err = %v, want it named as operation 1", err)
 	}
-	if pages, _ := items.Pages(ctx, user); len(pages) != 0 {
+	if pages, _ := services.NewPagesService(db).Pages(ctx, user); len(pages) != 0 {
 		t.Errorf("a rejected batch created %d pages", len(pages))
 	}
 }

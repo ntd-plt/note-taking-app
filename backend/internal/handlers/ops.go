@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"backend/internal/model"
-	"backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,11 +13,11 @@ type ApplyOpsRequest struct {
 }
 
 type OpsHandler struct {
-	items *services.ItemsService
+	ops opsService
 }
 
-func NewOpsHandler(items *services.ItemsService) *OpsHandler {
-	return &OpsHandler{items: items}
+func NewOpsHandler(ops opsService) *OpsHandler {
+	return &OpsHandler{ops: ops}
 }
 
 // ApplyOps godoc
@@ -46,7 +45,7 @@ func (h *OpsHandler) ApplyOps(c *gin.Context) {
 	if !decode(c, &req) {
 		return
 	}
-	if err := h.items.ApplyOps(c.Request.Context(), userID, req.Ops); err != nil {
+	if err := h.ops.ApplyOps(c.Request.Context(), userID, req.Ops); err != nil {
 		writeError(c, err)
 		return
 	}
@@ -76,7 +75,7 @@ func (h *OpsHandler) DuplicateItem(c *gin.Context) {
 	if !ok {
 		return
 	}
-	copied, err := h.items.Duplicate(c.Request.Context(), userID, id)
+	copied, err := h.ops.Duplicate(c.Request.Context(), userID, id)
 	if err != nil {
 		writeError(c, err)
 		return

@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"backend/internal/model"
-	"backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -23,11 +22,11 @@ type ItemResponse struct {
 }
 
 type PagesHandler struct {
-	items *services.ItemsService
+	pages pagesService
 }
 
-func NewPagesHandler(items *services.ItemsService) *PagesHandler {
-	return &PagesHandler{items: items}
+func NewPagesHandler(pages pagesService) *PagesHandler {
+	return &PagesHandler{pages: pages}
 }
 
 // GetItem godoc
@@ -52,7 +51,7 @@ func (h *PagesHandler) GetItem(c *gin.Context) {
 	if !ok {
 		return
 	}
-	opened, err := h.items.Open(c.Request.Context(), userID, id)
+	opened, err := h.pages.Open(c.Request.Context(), userID, id)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -76,7 +75,7 @@ func (h *PagesHandler) GetWorkspace(c *gin.Context) {
 	if !ok {
 		return
 	}
-	ws, err := h.items.Workspace(c.Request.Context(), userID)
+	ws, err := h.pages.Workspace(c.Request.Context(), userID)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -99,7 +98,7 @@ func (h *PagesHandler) ListPages(c *gin.Context) {
 	if !ok {
 		return
 	}
-	pages, err := h.items.Pages(c.Request.Context(), userID)
+	pages, err := h.pages.Pages(c.Request.Context(), userID)
 	if err != nil {
 		writeError(c, err)
 		return

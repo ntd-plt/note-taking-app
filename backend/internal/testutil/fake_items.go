@@ -128,17 +128,17 @@ func (f *FakeDatabase) ResolveItem(ctx context.Context, userID, id uuid.UUID) (m
 	return loc, nil
 }
 
-func (f *FakeDatabase) OpenItem(ctx context.Context, userID, id uuid.UUID) (database.OpenedItem, error) {
-	var out database.OpenedItem
+func (f *FakeDatabase) OpenItem(ctx context.Context, userID, id uuid.UUID) (model.OpenedItem, error) {
+	var out model.OpenedItem
 	var err error
 	if out.Location, err = f.ResolveItem(ctx, userID, id); err != nil {
-		return database.OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	if out.Items, err = f.GetPageTree(ctx, userID, out.Location.PageID); err != nil {
-		return database.OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	if out.Ancestors, err = f.Ancestors(ctx, userID, out.Location.PageID); err != nil {
-		return database.OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	return out, nil
 }

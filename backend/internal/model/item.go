@@ -75,6 +75,14 @@ type ItemLocation struct {
 	InTrash bool
 }
 
+// OpenedItem is a page loaded for the editor: where the requested item lives, the
+// page with everything under it, and the pages above it.
+type OpenedItem struct {
+	Location  ItemLocation
+	Items     []Item
+	Ancestors []Item
+}
+
 // OpType is what one operation in a batch does.
 type OpType string
 

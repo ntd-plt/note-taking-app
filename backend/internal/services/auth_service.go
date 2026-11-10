@@ -11,7 +11,7 @@ import (
 )
 
 type AuthService struct {
-	userService    *UserService
+	users          UserStore
 	hasher         hash.Hasher
 	emailValidator EmailValidator
 
@@ -21,13 +21,13 @@ type AuthService struct {
 	dummy     []byte
 }
 
-func NewAuthService(userService *UserService, hasher hash.Hasher, emailValidator EmailValidator) *AuthService {
-	return &AuthService{userService: userService, hasher: hasher, emailValidator: emailValidator}
+func NewAuthService(users UserStore, hasher hash.Hasher, emailValidator EmailValidator) *AuthService {
+	return &AuthService{users: users, hasher: hasher, emailValidator: emailValidator}
 }
 
 // Login answers an unknown email and a wrong password alike, after the same work.
 func (s *AuthService) Login(ctx context.Context, email, password string) (model.User, error) {
-	u, err := s.userService.GetUserByEmail(ctx, NormalizeEmail(email))
+	u, err := s.users.GetUserByEmail(ctx, NormalizeEmail(email))
 	if apperr.Is(err, apperr.NotFound) {
 		_ = s.hasher.Compare(s.dummyHash(), []byte(password))
 		return model.User{}, ErrWrongPasswordOrEmail
@@ -54,7 +54,7 @@ func (s *AuthService) Signup(ctx context.Context, rawName, rawEmail, password st
 		return model.User{}, err
 	}
 
-	_, err = s.userService.GetUserByEmail(ctx, email)
+	_, err = s.users.GetUserByEmail(ctx, email)
 	if err == nil {
 		return model.User{}, ErrEmailAlreadyExists
 	}
@@ -69,11 +69,14 @@ func (s *AuthService) Signup(ctx context.Context, rawName, rawEmail, password st
 	if err != nil {
 		return model.User{}, err
 	}
-	user, err := s.userService.CreateUser(ctx, name, email, passwordHash)
-	if apperr.Is(err, apperr.Conflict) {
-		return model.User{}, ErrEmailAlreadyExists
+	user := *model.New().WithEmail(email).WithPasswordHash(passwordHash).WithUsername(name)
+	if err := s.users.AddUser(ctx, user); err != nil {
+		if apperr.Is(err, apperr.Conflict) {
+			return model.User{}, ErrEmailAlreadyExists
+		}
+		return model.User{}, err
 	}
-	return user, err
+	return user, nil
 }
 
 func (s *AuthService) dummyHash() []byte {

@@ -84,9 +84,23 @@ func movesToTrash(ops []model.Op) bool {
 	return false
 }
 
+// trashPurger removes pages past the trash retention period.
+type trashPurger interface {
+	PurgeExpired(ctx context.Context, userID uuid.UUID)
+}
+
+type OpsService struct {
+	db    TreeWriter
+	trash trashPurger
+}
+
+func NewOpsService(db TreeWriter, trash trashPurger) *OpsService {
+	return &OpsService{db: db, trash: trash}
+}
+
 // ApplyOps checks each operation on its own, runs the batch all-or-nothing, and
 // purges expired trash after a batch that can move pages to the trash.
-func (s *ItemsService) ApplyOps(ctx context.Context, userID uuid.UUID, ops []model.Op) error {
+func (s *OpsService) ApplyOps(ctx context.Context, userID uuid.UUID, ops []model.Op) error {
 	if len(ops) == 0 {
 		return apperr.New(apperr.Invalid, "ops must not be empty")
 	}
@@ -102,11 +116,11 @@ func (s *ItemsService) ApplyOps(ctx context.Context, userID uuid.UUID, ops []mod
 		return err
 	}
 	if movesToTrash(ops) {
-		s.purgeExpiredTrash(ctx, userID)
+		s.trash.PurgeExpired(ctx, userID)
 	}
 	return nil
 }
 
-func (s *ItemsService) Duplicate(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
+func (s *OpsService) Duplicate(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
 	return s.db.Duplicate(ctx, userID, id)
 }

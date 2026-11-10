@@ -42,7 +42,7 @@ func newAuthRouterWithValidator(db *testutil.FakeDatabase, ev *testutil.FakeEmai
 	store := testutil.NewFakeSessionStore()
 	sessions := session.NewService(store, testSessionConfig)
 	hasher := &testutil.FakeHasher{}
-	authService := handlers.NewAuthHandler(services.NewAuthService(services.NewUserService(db), hasher, ev), sessions, testCookie)
+	authService := handlers.NewAuthHandler(services.NewAuthService(db, hasher, ev), sessions, testCookie)
 
 	r := gin.New()
 	r.POST("/auth/login", authService.Login)

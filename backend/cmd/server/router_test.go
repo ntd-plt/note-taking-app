@@ -21,14 +21,13 @@ func testRouter(t *testing.T) *gin.Engine {
 	db := testutil.NewFakeDatabase()
 	sessions := session.NewService(testutil.NewFakeSessionStore(), session.Config{IdleTTL: time.Hour, AbsoluteTTL: 24 * time.Hour})
 	cookie := session.Cookie{Secure: true, MaxAge: time.Hour}
-	users := services.NewUserService(db)
-	items := services.NewItemsService(db, time.Hour)
+	trash := services.NewTrashService(db, time.Hour)
 	r, err := NewRouter(RouterDeps{
-		Auth:           handlers.NewAuthHandler(services.NewAuthService(users, &testutil.FakeHasher{}, &testutil.FakeEmailValidator{}), sessions, cookie),
-		Users:          handlers.NewUserHandler(users),
-		Pages:          handlers.NewPagesHandler(items),
-		Ops:            handlers.NewOpsHandler(items),
-		Trash:          handlers.NewTrashHandler(items),
+		Auth:           handlers.NewAuthHandler(services.NewAuthService(db, &testutil.FakeHasher{}, &testutil.FakeEmailValidator{}), sessions, cookie),
+		Users:          handlers.NewUserHandler(services.NewUserService(db)),
+		Pages:          handlers.NewPagesHandler(services.NewPagesService(db)),
+		Ops:            handlers.NewOpsHandler(services.NewOpsService(db, trash)),
+		Trash:          handlers.NewTrashHandler(trash),
 		Sessions:       sessions,
 		Cookie:         cookie,
 		AllowedOrigins: []string{"https://app.example.com"},

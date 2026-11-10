@@ -13,6 +13,17 @@ import (
 // purgeTimeout bounds the trash cleanup that follows a trash batch.
 const purgeTimeout = 10 * time.Second
 
+type TrashService struct {
+	db TrashStore
+	// retention is how long a page stays in the trash before it is removed.
+	retention time.Duration
+	now       func() time.Time
+}
+
+func NewTrashService(db TrashStore, retention time.Duration) *TrashService {
+	return &TrashService{db: db, retention: retention, now: time.Now}
+}
+
 // TrashedPage is a page in the trash and when it will be removed for good.
 type TrashedPage struct {
 	Page    model.Item
@@ -21,7 +32,7 @@ type TrashedPage struct {
 
 // ListTrash returns the pages in the trash, most recently trashed first, leaving
 // out the ones past the retention period.
-func (s *ItemsService) ListTrash(ctx context.Context, userID uuid.UUID) ([]TrashedPage, error) {
+func (s *TrashService) ListTrash(ctx context.Context, userID uuid.UUID) ([]TrashedPage, error) {
 	pages, err := s.db.ListTrash(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -37,21 +48,21 @@ func (s *ItemsService) ListTrash(ctx context.Context, userID uuid.UUID) ([]Trash
 	return out, nil
 }
 
-func (s *ItemsService) Restore(ctx context.Context, userID, id uuid.UUID) error {
+func (s *TrashService) Restore(ctx context.Context, userID, id uuid.UUID) error {
 	return s.db.ApplyOps(ctx, userID, []model.Op{{Op: model.OpRestore, ID: id}})
 }
 
-func (s *ItemsService) DeleteFromTrash(ctx context.Context, userID, id uuid.UUID) error {
+func (s *TrashService) DeleteFromTrash(ctx context.Context, userID, id uuid.UUID) error {
 	return s.db.DeleteFromTrash(ctx, userID, id)
 }
 
-func (s *ItemsService) EmptyTrash(ctx context.Context, userID uuid.UUID) (int, error) {
+func (s *TrashService) EmptyTrash(ctx context.Context, userID uuid.UUID) (int, error) {
 	return s.db.EmptyTrash(ctx, userID, nil)
 }
 
-// purgeExpiredTrash removes pages past the retention period. It keeps going if
-// the client disconnects; a failure is logged, not reported.
-func (s *ItemsService) purgeExpiredTrash(ctx context.Context, userID uuid.UUID) {
+// PurgeExpired removes pages past the retention period. It keeps going if the
+// client disconnects; a failure is logged, not reported.
+func (s *TrashService) PurgeExpired(ctx context.Context, userID uuid.UUID) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), purgeTimeout)
 	defer cancel()
 	before := s.now().Add(-s.retention)

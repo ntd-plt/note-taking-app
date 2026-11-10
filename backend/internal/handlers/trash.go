@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"backend/internal/model"
-	"backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,11 +21,11 @@ type TrashedPage struct {
 }
 
 type TrashHandler struct {
-	items *services.ItemsService
+	trash trashService
 }
 
-func NewTrashHandler(items *services.ItemsService) *TrashHandler {
-	return &TrashHandler{items: items}
+func NewTrashHandler(trash trashService) *TrashHandler {
+	return &TrashHandler{trash: trash}
 }
 
 // ListTrash godoc
@@ -44,7 +43,7 @@ func (h *TrashHandler) ListTrash(c *gin.Context) {
 	if !ok {
 		return
 	}
-	pages, err := h.items.ListTrash(c.Request.Context(), userID)
+	pages, err := h.trash.ListTrash(c.Request.Context(), userID)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -78,7 +77,7 @@ func (h *TrashHandler) RestoreFromTrash(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.items.Restore(c.Request.Context(), userID, id); err != nil {
+	if err := h.trash.Restore(c.Request.Context(), userID, id); err != nil {
 		writeError(c, err)
 		return
 	}
@@ -106,7 +105,7 @@ func (h *TrashHandler) DeleteFromTrash(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := h.items.DeleteFromTrash(c.Request.Context(), userID, id); err != nil {
+	if err := h.trash.DeleteFromTrash(c.Request.Context(), userID, id); err != nil {
 		writeError(c, err)
 		return
 	}
@@ -128,7 +127,7 @@ func (h *TrashHandler) EmptyTrash(c *gin.Context) {
 	if !ok {
 		return
 	}
-	n, err := h.items.EmptyTrash(c.Request.Context(), userID)
+	n, err := h.trash.EmptyTrash(c.Request.Context(), userID)
 	if err != nil {
 		writeError(c, err)
 		return

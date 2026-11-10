@@ -197,7 +197,7 @@ func TestTrashPurgeOutlivesADisconnectedClient(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(func(c *gin.Context) { middleware.SetUserID(c, userID) })
-	r.POST("/ops", handlers.NewOpsHandler(services.NewItemsService(db, time.Hour)).ApplyOps)
+	r.POST("/ops", handlers.NewOpsHandler(services.NewOpsService(db, services.NewTrashService(db, time.Hour))).ApplyOps)
 
 	body := strings.NewReader(`{"ops":[{"op":"trash","id":"` + victim.String() + `"}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/ops", body).WithContext(reqCtx)

@@ -68,16 +68,14 @@ func run() error {
 		emailValidator = services.NewEmailValidator()
 	}
 
-	userService := services.NewUserService(userDataSource)
-	authService := services.NewAuthService(userService, hasher, emailValidator)
-	itemsService := services.NewItemsService(itemsDataSource, cfg.TrashRetention)
+	trashService := services.NewTrashService(itemsDataSource, cfg.TrashRetention)
 
 	router, err := NewRouter(RouterDeps{
-		Auth:           handlers.NewAuthHandler(authService, sessions, cookie),
-		Users:          handlers.NewUserHandler(userService),
-		Pages:          handlers.NewPagesHandler(itemsService),
-		Ops:            handlers.NewOpsHandler(itemsService),
-		Trash:          handlers.NewTrashHandler(itemsService),
+		Auth:           handlers.NewAuthHandler(services.NewAuthService(userDataSource, hasher, emailValidator), sessions, cookie),
+		Users:          handlers.NewUserHandler(services.NewUserService(userDataSource)),
+		Pages:          handlers.NewPagesHandler(services.NewPagesService(itemsDataSource)),
+		Ops:            handlers.NewOpsHandler(services.NewOpsService(itemsDataSource, trashService)),
+		Trash:          handlers.NewTrashHandler(trashService),
 		Sessions:       sessions,
 		Cookie:         cookie,
 		AllowedOrigins: cfg.AllowedOrigins,

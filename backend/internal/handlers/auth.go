@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"backend/internal/model"
-	"backend/internal/services"
 	"backend/internal/session"
 
 	"github.com/gin-gonic/gin"
@@ -34,12 +33,12 @@ type SignupRequest struct {
 }
 
 type AuthHandler struct {
-	auth     *services.AuthService
+	auth     authService
 	sessions AuthSessions
 	cookie   session.Cookie
 }
 
-func NewAuthHandler(auth *services.AuthService, sessions AuthSessions, cookie session.Cookie) *AuthHandler {
+func NewAuthHandler(auth authService, sessions AuthSessions, cookie session.Cookie) *AuthHandler {
 	return &AuthHandler{auth: auth, sessions: sessions, cookie: cookie}
 }
 

@@ -3,6 +3,7 @@ package database
 import (
 	"backend/internal/apperr"
 	"backend/internal/model"
+	"backend/internal/tree"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const MaxTreeDepth = tree.MaxTreeDepth
 
 const (
 	pgForeignKeyViolation = "23503"
@@ -75,22 +78,22 @@ func getItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.Item, 
 		"SELECT "+itemColumns+" FROM items i WHERE i.id = $1 AND i.user_id = $2", id, userID))
 }
 
-func (db *PostgreItemsDataSource) OpenItem(ctx context.Context, userID, id uuid.UUID) (OpenedItem, error) {
+func (db *PostgreItemsDataSource) OpenItem(ctx context.Context, userID, id uuid.UUID) (model.OpenedItem, error) {
 	tx, err := db.conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var out OpenedItem
+	var out model.OpenedItem
 	if out.Location, err = resolveItem(ctx, tx, userID, id); err != nil {
-		return OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	if out.Items, err = pageTree(ctx, tx, userID, out.Location.PageID); err != nil {
-		return OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	if out.Ancestors, err = ancestors(ctx, tx, userID, out.Location.PageID); err != nil {
-		return OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	return out, tx.Commit(ctx)
 }

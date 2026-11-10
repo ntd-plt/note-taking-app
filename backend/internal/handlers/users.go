@@ -35,10 +35,10 @@ type UpdateUserRequest struct {
 }
 
 type UserHandler struct {
-	users *services.UserService
+	users userService
 }
 
-func NewUserHandler(users *services.UserService) *UserHandler {
+func NewUserHandler(users userService) *UserHandler {
 	return &UserHandler{users: users}
 }
 
@@ -58,7 +58,7 @@ func (h *UserHandler) GetUser(c *gin.Context) {
 	if !ok {
 		return
 	}
-	user, err := h.users.GetUserByID(c.Request.Context(), id)
+	user, err := h.users.Get(c.Request.Context(), id)
 	if err != nil {
 		writeError(c, err)
 		return
@@ -100,7 +100,7 @@ func (h *UserHandler) UpdateUser(c *gin.Context) {
 	if req.Name != nil {
 		user, err = h.users.Rename(c.Request.Context(), id, *req.Name)
 	} else {
-		user, err = h.users.GetUserByID(c.Request.Context(), id)
+		user, err = h.users.Get(c.Request.Context(), id)
 	}
 	if err != nil {
 		writeError(c, err)
