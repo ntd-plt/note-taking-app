@@ -116,3 +116,49 @@ func TestApplyOpsChecksTheBatchBeforeRunningIt(t *testing.T) {
 		t.Errorf("a rejected batch created %d pages", len(pages))
 	}
 }
+
+// trashedAgo moves a trashed page's trashed_at into the past: the data gets old
+// instead of the clock moving forward.
+func trashedAgo(db *testutil.FakeDatabase, id uuid.UUID, ago time.Duration) {
+	it := db.Items[id]
+	at := time.Now().Add(-ago)
+	it.TrashedAt = &at
+	db.Items[id] = it
+}
+
+func TestTrashRetentionKeepsRecentPagesAndRemovesOldOnes(t *testing.T) {
+	const day = 24 * time.Hour
+	db := testutil.NewFakeDatabase()
+	user := uuid.New()
+	ws := db.Workspace(user)
+	trash := services.NewTrashService(db, 30*day)
+	ops := services.NewOpsService(db, trash)
+	page := model.ItemTypePage
+	recent, old := uuid.New(), uuid.New()
+	for _, id := range []uuid.UUID{recent, old} {
+		if err := ops.ApplyOps(ctx, user, []model.Op{{Op: model.OpCreate, ID: id, Type: &page, ParentID: &ws.ID}, {Op: model.OpTrash, ID: id}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	trashedAgo(db, recent, 29*day)
+	trashedAgo(db, old, 31*day)
+
+	listed, err := trash.ListTrash(ctx, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Page.ID != recent {
+		t.Fatalf("listed %d pages, want only the 29-day-old one", len(listed))
+	}
+	if left := time.Until(listed[0].PurgeAt); left < 23*time.Hour || left > 25*time.Hour {
+		t.Errorf("purge_at is %v away, want about a day", left)
+	}
+
+	trash.PurgeExpired(ctx, user)
+	if _, ok := db.Items[old]; ok {
+		t.Error("the 31-day-old page was not purged")
+	}
+	if _, ok := db.Items[recent]; !ok {
+		t.Error("the 29-day-old page was purged")
+	}
+}

@@ -17,11 +17,15 @@ type TrashService struct {
 	db TrashStore
 	// retention is how long a page stays in the trash before it is removed.
 	retention time.Duration
-	now       func() time.Time
 }
 
 func NewTrashService(db TrashStore, retention time.Duration) *TrashService {
-	return &TrashService{db: db, retention: retention, now: time.Now}
+	return &TrashService{db: db, retention: retention}
+}
+
+// trashCutoff is the moment before which a trashed page has expired.
+func trashCutoff(now time.Time, retention time.Duration) time.Time {
+	return now.Add(-retention)
 }
 
 // TrashedPage is a page in the trash and when it will be removed for good.
@@ -37,7 +41,7 @@ func (s *TrashService) ListTrash(ctx context.Context, userID uuid.UUID) ([]Trash
 	if err != nil {
 		return nil, err
 	}
-	expired := s.now().Add(-s.retention)
+	expired := trashCutoff(time.Now(), s.retention)
 	out := []TrashedPage{}
 	for _, p := range pages {
 		if p.TrashedAt.Before(expired) {
@@ -65,7 +69,7 @@ func (s *TrashService) EmptyTrash(ctx context.Context, userID uuid.UUID) (int, e
 func (s *TrashService) PurgeExpired(ctx context.Context, userID uuid.UUID) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), purgeTimeout)
 	defer cancel()
-	before := s.now().Add(-s.retention)
+	before := trashCutoff(time.Now(), s.retention)
 	if n, err := s.db.EmptyTrash(ctx, userID, &before); err != nil {
 		log.Printf("purging the trash of %s: %v", userID, err)
 	} else if n > 0 {
