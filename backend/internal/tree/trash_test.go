@@ -52,7 +52,7 @@ func TestRestoreToTheEndOfTheTopLevel(t *testing.T) {
 	if it.Props["is_favorite"] != true {
 		t.Error("the restored page lost its favorite flag")
 	}
-	if pages, _ := f.db.ListPages(f.user); len(pages) != 3 {
+	if pages, _ := f.db.ListPages(ctx, f.user); len(pages) != 3 {
 		t.Errorf("sidebar = %d pages, want Page, Child and Deep", len(pages))
 	}
 }
@@ -102,7 +102,7 @@ func TestListAndDeleteFromTrash(t *testing.T) {
 	f.apply(createPage(later, f.ws, nil, "Later"))
 	f.apply(trash(later))
 
-	pages, err := f.db.ListTrash(f.user)
+	pages, err := f.db.ListTrash(ctx, f.user)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,13 +114,13 @@ func TestListAndDeleteFromTrash(t *testing.T) {
 	wantIDs(t, "trash", ids, later, child)
 
 	var nf *pkg.NotFoundError
-	if err := f.db.DeleteFromTrash(f.user, deep); !errors.As(err, &nf) {
+	if err := f.db.DeleteFromTrash(ctx, f.user, deep); !errors.As(err, &nf) {
 		t.Errorf("deleting a page inside a trashed page: err = %v, want not found", err)
 	}
-	if err := f.db.DeleteFromTrash(f.user, uuid.New()); !errors.As(err, &nf) {
+	if err := f.db.DeleteFromTrash(ctx, f.user, uuid.New()); !errors.As(err, &nf) {
 		t.Errorf("deleting an unknown page: err = %v, want not found", err)
 	}
-	if err := f.db.DeleteFromTrash(f.user, child); err != nil {
+	if err := f.db.DeleteFromTrash(ctx, f.user, child); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []uuid.UUID{child, inside, deep} {
@@ -128,7 +128,7 @@ func TestListAndDeleteFromTrash(t *testing.T) {
 			t.Errorf("%s survived deleting the page that held it", id)
 		}
 	}
-	if pages, _ := f.db.ListTrash(f.user); len(pages) != 1 {
+	if pages, _ := f.db.ListTrash(ctx, f.user); len(pages) != 1 {
 		t.Errorf("trash = %d pages, want 1", len(pages))
 	}
 }
@@ -144,7 +144,7 @@ func TestEmptyTrash(t *testing.T) {
 	f.db.Items[child] = old
 
 	before := time.Now().Add(-30 * 24 * time.Hour)
-	n, err := f.db.EmptyTrash(f.user, &before)
+	n, err := f.db.EmptyTrash(ctx, f.user, &before)
 	if err != nil || n != 1 {
 		t.Fatalf("purge removed %d (%v), want 1", n, err)
 	}
@@ -155,15 +155,15 @@ func TestEmptyTrash(t *testing.T) {
 		t.Error("the recent page was removed")
 	}
 
-	n, err = f.db.EmptyTrash(f.user, nil)
+	n, err = f.db.EmptyTrash(ctx, f.user, nil)
 	if err != nil || n != 1 {
 		t.Fatalf("empty removed %d (%v), want 1", n, err)
 	}
-	if pages, _ := f.db.ListTrash(f.user); len(pages) != 0 {
+	if pages, _ := f.db.ListTrash(ctx, f.user); len(pages) != 0 {
 		t.Errorf("trash = %+v, want empty", pages)
 	}
 	// Other pages are untouched.
-	if pages, _ := f.db.ListPages(f.user); len(pages) != 1 {
+	if pages, _ := f.db.ListPages(ctx, f.user); len(pages) != 1 {
 		t.Errorf("sidebar = %d pages, want only Page", len(pages))
 	}
 }

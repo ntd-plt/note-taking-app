@@ -274,7 +274,7 @@ func TestSignupEndpointSuccessLogsTheUserIn(t *testing.T) {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusCreated, w.Body.String())
 	}
 	wantLoggedIn(t, f, w, "bob@example.com")
-	if _, err := db.GetUserByEmail("bob@example.com"); err != nil {
+	if _, err := db.GetUserByEmail(ctx, "bob@example.com"); err != nil {
 		t.Errorf("user not stored after signup: %v", err)
 	}
 }
@@ -365,7 +365,7 @@ func TestSignupEndpointUndeliverableEmail(t *testing.T) {
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusUnprocessableEntity, w.Body.String())
 	}
-	if _, err := db.GetUserByEmail("bob@example.com"); err == nil {
+	if _, err := db.GetUserByEmail(ctx, "bob@example.com"); err == nil {
 		t.Error("user should not have been stored")
 	}
 }
@@ -429,7 +429,7 @@ func TestSignupEndpointMalformedEmailFormat(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body: %s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
-	if _, err := db.GetUserByEmail("not-an-email"); err == nil {
+	if _, err := db.GetUserByEmail(ctx, "not-an-email"); err == nil {
 		t.Error("user should not have been stored for a malformed email")
 	}
 }
@@ -689,7 +689,7 @@ func TestSignupStoresTheTrimmedName(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
 	}
-	u, err := db.GetUserByEmail("bob@example.com")
+	u, err := db.GetUserByEmail(ctx, "bob@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}

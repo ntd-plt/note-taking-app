@@ -43,7 +43,7 @@ func blockOp(id, parent uuid.UUID, pos *int, s string) model.Op {
 
 func mustGet(t *testing.T, db *database.PostgreItemsDataSource, user, id uuid.UUID) model.Item {
 	t.Helper()
-	it, err := db.GetItem(user, id)
+	it, err := db.GetItem(ctx, user, id)
 	if err != nil {
 		t.Fatalf("getting %s: %v", id, err)
 	}
@@ -56,7 +56,7 @@ func TestPostgresApplyOps(t *testing.T) {
 	ws := workspaceOf(t, db, me).ID
 	page, a, b, child := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 
-	if err := db.ApplyOps(me, []model.Op{
+	if err := db.ApplyOps(ctx, me, []model.Op{
 		pageOp(page, ws, nil, "Page"),
 		blockOp(b, page, nil, "b"),
 		blockOp(a, page, ptr(0), "a"),
@@ -69,7 +69,7 @@ func TestPostgresApplyOps(t *testing.T) {
 	}
 	before := mustGet(t, db, me, a)
 
-	if err := db.ApplyOps(me, []model.Op{
+	if err := db.ApplyOps(ctx, me, []model.Op{
 		{Op: model.OpUpdate, ID: b, Type: ptr(model.ItemTypeHeading), Props: model.Props{"level": 1, "textColor": "red"}},
 		{Op: model.OpMove, ID: b, ParentID: &page, Position: ptr(0)},
 	}); err != nil {
@@ -86,10 +86,10 @@ func TestPostgresApplyOps(t *testing.T) {
 		t.Errorf("turn into = %+v, want props %v", got, want)
 	}
 
-	if err := db.ApplyOps(me, []model.Op{{Op: model.OpDelete, ID: b}}); err != nil {
+	if err := db.ApplyOps(ctx, me, []model.Op{{Op: model.OpDelete, ID: b}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.GetItem(me, b); !isNotFound(err) {
+	if _, err := db.GetItem(ctx, me, b); !isNotFound(err) {
 		t.Errorf("deleted block: err = %v", err)
 	}
 	if got := mustGet(t, db, me, child); got.TrashedAt == nil || *got.ParentID != ws {
@@ -99,10 +99,10 @@ func TestPostgresApplyOps(t *testing.T) {
 		t.Errorf("workspace children = %v", got)
 	}
 
-	if err := db.ApplyOps(me, []model.Op{{Op: model.OpTrash, ID: page}}); err != nil {
+	if err := db.ApplyOps(ctx, me, []model.Op{{Op: model.OpTrash, ID: page}}); err != nil {
 		t.Fatal(err)
 	}
-	if pages, _ := db.ListPages(me); len(pages) != 0 {
+	if pages, _ := db.ListPages(ctx, me); len(pages) != 0 {
 		t.Errorf("sidebar after trashing = %+v", pages)
 	}
 }
@@ -112,12 +112,12 @@ func TestPostgresApplyOpsRollsBack(t *testing.T) {
 	me := newUser(t, pool)
 	ws := workspaceOf(t, db, me).ID
 	page, a := uuid.New(), uuid.New()
-	if err := db.ApplyOps(me, []model.Op{pageOp(page, ws, nil, "Page"), blockOp(a, page, nil, "a")}); err != nil {
+	if err := db.ApplyOps(ctx, me, []model.Op{pageOp(page, ws, nil, "Page"), blockOp(a, page, nil, "a")}); err != nil {
 		t.Fatal(err)
 	}
 
 	added := uuid.New()
-	err := db.ApplyOps(me, []model.Op{
+	err := db.ApplyOps(ctx, me, []model.Op{
 		blockOp(added, page, nil, "added"),
 		{Op: model.OpUpdate, ID: a, Props: model.Props{"content": runs("changed")}},
 		{Op: model.OpMove, ID: page, ParentID: &a},
@@ -126,7 +126,7 @@ func TestPostgresApplyOpsRollsBack(t *testing.T) {
 	if !errors.As(err, &te) || te.Kind != tree.Conflict || te.Index != 2 {
 		t.Fatalf("err = %v, want a conflict at op 2", err)
 	}
-	if _, err := db.GetItem(me, added); !isNotFound(err) {
+	if _, err := db.GetItem(ctx, me, added); !isNotFound(err) {
 		t.Error("the create before the rejected op was kept")
 	}
 	if got := mustGet(t, db, me, a); !sameJSON(got.Props["content"], runs("a")) {
@@ -137,7 +137,7 @@ func TestPostgresApplyOpsRollsBack(t *testing.T) {
 	}
 
 	other := newUser(t, pool)
-	if err := db.ApplyOps(other, []model.Op{{Op: model.OpUpdate, ID: a, Props: model.Props{"x": 1}}}); !errors.As(err, &te) || te.Kind != tree.NotFound {
+	if err := db.ApplyOps(ctx, other, []model.Op{{Op: model.OpUpdate, ID: a, Props: model.Props{"x": 1}}}); !errors.As(err, &te) || te.Kind != tree.NotFound {
 		t.Errorf("another user's block: err = %v", err)
 	}
 }
@@ -147,7 +147,7 @@ func TestPostgresApplyOpsChecksChildIDs(t *testing.T) {
 	me := newUser(t, pool)
 	ws := workspaceOf(t, db, me).ID
 	page := uuid.New()
-	if err := db.ApplyOps(me, []model.Op{pageOp(page, ws, nil, "Page")}); err != nil {
+	if err := db.ApplyOps(ctx, me, []model.Op{pageOp(page, ws, nil, "Page")}); err != nil {
 		t.Fatal(err)
 	}
 	// A child the page does not list: any batch touching the page must fail.
@@ -155,7 +155,7 @@ func TestPostgresApplyOpsChecksChildIDs(t *testing.T) {
 		"INSERT INTO items (id, user_id, parent_id, type) VALUES ($1, $2, $3, 'paragraph')", uuid.New(), me, page); err != nil {
 		t.Fatal(err)
 	}
-	err := db.ApplyOps(me, []model.Op{blockOp(uuid.New(), page, nil, "x")})
+	err := db.ApplyOps(ctx, me, []model.Op{blockOp(uuid.New(), page, nil, "x")})
 	var te *tree.Error
 	if err == nil || errors.As(err, &te) {
 		t.Errorf("err = %v, want an internal child_ids error", err)
@@ -167,7 +167,7 @@ func TestPostgresConcurrentBatchesKeepChildIDs(t *testing.T) {
 	me := newUser(t, pool)
 	ws := workspaceOf(t, db, me).ID
 	page := uuid.New()
-	if err := db.ApplyOps(me, []model.Op{pageOp(page, ws, nil, "Page")}); err != nil {
+	if err := db.ApplyOps(ctx, me, []model.Op{pageOp(page, ws, nil, "Page")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -177,7 +177,7 @@ func TestPostgresConcurrentBatchesKeepChildIDs(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs <- db.ApplyOps(me, []model.Op{blockOp(uuid.New(), page, ptr(0), "x")})
+			errs <- db.ApplyOps(ctx, me, []model.Op{blockOp(uuid.New(), page, ptr(0), "x")})
 		}()
 	}
 	wg.Wait()
@@ -197,7 +197,7 @@ func TestPostgresDuplicate(t *testing.T) {
 	me := newUser(t, pool)
 	ws := workspaceOf(t, db, me).ID
 	page, a, child, after := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	if err := db.ApplyOps(me, []model.Op{
+	if err := db.ApplyOps(ctx, me, []model.Op{
 		pageOp(page, ws, nil, "Page"),
 		{Op: model.OpUpdate, ID: page, Props: model.Props{"is_favorite": true}},
 		blockOp(a, page, nil, "a"),
@@ -207,7 +207,7 @@ func TestPostgresDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	copied, err := db.Duplicate(me, page)
+	copied, err := db.Duplicate(ctx, me, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,14 +217,14 @@ func TestPostgresDuplicate(t *testing.T) {
 	if got := mustGet(t, db, me, ws).ChildIDs; !slices.Equal(got, []uuid.UUID{page, copied.ID, after}) {
 		t.Errorf("workspace children = %v", got)
 	}
-	items, err := db.GetPageTree(me, copied.ID)
+	items, err := db.GetPageTree(ctx, me, copied.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 3 || items[1].ID == a || items[2].Name() != "Child" || items[2].ID == child {
 		t.Errorf("copied tree = %+v", items)
 	}
-	if pages, _ := db.ListPages(me); len(pages) != 5 {
+	if pages, _ := db.ListPages(ctx, me); len(pages) != 5 {
 		t.Errorf("sidebar has %d pages, want 5", len(pages))
 	}
 }

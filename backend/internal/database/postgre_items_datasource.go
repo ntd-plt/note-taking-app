@@ -64,13 +64,13 @@ func translateErr(err error) error {
 	return err
 }
 
-func (db *PostgreItemsDataSource) GetWorkspace(userID uuid.UUID) (model.Item, error) {
-	return scanItem(db.conn.QueryRow(context.Background(),
+func (db *PostgreItemsDataSource) GetWorkspace(ctx context.Context, userID uuid.UUID) (model.Item, error) {
+	return scanItem(db.conn.QueryRow(ctx,
 		"SELECT "+itemColumns+" FROM items i WHERE i.user_id = $1 AND i.type = 'workspace'", userID))
 }
 
-func (db *PostgreItemsDataSource) GetItem(userID, id uuid.UUID) (model.Item, error) {
-	return getItem(context.Background(), db.conn, userID, id)
+func (db *PostgreItemsDataSource) GetItem(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
+	return getItem(ctx, db.conn, userID, id)
 }
 
 func getItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.Item, error) {
@@ -78,8 +78,7 @@ func getItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.Item, 
 		"SELECT "+itemColumns+" FROM items i WHERE i.id = $1 AND i.user_id = $2", id, userID))
 }
 
-func (db *PostgreItemsDataSource) OpenItem(userID, id uuid.UUID) (OpenedItem, error) {
-	ctx := context.Background()
+func (db *PostgreItemsDataSource) OpenItem(ctx context.Context, userID, id uuid.UUID) (OpenedItem, error) {
 	tx, err := db.conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return OpenedItem{}, err
@@ -99,8 +98,8 @@ func (db *PostgreItemsDataSource) OpenItem(userID, id uuid.UUID) (OpenedItem, er
 	return out, tx.Commit(ctx)
 }
 
-func (db *PostgreItemsDataSource) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, error) {
-	return resolveItem(context.Background(), db.conn, userID, id)
+func (db *PostgreItemsDataSource) ResolveItem(ctx context.Context, userID, id uuid.UUID) (model.ItemLocation, error) {
+	return resolveItem(ctx, db.conn, userID, id)
 }
 
 func resolveItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.ItemLocation, error) {
@@ -129,8 +128,8 @@ func resolveItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.It
 	return loc, nil
 }
 
-func (db *PostgreItemsDataSource) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, error) {
-	return pageTree(context.Background(), db.conn, userID, pageID)
+func (db *PostgreItemsDataSource) GetPageTree(ctx context.Context, userID, pageID uuid.UUID) ([]model.Item, error) {
+	return pageTree(ctx, db.conn, userID, pageID)
 }
 
 func pageTree(ctx context.Context, q querier, userID, pageID uuid.UUID) ([]model.Item, error) {
@@ -179,8 +178,8 @@ func collectItems(rows pgx.Rows) ([]model.Item, error) {
 	return items, rows.Err()
 }
 
-func (db *PostgreItemsDataSource) Ancestors(userID, id uuid.UUID) ([]model.Item, error) {
-	return ancestors(context.Background(), db.conn, userID, id)
+func (db *PostgreItemsDataSource) Ancestors(ctx context.Context, userID, id uuid.UUID) ([]model.Item, error) {
+	return ancestors(ctx, db.conn, userID, id)
 }
 
 func ancestors(ctx context.Context, q querier, userID, id uuid.UUID) ([]model.Item, error) {
@@ -201,12 +200,12 @@ func ancestors(ctx context.Context, q querier, userID, id uuid.UUID) ([]model.It
 	return collectItems(rows)
 }
 
-func (db *PostgreItemsDataSource) ListPages(userID uuid.UUID) ([]model.Item, error) {
+func (db *PostgreItemsDataSource) ListPages(ctx context.Context, userID uuid.UUID) ([]model.Item, error) {
 	// Start from the user's pages (idx_items_user_pages) and walk each one up to the
 	// workspace, collecting its position at every level, rather than walking down
 	// through every block. A page is left out when it or any item above it is in
 	// the trash, or when the walk never reaches the workspace.
-	rows, err := db.conn.Query(context.Background(), `
+	rows, err := db.conn.Query(ctx, `
 		WITH RECURSIVE up(page_id, cur, cur_parent, parent_page_id, path, trashed, depth) AS (
 			SELECT p.id, p.id, p.parent_id, NULL::uuid, ARRAY[]::int[], p.trashed_at IS NOT NULL, 0
 			FROM items p WHERE p.user_id = $1 AND p.type = 'page'

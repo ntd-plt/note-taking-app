@@ -57,7 +57,7 @@ func move(id, parent uuid.UUID, pos *int) model.Op {
 
 func (f *fixture) apply(ops ...model.Op) {
 	f.t.Helper()
-	if err := f.db.ApplyOps(f.user, ops); err != nil {
+	if err := f.db.ApplyOps(ctx, f.user, ops); err != nil {
 		f.t.Fatalf("apply: %v", err)
 	}
 }
@@ -67,7 +67,7 @@ func (f *fixture) apply(ops ...model.Op) {
 func (f *fixture) reject(kind tree.Kind, index int, ops ...model.Op) {
 	f.t.Helper()
 	before := maps.Clone(f.db.Items)
-	err := f.db.ApplyOps(f.user, ops)
+	err := f.db.ApplyOps(ctx, f.user, ops)
 	var te *tree.Error
 	if !errors.As(err, &te) {
 		f.t.Fatalf("err = %v, want a *tree.Error", err)
@@ -281,7 +281,7 @@ func TestDeleteBlockTrashesChildPages(t *testing.T) {
 	if d := f.item(deepPage); *d.ParentID != inChild || d.TrashedAt != nil {
 		t.Error("a page inside the trashed page should stay where it is")
 	}
-	if pages, _ := f.db.ListPages(f.user); len(pages) != 1 {
+	if pages, _ := f.db.ListPages(ctx, f.user); len(pages) != 1 {
 		t.Errorf("sidebar = %+v, want only Page", pages)
 	}
 
@@ -387,7 +387,7 @@ func TestDuplicatePage(t *testing.T) {
 	)
 	before := len(f.db.Items)
 
-	copied, err := f.db.Duplicate(f.user, page)
+	copied, err := f.db.Duplicate(ctx, f.user, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +416,7 @@ func TestDuplicatePage(t *testing.T) {
 		t.Errorf("copied child page = %+v", cchild)
 	}
 
-	again, err := f.db.Duplicate(f.user, page)
+	again, err := f.db.Duplicate(ctx, f.user, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +430,7 @@ func TestDuplicateBlockAndRejections(t *testing.T) {
 	f := newFixture(t)
 	page, a, b, _, c := f.page()
 
-	copied, err := f.db.Duplicate(f.user, b)
+	copied, err := f.db.Duplicate(ctx, f.user, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,10 +441,10 @@ func TestDuplicateBlockAndRejections(t *testing.T) {
 
 	f.apply(model.Op{Op: model.OpTrash, ID: page})
 	var te *tree.Error
-	if _, err := f.db.Duplicate(f.user, a); !errors.As(err, &te) || te.Kind != tree.Conflict {
+	if _, err := f.db.Duplicate(ctx, f.user, a); !errors.As(err, &te) || te.Kind != tree.Conflict {
 		t.Errorf("duplicate inside the trash: err = %v", err)
 	}
-	if _, err := f.db.Duplicate(f.user, f.ws); !errors.As(err, &te) || te.Kind != tree.NotFound {
+	if _, err := f.db.Duplicate(ctx, f.user, f.ws); !errors.As(err, &te) || te.Kind != tree.NotFound {
 		t.Errorf("duplicate the workspace: err = %v", err)
 	}
 }

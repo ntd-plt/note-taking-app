@@ -25,7 +25,7 @@ func newUsersRouter(db *testutil.FakeDatabase, user model.User) *gin.Engine {
 
 func storedUser(t *testing.T, db *testutil.FakeDatabase, user model.User) model.User {
 	t.Helper()
-	u, err := db.GetUserByID(user.ID)
+	u, err := db.GetUserByID(ctx, user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

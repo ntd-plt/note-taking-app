@@ -16,11 +16,11 @@ func seedFake(t *testing.T, nodes []node) (*testutil.FakeDatabase, uuid.UUID, []
 	t.Helper()
 	db := testutil.NewFakeDatabase()
 	user := model.New()
-	if err := db.AddUser(*user); err != nil {
+	if err := db.AddUser(ctx, *user); err != nil {
 		t.Fatal(err)
 	}
 	rows, _ := buildItems(db.Workspace(user.ID).ID, nodes)
-	if err := db.ApplyOps(user.ID, createOps(rows)); err != nil {
+	if err := db.ApplyOps(ctx, user.ID, createOps(rows)); err != nil {
 		t.Fatal(err)
 	}
 	return db, user.ID, rows
@@ -55,7 +55,7 @@ func TestEmbeddedSampleTreeUsesEveryTypeAndNestsPages(t *testing.T) {
 		default:
 			underBlock = true
 		}
-		if crumbs, _ := db.Ancestors(userID, it.ID); len(crumbs) >= 2 {
+		if crumbs, _ := db.Ancestors(ctx, userID, it.ID); len(crumbs) >= 2 {
 			deep = true
 		}
 	}
@@ -118,7 +118,7 @@ func TestSeededPagesListInDocumentOrder(t *testing.T) {
 	}
 	db, userID, _ := seedFake(t, nodes)
 
-	pages, err := db.ListPages(userID)
+	pages, err := db.ListPages(ctx, userID)
 	if err != nil {
 		t.Fatal(err)
 	}

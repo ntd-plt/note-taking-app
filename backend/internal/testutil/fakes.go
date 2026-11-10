@@ -45,7 +45,7 @@ func NewFakeDatabase() *FakeDatabase {
 func (f *FakeDatabase) Connect() error    { return f.Errs["Connect"] }
 func (f *FakeDatabase) Disconnect() error { return f.Errs["Disconnect"] }
 
-func (f *FakeDatabase) GetUserByEmail(email string) (model.User, error) {
+func (f *FakeDatabase) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
 	if err := f.Errs["GetUserByEmail"]; err != nil {
 		return model.User{}, err
 	}
@@ -57,7 +57,7 @@ func (f *FakeDatabase) GetUserByEmail(email string) (model.User, error) {
 	return model.User{}, ErrUserNotFound
 }
 
-func (f *FakeDatabase) GetUserByID(id uuid.UUID) (model.User, error) {
+func (f *FakeDatabase) GetUserByID(ctx context.Context, id uuid.UUID) (model.User, error) {
 	if err := f.Errs["GetUserByID"]; err != nil {
 		return model.User{}, err
 	}
@@ -68,7 +68,7 @@ func (f *FakeDatabase) GetUserByID(id uuid.UUID) (model.User, error) {
 	return u, nil
 }
 
-func (f *FakeDatabase) AddUser(user model.User) error {
+func (f *FakeDatabase) AddUser(ctx context.Context, user model.User) error {
 	if err := f.Errs["AddUser"]; err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (f *FakeDatabase) AddUser(user model.User) error {
 	return nil
 }
 
-func (f *FakeDatabase) UpdateUser(user model.User) error {
+func (f *FakeDatabase) UpdateUser(ctx context.Context, user model.User) error {
 	if err := f.Errs["UpdateUser"]; err != nil {
 		return err
 	}

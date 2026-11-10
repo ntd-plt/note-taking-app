@@ -204,3 +204,28 @@ func TestCORSPreflight(t *testing.T) {
 		}
 	}
 }
+
+func TestDeadlineCancelsTheRequestContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(middleware.Deadline(20 * time.Millisecond))
+	r.GET("/slow", func(c *gin.Context) {
+		deadline, ok := c.Request.Context().Deadline()
+		if !ok || time.Until(deadline) > 20*time.Millisecond {
+			c.String(http.StatusTeapot, "no deadline")
+			return
+		}
+		select {
+		case <-c.Request.Context().Done():
+			c.String(http.StatusServiceUnavailable, c.Request.Context().Err().Error())
+		case <-time.After(time.Second):
+			c.String(http.StatusOK, "never canceled")
+		}
+	})
+
+	w := get(r, "/slow")
+
+	if w.Code != http.StatusServiceUnavailable || w.Body.String() != context.DeadlineExceeded.Error() {
+		t.Errorf("got %d %q, want the context canceled by its deadline", w.Code, w.Body.String())
+	}
+}

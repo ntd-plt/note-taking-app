@@ -60,7 +60,7 @@ func (tr *tree) add(it model.Item) uuid.UUID {
 	it.ID = uuid.New()
 	typ := it.Type
 	op := model.Op{Op: model.OpCreate, ID: it.ID, Type: &typ, ParentID: it.ParentID, Props: it.Props}
-	if err := tr.db.ApplyOps(tr.userID, []model.Op{op}); err != nil {
+	if err := tr.db.ApplyOps(ctx, tr.userID, []model.Op{op}); err != nil {
 		tr.t.Fatal(err)
 	}
 	return it.ID

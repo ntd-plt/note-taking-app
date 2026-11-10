@@ -163,12 +163,12 @@ func (s *ItemsService) ApplyOps(c *gin.Context) {
 			return
 		}
 	}
-	if err := s.db.ApplyOps(userID, req.Ops); err != nil {
+	if err := s.db.ApplyOps(c.Request.Context(), userID, req.Ops); err != nil {
 		respondOpError(c, err)
 		return
 	}
 	if movesToTrash(req.Ops) {
-		s.purgeExpiredTrash(userID)
+		s.purgeExpiredTrash(c.Request.Context(), userID)
 	}
 	c.Status(http.StatusNoContent)
 }
@@ -207,7 +207,7 @@ func (s *ItemsService) DuplicateItem(c *gin.Context) {
 	if !ok {
 		return
 	}
-	copied, err := s.db.Duplicate(userID, id)
+	copied, err := s.db.Duplicate(c.Request.Context(), userID, id)
 	var te *tree.Error
 	if stderrors.As(err, &te) {
 		c.JSON(treeStatus[te.Kind], gin.H{"error": te.Msg})

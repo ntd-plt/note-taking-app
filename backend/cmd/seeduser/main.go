@@ -30,6 +30,7 @@ func main() {
 }
 
 func run() error {
+	ctx := context.Background()
 	cfg, err := configs.Load()
 	if err != nil {
 		return err
@@ -64,7 +65,7 @@ func run() error {
 		return err
 	}
 
-	pool, err := database.NewPool(context.Background(), cfg.DSN())
+	pool, err := database.NewPool(ctx, cfg.DSN())
 	if err != nil {
 		return err
 	}
@@ -78,11 +79,11 @@ func run() error {
 	items := database.NewPostgreItemsDataSource(pool)
 
 	user := model.New().WithEmail(email).WithUsername(name).WithPasswordHash(passwordHash)
-	err = users.AddUser(*user)
+	err = users.AddUser(ctx, *user)
 	var exists *pkg.AlreadyExistsError
 	switch {
 	case stderrors.As(err, &exists):
-		existing, err := users.GetUserByEmail(email)
+		existing, err := users.GetUserByEmail(ctx, email)
 		if err != nil {
 			return err
 		}
@@ -94,7 +95,7 @@ func run() error {
 		fmt.Printf("seed-user: created %s (%s).\n", email, name)
 	}
 
-	seeded, err := hasPages(pool, user.ID)
+	seeded, err := hasPages(ctx, pool, user.ID)
 	if err != nil {
 		return err
 	}
@@ -102,12 +103,12 @@ func run() error {
 		fmt.Printf("seed-user: %s already has pages; leaving them alone.\n", email)
 		return nil
 	}
-	workspace, err := items.GetWorkspace(user.ID)
+	workspace, err := items.GetWorkspace(ctx, user.ID)
 	if err != nil {
 		return fmt.Errorf("finding the workspace of %s: %w", email, err)
 	}
 	rows, _ := buildItems(workspace.ID, tree)
-	if err := items.ApplyOps(user.ID, createOps(rows)); err != nil {
+	if err := items.ApplyOps(ctx, user.ID, createOps(rows)); err != nil {
 		return err
 	}
 	fmt.Printf("seed-user: created %d sample items.\n", len(rows))
@@ -116,9 +117,9 @@ func run() error {
 
 // hasPages reports whether the user already has any page, trashed ones included, so
 // running the seed twice does not add a second sample tree.
-func hasPages(pool *pgxpool.Pool, userID uuid.UUID) (bool, error) {
+func hasPages(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) (bool, error) {
 	var found bool
-	err := pool.QueryRow(context.Background(),
+	err := pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM items WHERE user_id = $1 AND type = 'page')", userID).Scan(&found)
 	return found, err
 }

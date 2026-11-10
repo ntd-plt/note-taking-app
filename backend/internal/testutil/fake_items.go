@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"context"
 	"sort"
 	"time"
 
@@ -75,7 +76,7 @@ func (f *FakeDatabase) children(parent model.Item) []model.Item {
 	return kids
 }
 
-func (f *FakeDatabase) GetWorkspace(userID uuid.UUID) (model.Item, error) {
+func (f *FakeDatabase) GetWorkspace(ctx context.Context, userID uuid.UUID) (model.Item, error) {
 	if err := f.Errs["GetWorkspace"]; err != nil {
 		return model.Item{}, err
 	}
@@ -87,7 +88,7 @@ func (f *FakeDatabase) GetWorkspace(userID uuid.UUID) (model.Item, error) {
 	return model.Item{}, pkg.NewNotFoundError("item")
 }
 
-func (f *FakeDatabase) GetItem(userID, id uuid.UUID) (model.Item, error) {
+func (f *FakeDatabase) GetItem(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
 	if err := f.Errs["GetItem"]; err != nil {
 		return model.Item{}, err
 	}
@@ -98,7 +99,7 @@ func (f *FakeDatabase) GetItem(userID, id uuid.UUID) (model.Item, error) {
 	return it, nil
 }
 
-func (f *FakeDatabase) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, error) {
+func (f *FakeDatabase) ResolveItem(ctx context.Context, userID, id uuid.UUID) (model.ItemLocation, error) {
 	var loc model.ItemLocation
 	if err := f.Errs["ResolveItem"]; err != nil {
 		return loc, err
@@ -127,22 +128,22 @@ func (f *FakeDatabase) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, er
 	return loc, nil
 }
 
-func (f *FakeDatabase) OpenItem(userID, id uuid.UUID) (database.OpenedItem, error) {
+func (f *FakeDatabase) OpenItem(ctx context.Context, userID, id uuid.UUID) (database.OpenedItem, error) {
 	var out database.OpenedItem
 	var err error
-	if out.Location, err = f.ResolveItem(userID, id); err != nil {
+	if out.Location, err = f.ResolveItem(ctx, userID, id); err != nil {
 		return database.OpenedItem{}, err
 	}
-	if out.Items, err = f.GetPageTree(userID, out.Location.PageID); err != nil {
+	if out.Items, err = f.GetPageTree(ctx, userID, out.Location.PageID); err != nil {
 		return database.OpenedItem{}, err
 	}
-	if out.Ancestors, err = f.Ancestors(userID, out.Location.PageID); err != nil {
+	if out.Ancestors, err = f.Ancestors(ctx, userID, out.Location.PageID); err != nil {
 		return database.OpenedItem{}, err
 	}
 	return out, nil
 }
 
-func (f *FakeDatabase) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, error) {
+func (f *FakeDatabase) GetPageTree(ctx context.Context, userID, pageID uuid.UUID) ([]model.Item, error) {
 	if err := f.Errs["GetPageTree"]; err != nil {
 		return nil, err
 	}
@@ -170,7 +171,7 @@ func (f *FakeDatabase) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, erro
 	return items, nil
 }
 
-func (f *FakeDatabase) Ancestors(userID, id uuid.UUID) ([]model.Item, error) {
+func (f *FakeDatabase) Ancestors(ctx context.Context, userID, id uuid.UUID) ([]model.Item, error) {
 	if err := f.Errs["Ancestors"]; err != nil {
 		return nil, err
 	}
@@ -188,12 +189,12 @@ func (f *FakeDatabase) Ancestors(userID, id uuid.UUID) ([]model.Item, error) {
 	return pages, nil
 }
 
-func (f *FakeDatabase) ListPages(userID uuid.UUID) ([]model.Item, error) {
+func (f *FakeDatabase) ListPages(ctx context.Context, userID uuid.UUID) ([]model.Item, error) {
 	if err := f.Errs["ListPages"]; err != nil {
 		return nil, err
 	}
 	pages := []model.Item{}
-	ws, err := f.GetWorkspace(userID)
+	ws, err := f.GetWorkspace(ctx, userID)
 	if err != nil {
 		return pages, nil
 	}

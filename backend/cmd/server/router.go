@@ -14,6 +14,10 @@ import (
 
 const maxRequestBodyBytes = 2 << 20
 
+// requestDeadline is the longest a request may work before its context is
+// canceled. It matches the server's write timeout.
+const requestDeadline = writeTimeout
+
 // RouterDeps is what the HTTP routes are built from.
 type RouterDeps struct {
 	Auth     *services.AuthService
@@ -36,6 +40,7 @@ func NewRouter(d RouterDeps) (*gin.Engine, error) {
 	router.Use(middleware.CORS(d.AllowedOrigins))
 	router.Use(csrf)
 	router.Use(middleware.MaxBodyBytes(maxRequestBodyBytes))
+	router.Use(middleware.Deadline(requestDeadline))
 
 	if d.EnableSwagger {
 		router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

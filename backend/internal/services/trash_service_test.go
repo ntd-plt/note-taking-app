@@ -1,15 +1,20 @@
 package services_test
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/services"
 	"backend/internal/testutil"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
@@ -155,4 +160,56 @@ func TestTrashEndpointsNeedAUserAndReportErrors(t *testing.T) {
 	wantStatus(t, doJSON(t, r, http.MethodGet, "/api/v1/trash", nil), http.StatusInternalServerError)
 	db.Errs["EmptyTrash"] = errors.New("boom")
 	wantStatus(t, doJSON(t, r, http.MethodDelete, "/api/v1/trash", nil), http.StatusInternalServerError)
+}
+
+// disconnectingDB plays a client that goes away right after its trash batch is
+// saved, and records the context the following purge runs with.
+type disconnectingDB struct {
+	*testutil.FakeDatabase
+	disconnect context.CancelFunc
+	purged     bool
+	purgeErr   error
+}
+
+func (d *disconnectingDB) ApplyOps(ctx context.Context, userID uuid.UUID, ops []model.Op) error {
+	err := d.FakeDatabase.ApplyOps(ctx, userID, ops)
+	d.disconnect()
+	return err
+}
+
+func (d *disconnectingDB) EmptyTrash(ctx context.Context, userID uuid.UUID, before *time.Time) (int, error) {
+	d.purged, d.purgeErr = true, ctx.Err()
+	return d.FakeDatabase.EmptyTrash(ctx, userID, before)
+}
+
+func TestTrashPurgeOutlivesADisconnectedClient(t *testing.T) {
+	fake := testutil.NewFakeDatabase()
+	userID := uuid.New()
+	tr := &tree{t: t, db: fake, userID: userID, root: fake.Workspace(userID).ID}
+	old := tr.page(tr.root, "Old")
+	applyOK(t, tr, trashOp(old))
+	age(tr, old, 2*time.Hour)
+	victim := tr.page(tr.root, "Victim")
+
+	reqCtx, disconnect := context.WithCancel(context.Background())
+	db := &disconnectingDB{FakeDatabase: fake, disconnect: disconnect}
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) { middleware.SetUserID(c, userID) })
+	r.POST("/ops", services.NewItemsService(db, time.Hour).ApplyOps)
+
+	body := strings.NewReader(`{"ops":[{"op":"trash","id":"` + victim.String() + `"}]}`)
+	req := httptest.NewRequest(http.MethodPost, "/ops", body).WithContext(reqCtx)
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(httptest.NewRecorder(), req)
+
+	if !db.purged {
+		t.Fatal("the purge did not run after the trash batch")
+	}
+	if db.purgeErr != nil {
+		t.Errorf("the purge ran with a dead context (%v): a client leaving must not stop it", db.purgeErr)
+	}
+	if _, ok := fake.Items[old]; ok {
+		t.Error("the expired page was not purged")
+	}
 }

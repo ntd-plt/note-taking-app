@@ -70,7 +70,7 @@ func (s *AuthService) Login(c *gin.Context) {
 		return
 	}
 
-	user, err := s.login(req.Email, req.Password)
+	user, err := s.login(c.Request.Context(), req.Email, req.Password)
 	if stderrors.Is(err, errors.ErrWrongPasswordOrEmail) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
@@ -201,8 +201,8 @@ func (s *AuthService) startSession(c *gin.Context, user model.User) bool {
 // login returns ErrWrongPasswordOrEmail alike for an unknown email and a wrong
 // password, after the same amount of work, so neither the answer nor its timing
 // tells whether the account exists.
-func (s *AuthService) login(email, password string) (model.User, error) {
-	u, err := s.userService.GetUserByEmail(NormalizeEmail(email))
+func (s *AuthService) login(ctx context.Context, email, password string) (model.User, error) {
+	u, err := s.userService.GetUserByEmail(ctx, NormalizeEmail(email))
 	var notFound *pkg.NotFoundError
 	if stderrors.As(err, &notFound) {
 		_ = s.hasher.Compare(s.dummyHash(), []byte(password))
@@ -242,7 +242,7 @@ func (s *AuthService) signup(ctx context.Context, rawName, rawEmail, password st
 		return model.User{}, err
 	}
 
-	_, err = s.userService.GetUserByEmail(email)
+	_, err = s.userService.GetUserByEmail(ctx, email)
 	if err == nil {
 		return model.User{}, errors.ErrEmailAlreadyExists
 	}
@@ -260,7 +260,7 @@ func (s *AuthService) signup(ctx context.Context, rawName, rawEmail, password st
 		return model.User{}, err
 	}
 
-	user, err := s.userService.CreateUser(name, email, passwordHash)
+	user, err := s.userService.CreateUser(ctx, name, email, passwordHash)
 	if err != nil {
 		var alreadyExists *pkg.AlreadyExistsError
 		if stderrors.As(err, &alreadyExists) {

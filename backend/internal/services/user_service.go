@@ -5,6 +5,7 @@ import (
 	"backend/internal/errors"
 	"backend/internal/model"
 	"backend/internal/pkg"
+	"context"
 	stderrors "errors"
 	"net/http"
 	"time"
@@ -39,17 +40,17 @@ func NewUserService(db database.UserDataSource) *UserService {
 	return &UserService{db: db}
 }
 
-func (s *UserService) GetUserByEmail(email string) (model.User, error) {
-	return s.db.GetUserByEmail(email)
+func (s *UserService) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
+	return s.db.GetUserByEmail(ctx, email)
 }
 
-func (s *UserService) GetUserByID(id uuid.UUID) (model.User, error) {
-	return s.db.GetUserByID(id)
+func (s *UserService) GetUserByID(ctx context.Context, id uuid.UUID) (model.User, error) {
+	return s.db.GetUserByID(ctx, id)
 }
 
-func (s *UserService) CreateUser(name, email string, passwordHash []byte) (model.User, error) {
+func (s *UserService) CreateUser(ctx context.Context, name, email string, passwordHash []byte) (model.User, error) {
 	newUser := model.New().WithEmail(email).WithPasswordHash(passwordHash).WithUsername(name)
-	if err := s.db.AddUser(*newUser); err != nil {
+	if err := s.db.AddUser(ctx, *newUser); err != nil {
 		return model.User{}, err
 	}
 	return *newUser, nil
@@ -72,7 +73,7 @@ func (s *UserService) GetUser(c *gin.Context) {
 		return
 	}
 
-	user, err := s.db.GetUserByID(id)
+	user, err := s.db.GetUserByID(c.Request.Context(), id)
 	if err != nil {
 		var notFound *pkg.NotFoundError
 		if stderrors.As(err, &notFound) {
@@ -132,7 +133,7 @@ func (s *UserService) UpdateUser(c *gin.Context) {
 		}
 	}
 
-	user, err := s.db.GetUserByID(id)
+	user, err := s.db.GetUserByID(c.Request.Context(), id)
 	if err != nil {
 		var notFound *pkg.NotFoundError
 		if stderrors.As(err, &notFound) {
@@ -147,7 +148,7 @@ func (s *UserService) UpdateUser(c *gin.Context) {
 		user.Name = name
 	}
 
-	if err := s.db.UpdateUser(user); err != nil {
+	if err := s.db.UpdateUser(c.Request.Context(), user); err != nil {
 		var notFound *pkg.NotFoundError
 		if stderrors.As(err, &notFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
@@ -158,7 +159,7 @@ func (s *UserService) UpdateUser(c *gin.Context) {
 	}
 
 	// Re-read so the response carries the persisted updated_at.
-	updated, err := s.db.GetUserByID(id)
+	updated, err := s.db.GetUserByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return

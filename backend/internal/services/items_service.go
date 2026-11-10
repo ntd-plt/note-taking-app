@@ -117,7 +117,7 @@ func (s *ItemsService) GetItem(c *gin.Context) {
 		return
 	}
 
-	opened, err := s.db.OpenItem(userID, id)
+	opened, err := s.db.OpenItem(c.Request.Context(), userID, id)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -146,7 +146,7 @@ func (s *ItemsService) GetWorkspace(c *gin.Context) {
 	if !ok {
 		return
 	}
-	ws, err := s.db.GetWorkspace(userID)
+	ws, err := s.db.GetWorkspace(c.Request.Context(), userID)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -169,7 +169,7 @@ func (s *ItemsService) ListPages(c *gin.Context) {
 	if !ok {
 		return
 	}
-	pages, err := s.db.ListPages(userID)
+	pages, err := s.db.ListPages(c.Request.Context(), userID)
 	if err != nil {
 		respondError(c, err)
 		return

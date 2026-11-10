@@ -25,10 +25,10 @@ func NewPostgreUserDataSource(conn *pgxpool.Pool) *PostgreUserDataSource {
 	return &PostgreUserDataSource{conn: conn}
 }
 
-func (db *PostgreUserDataSource) GetUserByEmail(email string) (user.User, error) {
+func (db *PostgreUserDataSource) GetUserByEmail(ctx context.Context, email string) (user.User, error) {
 	var u user.User
 	queryString := "SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE email = $1"
-	err := db.conn.QueryRow(context.Background(), queryString, email).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
+	err := db.conn.QueryRow(ctx, queryString, email).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
 			return user.User{}, pkg.NewNotFoundError("user")
@@ -38,10 +38,10 @@ func (db *PostgreUserDataSource) GetUserByEmail(email string) (user.User, error)
 	return u, nil
 }
 
-func (db *PostgreUserDataSource) GetUserByID(id uuid.UUID) (user.User, error) {
+func (db *PostgreUserDataSource) GetUserByID(ctx context.Context, id uuid.UUID) (user.User, error) {
 	var u user.User
 	queryString := "SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE id = $1"
-	err := db.conn.QueryRow(context.Background(), queryString, id).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
+	err := db.conn.QueryRow(ctx, queryString, id).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
 			return user.User{}, pkg.NewNotFoundError("user")
@@ -51,9 +51,9 @@ func (db *PostgreUserDataSource) GetUserByID(id uuid.UUID) (user.User, error) {
 	return u, nil
 }
 
-func (db *PostgreUserDataSource) UpdateUser(u user.User) error {
+func (db *PostgreUserDataSource) UpdateUser(ctx context.Context, u user.User) error {
 	queryString := "UPDATE users SET name = $1, email = $2, updated_at = NOW() WHERE id = $3"
-	tag, err := db.conn.Exec(context.Background(), queryString, u.Name, u.Email, u.ID)
+	tag, err := db.conn.Exec(ctx, queryString, u.Name, u.Email, u.ID)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if stderrors.As(err, &pgErr) && pgErr.Code == postgresUniqueViolationCode {
@@ -69,8 +69,7 @@ func (db *PostgreUserDataSource) UpdateUser(u user.User) error {
 
 // AddUser creates the user together with their workspace, the hidden root item
 // that holds their top-level pages.
-func (db *PostgreUserDataSource) AddUser(u user.User) error {
-	ctx := context.Background()
+func (db *PostgreUserDataSource) AddUser(ctx context.Context, u user.User) error {
 	tx, err := db.conn.Begin(ctx)
 	if err != nil {
 		return err

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -10,6 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
+
+// purgeTimeout bounds the trash cleanup that follows a trash batch.
+const purgeTimeout = 10 * time.Second
 
 // TrashResponse lists the pages in the trash, most recently trashed first. Each
 // page's purge_at is when it will be removed for good.
@@ -24,10 +28,13 @@ type TrashedPage struct {
 
 // purgeExpiredTrash removes the user's pages that have been in the trash longer
 // than the retention period. It runs after a batch that moved pages to the trash,
-// so the trash is cleaned lazily; a failure is logged, not reported.
-func (s *ItemsService) purgeExpiredTrash(userID uuid.UUID) {
+// so the trash is cleaned lazily; a failure is logged, not reported. It is
+// housekeeping, so it keeps going if the client disconnects, within its own limit.
+func (s *ItemsService) purgeExpiredTrash(ctx context.Context, userID uuid.UUID) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), purgeTimeout)
+	defer cancel()
 	before := s.now().Add(-s.retention)
-	if n, err := s.db.EmptyTrash(userID, &before); err != nil {
+	if n, err := s.db.EmptyTrash(ctx, userID, &before); err != nil {
 		log.Printf("purging the trash of %s: %v", userID, err)
 	} else if n > 0 {
 		log.Printf("purged %d expired pages from the trash of %s", n, userID)
@@ -49,7 +56,7 @@ func (s *ItemsService) ListTrash(c *gin.Context) {
 	if !ok {
 		return
 	}
-	pages, err := s.db.ListTrash(userID)
+	pages, err := s.db.ListTrash(c.Request.Context(), userID)
 	if err != nil {
 		respondError(c, err)
 		return
@@ -87,7 +94,7 @@ func (s *ItemsService) RestoreFromTrash(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := s.db.ApplyOps(userID, []model.Op{{Op: model.OpRestore, ID: id}}); err != nil {
+	if err := s.db.ApplyOps(c.Request.Context(), userID, []model.Op{{Op: model.OpRestore, ID: id}}); err != nil {
 		respondOpError(c, err)
 		return
 	}
@@ -115,7 +122,7 @@ func (s *ItemsService) DeleteFromTrash(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if err := s.db.DeleteFromTrash(userID, id); err != nil {
+	if err := s.db.DeleteFromTrash(c.Request.Context(), userID, id); err != nil {
 		if isNotFound(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "page is not in the trash"})
 			return
@@ -141,7 +148,7 @@ func (s *ItemsService) EmptyTrash(c *gin.Context) {
 	if !ok {
 		return
 	}
-	n, err := s.db.EmptyTrash(userID, nil)
+	n, err := s.db.EmptyTrash(c.Request.Context(), userID, nil)
 	if err != nil {
 		respondError(c, err)
 		return
