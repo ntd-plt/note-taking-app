@@ -1,8 +1,8 @@
 package database
 
 import (
+	"backend/internal/apperr"
 	"backend/internal/model"
-	"backend/internal/pkg"
 	"context"
 	"errors"
 	"fmt"
@@ -19,11 +19,6 @@ const (
 	pgCheckViolation      = "23514"
 
 	itemColumns = "i.id, i.user_id, i.parent_id, i.type, i.child_ids, i.props, i.trashed_at, i.created_at, i.updated_at"
-)
-
-var (
-	ErrInvalidParent = errors.New("parent must be one of your items")
-	ErrInvalidItem   = errors.New("item is not valid")
 )
 
 type PostgreItemsDataSource struct {
@@ -44,7 +39,7 @@ func scanItem(row pgx.Row, extra ...any) (model.Item, error) {
 	dest := append([]any{&it.ID, &it.UserID, &it.ParentID, &it.Type, &it.ChildIDs, &it.Props, &it.TrashedAt, &it.CreatedAt, &it.UpdatedAt}, extra...)
 	err := row.Scan(dest...)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return model.Item{}, pkg.NewNotFoundError("item")
+		return model.Item{}, apperr.NotFoundf("item")
 	}
 	return it, err
 }
@@ -54,11 +49,13 @@ func translateErr(err error) error {
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
 		case pgForeignKeyViolation:
-			return ErrInvalidParent
+			return apperr.New(apperr.Invalid, "parent must be one of your items")
 		case pgUniqueViolation:
-			return pkg.NewAlreadyExistsError("item")
+			return apperr.New(apperr.Conflict, "item already exists")
 		case pgCheckViolation:
-			return fmt.Errorf("%w: %s", ErrInvalidItem, pgErr.ConstraintName)
+			e := apperr.New(apperr.Invalid, "item is not valid")
+			e.Err = fmt.Errorf("check constraint %s", pgErr.ConstraintName)
+			return e
 		}
 	}
 	return err
@@ -122,7 +119,7 @@ func resolveItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.It
 		return loc, err
 	}
 	if typ == nil || pageID == nil {
-		return loc, pkg.NewNotFoundError("item")
+		return loc, apperr.NotFoundf("item")
 	}
 	loc.Type, loc.PageID = *typ, *pageID
 	return loc, nil
@@ -138,7 +135,7 @@ func pageTree(ctx context.Context, q querier, userID, pageID uuid.UUID) ([]model
 		return nil, err
 	}
 	if page.Type != model.ItemTypePage {
-		return nil, pkg.NewNotFoundError("page")
+		return nil, apperr.NotFoundf("item")
 	}
 	items := []model.Item{page}
 

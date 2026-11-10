@@ -7,8 +7,8 @@ import (
 	"slices"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/model"
-	"backend/internal/pkg"
 	"backend/internal/tree"
 
 	"github.com/google/uuid"
@@ -26,7 +26,7 @@ var _ tree.Store = (*fakeTreeStore)(nil)
 func (s *fakeTreeStore) Get(id uuid.UUID) (model.Item, error) {
 	it, ok := s.f.owned(s.userID, id)
 	if !ok {
-		return model.Item{}, pkg.NewNotFoundError("item")
+		return model.Item{}, apperr.NotFoundf("item")
 	}
 	return it, nil
 }
@@ -46,7 +46,7 @@ func (s *fakeTreeStore) Descendants(id uuid.UUID) ([]model.Item, error) {
 
 func (s *fakeTreeStore) Insert(it model.Item) error {
 	if _, exists := s.f.Items[it.ID]; exists {
-		return pkg.NewAlreadyExistsError("item")
+		return apperr.New(apperr.Conflict, "item already exists")
 	}
 	if it.ParentID != nil {
 		if _, ok := s.f.owned(s.userID, *it.ParentID); !ok {
@@ -60,7 +60,7 @@ func (s *fakeTreeStore) Insert(it model.Item) error {
 
 func (s *fakeTreeStore) Save(it model.Item) error {
 	if _, ok := s.f.owned(s.userID, it.ID); !ok {
-		return pkg.NewNotFoundError("item")
+		return apperr.NotFoundf("item")
 	}
 	s.f.Items[it.ID] = it
 	return nil

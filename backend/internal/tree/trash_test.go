@@ -1,13 +1,11 @@
 package tree_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/model"
-	"backend/internal/pkg"
-	"backend/internal/tree"
 
 	"github.com/google/uuid"
 )
@@ -84,15 +82,15 @@ func TestRestoreRejections(t *testing.T) {
 	page, b1, child, inside, deep := f.trashedChild()
 	block := f.children(page)[0]
 
-	f.reject(tree.Conflict, 0, restore(page, nil, nil)) // not in the trash
-	f.reject(tree.Conflict, 0, restore(deep, nil, nil)) // inside a trashed page
-	f.reject(tree.Invalid, 0, restore(block, nil, nil)) // a block
-	f.reject(tree.NotFound, 0, restore(uuid.New(), nil, nil))
-	f.reject(tree.Conflict, 0, restore(child, &inside, nil)) // into itself
-	f.reject(tree.Conflict, 0, restore(child, &b1, ptr(5)))  // position out of range
+	f.reject(apperr.Conflict, 0, restore(page, nil, nil)) // not in the trash
+	f.reject(apperr.Conflict, 0, restore(deep, nil, nil)) // inside a trashed page
+	f.reject(apperr.Invalid, 0, restore(block, nil, nil)) // a block
+	f.reject(apperr.NotFound, 0, restore(uuid.New(), nil, nil))
+	f.reject(apperr.Conflict, 0, restore(child, &inside, nil)) // into itself
+	f.reject(apperr.Conflict, 0, restore(child, &b1, ptr(5)))  // position out of range
 	other := uuid.New()
 	f.apply(createPage(other, f.ws, nil, "Other"), trash(other))
-	f.reject(tree.Conflict, 0, restore(child, &other, nil)) // into another trashed page
+	f.reject(apperr.Conflict, 0, restore(child, &other, nil)) // into another trashed page
 }
 
 func TestListAndDeleteFromTrash(t *testing.T) {
@@ -113,11 +111,10 @@ func TestListAndDeleteFromTrash(t *testing.T) {
 	// Most recent first, and Deep (inside Child) is not listed on its own.
 	wantIDs(t, "trash", ids, later, child)
 
-	var nf *pkg.NotFoundError
-	if err := f.db.DeleteFromTrash(ctx, f.user, deep); !errors.As(err, &nf) {
+	if err := f.db.DeleteFromTrash(ctx, f.user, deep); !apperr.Is(err, apperr.NotFound) {
 		t.Errorf("deleting a page inside a trashed page: err = %v, want not found", err)
 	}
-	if err := f.db.DeleteFromTrash(ctx, f.user, uuid.New()); !errors.As(err, &nf) {
+	if err := f.db.DeleteFromTrash(ctx, f.user, uuid.New()); !apperr.Is(err, apperr.NotFound) {
 		t.Errorf("deleting an unknown page: err = %v, want not found", err)
 	}
 	if err := f.db.DeleteFromTrash(ctx, f.user, child); err != nil {

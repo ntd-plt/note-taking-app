@@ -2,11 +2,8 @@ package services
 
 import (
 	"backend/internal/database"
-	"backend/internal/errors"
 	"backend/internal/model"
-	"backend/internal/pkg"
 	"context"
-	stderrors "errors"
 	"net/http"
 	"time"
 
@@ -75,12 +72,7 @@ func (s *UserService) GetUser(c *gin.Context) {
 
 	user, err := s.db.GetUserByID(c.Request.Context(), id)
 	if err != nil {
-		var notFound *pkg.NotFoundError
-		if stderrors.As(err, &notFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		writeError(c, err)
 		return
 	}
 
@@ -121,26 +113,21 @@ func (s *UserService) UpdateUser(c *gin.Context) {
 		return
 	}
 	if req.Email != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrEmailChangeDisabled.Error()})
+		writeError(c, ErrEmailChangeDisabled)
 		return
 	}
 	var name string
 	if req.Name != nil {
 		var err error
 		if name, err = CheckName(*req.Name); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			writeError(c, err)
 			return
 		}
 	}
 
 	user, err := s.db.GetUserByID(c.Request.Context(), id)
 	if err != nil {
-		var notFound *pkg.NotFoundError
-		if stderrors.As(err, &notFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		writeError(c, err)
 		return
 	}
 
@@ -149,19 +136,14 @@ func (s *UserService) UpdateUser(c *gin.Context) {
 	}
 
 	if err := s.db.UpdateUser(c.Request.Context(), user); err != nil {
-		var notFound *pkg.NotFoundError
-		if stderrors.As(err, &notFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		writeError(c, err)
 		return
 	}
 
 	// Re-read so the response carries the persisted updated_at.
 	updated, err := s.db.GetUserByID(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		writeError(c, err)
 		return
 	}
 

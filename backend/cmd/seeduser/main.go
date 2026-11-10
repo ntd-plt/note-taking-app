@@ -11,10 +11,10 @@ import (
 	"os"
 	"strings"
 
+	"backend/internal/apperr"
 	"backend/internal/configs"
 	"backend/internal/database"
 	"backend/internal/model"
-	"backend/internal/pkg"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
 
@@ -80,9 +80,8 @@ func run() error {
 
 	user := model.New().WithEmail(email).WithUsername(name).WithPasswordHash(passwordHash)
 	err = users.AddUser(ctx, *user)
-	var exists *pkg.AlreadyExistsError
 	switch {
-	case stderrors.As(err, &exists):
+	case apperr.Is(err, apperr.Conflict):
 		existing, err := users.GetUserByEmail(ctx, email)
 		if err != nil {
 			return err

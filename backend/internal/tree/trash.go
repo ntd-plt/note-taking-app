@@ -4,8 +4,8 @@ import (
 	"slices"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/model"
-	"backend/internal/pkg"
 
 	"github.com/google/uuid"
 )
@@ -23,13 +23,13 @@ func (e *engine) restore(op model.Op) error {
 		return err
 	}
 	if it.Type != model.ItemTypePage {
-		return e.fail(Invalid, "only pages are restored from the trash")
+		return e.fail(apperr.Invalid, "only pages are restored from the trash")
 	}
 	if it.TrashedAt == nil {
 		if _, err := e.chain(it); err != nil {
-			return e.fail(Conflict, "this page is inside a page in the trash; restore that page instead")
+			return e.fail(apperr.Conflict, "this page is inside a page in the trash; restore that page instead")
 		}
-		return e.fail(Conflict, "page is not in the trash")
+		return e.fail(apperr.Conflict, "page is not in the trash")
 	}
 	parentID := op.ParentID
 	if parentID == nil {
@@ -64,7 +64,7 @@ func DeleteFromTrash(s Store, id uuid.UUID) error {
 		return err
 	}
 	if !slices.ContainsFunc(pages, func(p model.Item) bool { return p.ID == id }) {
-		return pkg.NewNotFoundError("page in the trash")
+		return apperr.New(apperr.NotFound, "page is not in the trash")
 	}
 	return s.Delete(id)
 }

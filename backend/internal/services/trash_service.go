@@ -58,7 +58,7 @@ func (s *ItemsService) ListTrash(c *gin.Context) {
 	}
 	pages, err := s.db.ListTrash(c.Request.Context(), userID)
 	if err != nil {
-		respondError(c, err)
+		writeError(c, err)
 		return
 	}
 	expired := s.now().Add(-s.retention)
@@ -95,7 +95,7 @@ func (s *ItemsService) RestoreFromTrash(c *gin.Context) {
 		return
 	}
 	if err := s.db.ApplyOps(c.Request.Context(), userID, []model.Op{{Op: model.OpRestore, ID: id}}); err != nil {
-		respondOpError(c, err)
+		writeError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -123,11 +123,7 @@ func (s *ItemsService) DeleteFromTrash(c *gin.Context) {
 		return
 	}
 	if err := s.db.DeleteFromTrash(c.Request.Context(), userID, id); err != nil {
-		if isNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "page is not in the trash"})
-			return
-		}
-		respondError(c, err)
+		writeError(c, err)
 		return
 	}
 	c.Status(http.StatusNoContent)
@@ -150,7 +146,7 @@ func (s *ItemsService) EmptyTrash(c *gin.Context) {
 	}
 	n, err := s.db.EmptyTrash(c.Request.Context(), userID, nil)
 	if err != nil {
-		respondError(c, err)
+		writeError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": n})

@@ -3,15 +3,14 @@ package database_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"reflect"
 	"slices"
 	"sync"
 	"testing"
 
+	"backend/internal/apperr"
 	"backend/internal/database"
 	"backend/internal/model"
-	"backend/internal/tree"
 
 	"github.com/google/uuid"
 )
@@ -122,8 +121,7 @@ func TestPostgresApplyOpsRollsBack(t *testing.T) {
 		{Op: model.OpUpdate, ID: a, Props: model.Props{"content": runs("changed")}},
 		{Op: model.OpMove, ID: page, ParentID: &a},
 	})
-	var te *tree.Error
-	if !errors.As(err, &te) || te.Kind != tree.Conflict || te.Index != 2 {
+	if te, ok := apperr.As(err); !ok || te.Kind != apperr.Conflict || te.OpIndex == nil || *te.OpIndex != 2 {
 		t.Fatalf("err = %v, want a conflict at op 2", err)
 	}
 	if _, err := db.GetItem(ctx, me, added); !isNotFound(err) {
@@ -137,7 +135,7 @@ func TestPostgresApplyOpsRollsBack(t *testing.T) {
 	}
 
 	other := newUser(t, pool)
-	if err := db.ApplyOps(ctx, other, []model.Op{{Op: model.OpUpdate, ID: a, Props: model.Props{"x": 1}}}); !errors.As(err, &te) || te.Kind != tree.NotFound {
+	if err := db.ApplyOps(ctx, other, []model.Op{{Op: model.OpUpdate, ID: a, Props: model.Props{"x": 1}}}); !apperr.Is(err, apperr.NotFound) {
 		t.Errorf("another user's block: err = %v", err)
 	}
 }
@@ -156,8 +154,7 @@ func TestPostgresApplyOpsChecksChildIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := db.ApplyOps(ctx, me, []model.Op{blockOp(uuid.New(), page, nil, "x")})
-	var te *tree.Error
-	if err == nil || errors.As(err, &te) {
+	if _, isAppErr := apperr.As(err); err == nil || isAppErr {
 		t.Errorf("err = %v, want an internal child_ids error", err)
 	}
 }

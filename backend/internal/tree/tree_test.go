@@ -1,13 +1,13 @@
 package tree_test
 
 import (
-	"errors"
 	"maps"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
+	"backend/internal/apperr"
 	"backend/internal/model"
 	"backend/internal/testutil"
 	"backend/internal/tree"
@@ -62,18 +62,18 @@ func (f *fixture) apply(ops ...model.Op) {
 	}
 }
 
-// reject applies ops, wants a *tree.Error of the given kind at index, and checks
+// reject applies ops, wants an apperr of the given kind at index, and checks
 // that nothing changed.
-func (f *fixture) reject(kind tree.Kind, index int, ops ...model.Op) {
+func (f *fixture) reject(kind apperr.Kind, index int, ops ...model.Op) {
 	f.t.Helper()
 	before := maps.Clone(f.db.Items)
 	err := f.db.ApplyOps(ctx, f.user, ops)
-	var te *tree.Error
-	if !errors.As(err, &te) {
-		f.t.Fatalf("err = %v, want a *tree.Error", err)
+	e, ok := apperr.As(err)
+	if !ok || e.OpIndex == nil {
+		f.t.Fatalf("err = %v, want an apperr naming an operation", err)
 	}
-	if te.Kind != kind || te.Index != index {
-		f.t.Errorf("rejected with kind %d at %d (%s), want kind %d at %d", te.Kind, te.Index, te.Msg, kind, index)
+	if e.Kind != kind || *e.OpIndex != index {
+		f.t.Errorf("rejected with kind %d at %d (%s), want kind %d at %d", e.Kind, *e.OpIndex, e.Msg, kind, index)
 	}
 	if !reflect.DeepEqual(before, f.db.Items) {
 		f.t.Error("a rejected batch changed the tree")
@@ -194,8 +194,8 @@ func TestUpdateTurnInto(t *testing.T) {
 	if got := f.item(b).Props["checked"]; got != false {
 		t.Errorf("turn into checklist: checked = %v, want the default", got)
 	}
-	f.reject(tree.Invalid, 0, model.Op{Op: model.OpUpdate, ID: b, Type: ptr(model.ItemTypeHeading)})
-	f.reject(tree.Invalid, 0, model.Op{Op: model.OpUpdate, ID: b, Type: ptr(model.ItemTypeHeading), Props: model.Props{"level": 7}})
+	f.reject(apperr.Invalid, 0, model.Op{Op: model.OpUpdate, ID: b, Type: ptr(model.ItemTypeHeading)})
+	f.reject(apperr.Invalid, 0, model.Op{Op: model.OpUpdate, ID: b, Type: ptr(model.ItemTypeHeading), Props: model.Props{"level": 7}})
 }
 
 func TestMovePositions(t *testing.T) {
@@ -323,33 +323,33 @@ func TestRejections(t *testing.T) {
 
 	cases := []struct {
 		name string
-		kind tree.Kind
+		kind apperr.Kind
 		op   model.Op
 	}{
-		{"unknown type", tree.Invalid, createBlock(uuid.New(), page, nil, "codeBlock", "x")},
-		{"another user's item", tree.NotFound, update(theirs, model.Props{"name": "x"})},
-		{"another user's parent", tree.NotFound, createBlock(uuid.New(), theirs, nil, model.ItemTypeParagraph, "x")},
-		{"unknown item", tree.NotFound, model.Op{Op: model.OpDelete, ID: uuid.New()}},
-		{"the workspace", tree.NotFound, move(f.ws, page, nil)},
-		{"edit inside a trashed page", tree.Conflict, update(inTrash, model.Props{"content": text("y")})},
-		{"create inside a trashed page", tree.Conflict, createBlock(uuid.New(), inTrash, nil, model.ItemTypeParagraph, "x")},
-		{"move into a trashed page", tree.Conflict, move(a, trashed, nil)},
-		{"trash a trashed page", tree.Conflict, model.Op{Op: model.OpTrash, ID: trashed}},
-		{"create past the end", tree.Conflict, createBlock(uuid.New(), page, ptr(4), model.ItemTypeParagraph, "x")},
-		{"move past the end", tree.Conflict, move(a, page, ptr(3))},
-		{"cycle", tree.Conflict, move(b, b1, nil)},
-		{"into itself", tree.Conflict, move(b, b, nil)},
-		{"page into its own block", tree.Conflict, move(page, b1, nil)},
-		{"delete a page", tree.Invalid, model.Op{Op: model.OpDelete, ID: page}},
-		{"trash a block", tree.Invalid, model.Op{Op: model.OpTrash, ID: a}},
-		{"block into page", tree.Invalid, model.Op{Op: model.OpUpdate, ID: a, Type: ptr(model.ItemTypePage)}},
-		{"page into block", tree.Invalid, model.Op{Op: model.OpUpdate, ID: page, Type: ptr(model.ItemTypeQuote)}},
-		{"block at the top level", tree.Invalid, createBlock(uuid.New(), f.ws, nil, model.ItemTypeParagraph, "x")},
-		{"block moved to the top level", tree.Invalid, move(a, f.ws, nil)},
-		{"heading without level", tree.Invalid, model.Op{Op: model.OpCreate, ID: uuid.New(), Type: ptr(model.ItemTypeHeading), ParentID: &page}},
-		{"props too large after merge", tree.Invalid, update(c, model.Props{"more": big})},
-		{"existing id", tree.Conflict, createBlock(a, page, nil, model.ItemTypeParagraph, "x")},
-		{"another user's id", tree.Conflict, createBlock(theirs, page, nil, model.ItemTypeParagraph, "x")},
+		{"unknown type", apperr.Invalid, createBlock(uuid.New(), page, nil, "codeBlock", "x")},
+		{"another user's item", apperr.NotFound, update(theirs, model.Props{"name": "x"})},
+		{"another user's parent", apperr.NotFound, createBlock(uuid.New(), theirs, nil, model.ItemTypeParagraph, "x")},
+		{"unknown item", apperr.NotFound, model.Op{Op: model.OpDelete, ID: uuid.New()}},
+		{"the workspace", apperr.NotFound, move(f.ws, page, nil)},
+		{"edit inside a trashed page", apperr.Conflict, update(inTrash, model.Props{"content": text("y")})},
+		{"create inside a trashed page", apperr.Conflict, createBlock(uuid.New(), inTrash, nil, model.ItemTypeParagraph, "x")},
+		{"move into a trashed page", apperr.Conflict, move(a, trashed, nil)},
+		{"trash a trashed page", apperr.Conflict, model.Op{Op: model.OpTrash, ID: trashed}},
+		{"create past the end", apperr.Conflict, createBlock(uuid.New(), page, ptr(4), model.ItemTypeParagraph, "x")},
+		{"move past the end", apperr.Conflict, move(a, page, ptr(3))},
+		{"cycle", apperr.Conflict, move(b, b1, nil)},
+		{"into itself", apperr.Conflict, move(b, b, nil)},
+		{"page into its own block", apperr.Conflict, move(page, b1, nil)},
+		{"delete a page", apperr.Invalid, model.Op{Op: model.OpDelete, ID: page}},
+		{"trash a block", apperr.Invalid, model.Op{Op: model.OpTrash, ID: a}},
+		{"block into page", apperr.Invalid, model.Op{Op: model.OpUpdate, ID: a, Type: ptr(model.ItemTypePage)}},
+		{"page into block", apperr.Invalid, model.Op{Op: model.OpUpdate, ID: page, Type: ptr(model.ItemTypeQuote)}},
+		{"block at the top level", apperr.Invalid, createBlock(uuid.New(), f.ws, nil, model.ItemTypeParagraph, "x")},
+		{"block moved to the top level", apperr.Invalid, move(a, f.ws, nil)},
+		{"heading without level", apperr.Invalid, model.Op{Op: model.OpCreate, ID: uuid.New(), Type: ptr(model.ItemTypeHeading), ParentID: &page}},
+		{"props too large after merge", apperr.Invalid, update(c, model.Props{"more": big})},
+		{"existing id", apperr.Conflict, createBlock(a, page, nil, model.ItemTypeParagraph, "x")},
+		{"another user's id", apperr.Conflict, createBlock(theirs, page, nil, model.ItemTypeParagraph, "x")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -372,7 +372,7 @@ func TestOpsSeeEarlierOpsInTheBatch(t *testing.T) {
 	if _, ok := f.db.Items[c]; ok {
 		t.Error("c should have been deleted with x")
 	}
-	f.reject(tree.NotFound, 0, update(x, model.Props{"content": text("gone")}))
+	f.reject(apperr.NotFound, 0, update(x, model.Props{"content": text("gone")}))
 }
 
 func TestDuplicatePage(t *testing.T) {
@@ -440,11 +440,10 @@ func TestDuplicateBlockAndRejections(t *testing.T) {
 	}
 
 	f.apply(model.Op{Op: model.OpTrash, ID: page})
-	var te *tree.Error
-	if _, err := f.db.Duplicate(ctx, f.user, a); !errors.As(err, &te) || te.Kind != tree.Conflict {
+	if _, err := f.db.Duplicate(ctx, f.user, a); !apperr.Is(err, apperr.Conflict) {
 		t.Errorf("duplicate inside the trash: err = %v", err)
 	}
-	if _, err := f.db.Duplicate(ctx, f.user, f.ws); !errors.As(err, &te) || te.Kind != tree.NotFound {
+	if _, err := f.db.Duplicate(ctx, f.user, f.ws); !apperr.Is(err, apperr.NotFound) {
 		t.Errorf("duplicate the workspace: err = %v", err)
 	}
 }

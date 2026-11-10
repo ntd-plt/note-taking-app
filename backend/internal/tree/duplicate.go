@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"backend/internal/apperr"
 	"backend/internal/model"
 
 	"github.com/google/uuid"
@@ -55,7 +56,7 @@ func Duplicate(s Store, workspaceID, id uuid.UUID, now time.Time) (model.Item, e
 		return model.Item{}, err
 	}
 	if len(below)+1 > MaxDuplicateRows {
-		return model.Item{}, e.fail(Invalid, "cannot duplicate more than %d items at once", MaxDuplicateRows)
+		return model.Item{}, e.fail(apperr.Invalid, "cannot duplicate more than %d items at once", MaxDuplicateRows)
 	}
 
 	newIDs := map[uuid.UUID]uuid.UUID{src.ID: uuid.New()}

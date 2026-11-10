@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/database"
 	"backend/internal/model"
-	"backend/internal/pkg"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -98,10 +98,7 @@ func newUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	return u.ID
 }
 
-func isNotFound(err error) bool {
-	var nf *pkg.NotFoundError
-	return errors.As(err, &nf)
-}
+func isNotFound(err error) bool { return apperr.Is(err, apperr.NotFound) }
 
 // builder collects items so a test can create a whole tree in one ApplyOps batch,
 // each item appended to its parent.

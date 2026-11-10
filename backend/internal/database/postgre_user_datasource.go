@@ -4,7 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 
-	"backend/internal/pkg"
+	"backend/internal/apperr"
 
 	user "backend/internal/model"
 
@@ -31,7 +31,7 @@ func (db *PostgreUserDataSource) GetUserByEmail(ctx context.Context, email strin
 	err := db.conn.QueryRow(ctx, queryString, email).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
-			return user.User{}, pkg.NewNotFoundError("user")
+			return user.User{}, apperr.NotFoundf("user")
 		}
 		return user.User{}, err
 	}
@@ -44,7 +44,7 @@ func (db *PostgreUserDataSource) GetUserByID(ctx context.Context, id uuid.UUID) 
 	err := db.conn.QueryRow(ctx, queryString, id).Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if stderrors.Is(err, pgx.ErrNoRows) {
-			return user.User{}, pkg.NewNotFoundError("user")
+			return user.User{}, apperr.NotFoundf("user")
 		}
 		return user.User{}, err
 	}
@@ -57,12 +57,12 @@ func (db *PostgreUserDataSource) UpdateUser(ctx context.Context, u user.User) er
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if stderrors.As(err, &pgErr) && pgErr.Code == postgresUniqueViolationCode {
-			return pkg.NewAlreadyExistsError("user with this email")
+			return apperr.New(apperr.Conflict, "user with this email already exists")
 		}
 		return err
 	}
 	if tag.RowsAffected() == 0 {
-		return pkg.NewNotFoundError("user")
+		return apperr.NotFoundf("user")
 	}
 	return nil
 }
@@ -80,7 +80,7 @@ func (db *PostgreUserDataSource) AddUser(ctx context.Context, u user.User) error
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if stderrors.As(err, &pgErr) && pgErr.Code == postgresUniqueViolationCode {
-			return pkg.NewAlreadyExistsError("user with this email")
+			return apperr.New(apperr.Conflict, "user with this email already exists")
 		}
 		return err
 	}

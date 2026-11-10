@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"backend/internal/errors"
+	"backend/internal/apperr"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
@@ -13,6 +13,16 @@ import (
 
 // The rules an account's fields must follow, shared by signup, profile updates and
 // the seed command, so no path accepts what another refuses.
+
+var (
+	ErrEmailAlreadyExists   = apperr.New(apperr.Conflict, "the email already exists")
+	ErrWrongPasswordOrEmail = apperr.New(apperr.Unauthorized, "wrong email or password")
+	ErrInvalidEmailAddress  = apperr.New(apperr.Unprocessable, "the email address appears to be invalid or undeliverable")
+	ErrInvalidName          = apperr.New(apperr.Invalid, "name must be 1 to 50 characters")
+	ErrInvalidPassword      = apperr.New(apperr.Invalid, "password must be 6 to 72 bytes long; accented letters and emoji count as several bytes")
+	ErrInvalidEmailFormat   = apperr.New(apperr.Invalid, "email must be a valid address of at most 254 characters")
+	ErrEmailChangeDisabled  = apperr.New(apperr.Invalid, "email can't be changed yet")
+)
 
 const (
 	MaxNameLength     = 50 // characters
@@ -33,7 +43,7 @@ func NormalizeEmail(email string) string {
 func CheckName(raw string) (string, error) {
 	name := strings.TrimSpace(raw)
 	if n := utf8.RuneCountInString(name); n == 0 || n > MaxNameLength {
-		return "", errors.ErrInvalidName
+		return "", ErrInvalidName
 	}
 	return name, nil
 }
@@ -41,7 +51,7 @@ func CheckName(raw string) (string, error) {
 // CheckPassword accepts a password bcrypt can hash and that is not too short.
 func CheckPassword(password string) error {
 	if n := len(password); n < MinPasswordLength || n > MaxPasswordLength {
-		return errors.ErrInvalidPassword
+		return ErrInvalidPassword
 	}
 	return nil
 }
@@ -53,7 +63,7 @@ func CheckEmailFormat(raw string) (string, error) {
 	email := NormalizeEmail(raw)
 	v, ok := binding.Validator.Engine().(*validator.Validate)
 	if !ok || v.Var(email, "required,email,max=254") != nil {
-		return "", errors.ErrInvalidEmailFormat
+		return "", ErrInvalidEmailFormat
 	}
 	return email, nil
 }
@@ -64,7 +74,7 @@ func CheckEmailFormat(raw string) (string, error) {
 func checkEmailDeliverable(ctx context.Context, v EmailValidator, email string) error {
 	result, err := v.Verify(ctx, email)
 	if err == nil && (result.Classification == EmailVerificationUndeliverable || result.IsDisposable) {
-		return errors.ErrInvalidEmailAddress
+		return ErrInvalidEmailAddress
 	}
 	return nil
 }

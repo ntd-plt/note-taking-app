@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/pkg"
@@ -317,7 +318,7 @@ func TestSignupEndpointDuplicateEmailRace(t *testing.T) {
 	// Simulates the DB-level unique-violation translated by
 	// PostgreUserDataSource.AddUser when two signups for the same email race
 	// each other and both pass the pre-check.
-	db.Errs["AddUser"] = pkg.NewAlreadyExistsError("user with this email")
+	db.Errs["AddUser"] = apperr.New(apperr.Conflict, "user with this email already exists")
 	r := newAuthRouter(db).r
 
 	w := doJSON(t, r, http.MethodPost, "/auth/signup", pkg.SignupRequest{

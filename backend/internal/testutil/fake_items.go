@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/database"
 	"backend/internal/model"
-	"backend/internal/pkg"
 
 	"github.com/google/uuid"
 )
@@ -85,7 +85,7 @@ func (f *FakeDatabase) GetWorkspace(ctx context.Context, userID uuid.UUID) (mode
 			return it, nil
 		}
 	}
-	return model.Item{}, pkg.NewNotFoundError("item")
+	return model.Item{}, apperr.NotFoundf("item")
 }
 
 func (f *FakeDatabase) GetItem(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
@@ -94,7 +94,7 @@ func (f *FakeDatabase) GetItem(ctx context.Context, userID, id uuid.UUID) (model
 	}
 	it, ok := f.owned(userID, id)
 	if !ok {
-		return model.Item{}, pkg.NewNotFoundError("item")
+		return model.Item{}, apperr.NotFoundf("item")
 	}
 	return it, nil
 }
@@ -106,7 +106,7 @@ func (f *FakeDatabase) ResolveItem(ctx context.Context, userID, id uuid.UUID) (m
 	}
 	it, ok := f.owned(userID, id)
 	if !ok {
-		return loc, pkg.NewNotFoundError("item")
+		return loc, apperr.NotFoundf("item")
 	}
 	loc.Type = it.Type
 	found := false
@@ -123,7 +123,7 @@ func (f *FakeDatabase) ResolveItem(ctx context.Context, userID, id uuid.UUID) (m
 		it = f.Items[*it.ParentID]
 	}
 	if !found {
-		return loc, pkg.NewNotFoundError("item")
+		return loc, apperr.NotFoundf("item")
 	}
 	return loc, nil
 }
@@ -149,7 +149,7 @@ func (f *FakeDatabase) GetPageTree(ctx context.Context, userID, pageID uuid.UUID
 	}
 	page, ok := f.owned(userID, pageID)
 	if !ok || page.Type != model.ItemTypePage {
-		return nil, pkg.NewNotFoundError("page")
+		return nil, apperr.NotFoundf("item")
 	}
 	items := []model.Item{page}
 	var walk func(parent model.Item, depth int)

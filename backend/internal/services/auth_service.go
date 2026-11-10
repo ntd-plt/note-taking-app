@@ -1,13 +1,12 @@
 package services
 
 import (
-	"backend/internal/errors"
+	"backend/internal/apperr"
 	"backend/internal/model"
 	"backend/internal/pkg"
 	"backend/internal/pkg/hash"
 	"backend/internal/session"
 	"context"
-	stderrors "errors"
 	"log"
 	"net/http"
 	"sync"
@@ -71,13 +70,8 @@ func (s *AuthService) Login(c *gin.Context) {
 	}
 
 	user, err := s.login(c.Request.Context(), req.Email, req.Password)
-	if stderrors.Is(err, errors.ErrWrongPasswordOrEmail) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
-	}
 	if err != nil {
-		log.Printf("logging in: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		writeError(c, err)
 		return
 	}
 	if !s.startSession(c, user) {
@@ -110,19 +104,7 @@ func (s *AuthService) Signup(c *gin.Context) {
 
 	user, err := s.signup(c.Request.Context(), req.Name, req.Email, req.Password)
 	if err != nil {
-		if stderrors.Is(err, errors.ErrInvalidName) || stderrors.Is(err, errors.ErrInvalidPassword) || stderrors.Is(err, errors.ErrInvalidEmailFormat) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		if stderrors.Is(err, errors.ErrEmailAlreadyExists) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		}
-		if stderrors.Is(err, errors.ErrInvalidEmailAddress) {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		writeError(c, err)
 		return
 	}
 	if !s.startSession(c, user) {
@@ -143,8 +125,7 @@ func (s *AuthService) Logout(c *gin.Context) {
 	s.cookie.Clear(c.Writer)
 	if id := s.cookie.Read(c.Request); id != "" {
 		if err := s.sessions.Delete(c.Request.Context(), id); err != nil {
-			log.Printf("ending a session: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+			writeError(c, err)
 			return
 		}
 	}
@@ -167,8 +148,7 @@ func (s *AuthService) LogoutAll(c *gin.Context) {
 		return
 	}
 	if err := s.sessions.DeleteAllForUser(c.Request.Context(), userID); err != nil {
-		log.Printf("ending the sessions of %s: %v", userID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		writeError(c, err)
 		return
 	}
 	s.cookie.Clear(c.Writer)
@@ -190,8 +170,7 @@ func (s *AuthService) startSession(c *gin.Context, user model.User) bool {
 	}
 	id, _, err := s.sessions.Create(ctx, user.ID, c.Request.UserAgent())
 	if err != nil {
-		log.Printf("starting a session for %s: %v", user.ID, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		writeError(c, err)
 		return false
 	}
 	s.cookie.Set(c.Writer, id)
@@ -203,16 +182,15 @@ func (s *AuthService) startSession(c *gin.Context, user model.User) bool {
 // tells whether the account exists.
 func (s *AuthService) login(ctx context.Context, email, password string) (model.User, error) {
 	u, err := s.userService.GetUserByEmail(ctx, NormalizeEmail(email))
-	var notFound *pkg.NotFoundError
-	if stderrors.As(err, &notFound) {
+	if apperr.Is(err, apperr.NotFound) {
 		_ = s.hasher.Compare(s.dummyHash(), []byte(password))
-		return model.User{}, errors.ErrWrongPasswordOrEmail
+		return model.User{}, ErrWrongPasswordOrEmail
 	}
 	if err != nil {
 		return model.User{}, err
 	}
 	if err := s.hasher.Compare(u.PasswordHash, []byte(password)); err != nil {
-		return model.User{}, errors.ErrWrongPasswordOrEmail
+		return model.User{}, ErrWrongPasswordOrEmail
 	}
 	return u, nil
 }
@@ -244,10 +222,9 @@ func (s *AuthService) signup(ctx context.Context, rawName, rawEmail, password st
 
 	_, err = s.userService.GetUserByEmail(ctx, email)
 	if err == nil {
-		return model.User{}, errors.ErrEmailAlreadyExists
+		return model.User{}, ErrEmailAlreadyExists
 	}
-	var notFoundError *pkg.NotFoundError
-	if !stderrors.As(err, &notFoundError) {
+	if !apperr.Is(err, apperr.NotFound) {
 		return model.User{}, err
 	}
 
@@ -262,9 +239,8 @@ func (s *AuthService) signup(ctx context.Context, rawName, rawEmail, password st
 
 	user, err := s.userService.CreateUser(ctx, name, email, passwordHash)
 	if err != nil {
-		var alreadyExists *pkg.AlreadyExistsError
-		if stderrors.As(err, &alreadyExists) {
-			return model.User{}, errors.ErrEmailAlreadyExists
+		if apperr.Is(err, apperr.Conflict) {
+			return model.User{}, ErrEmailAlreadyExists
 		}
 		return model.User{}, err
 	}

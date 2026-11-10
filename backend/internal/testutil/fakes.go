@@ -4,9 +4,9 @@
 package testutil
 
 import (
+	"backend/internal/apperr"
 	"backend/internal/database"
 	"backend/internal/model"
-	"backend/internal/pkg"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
 	"context"
@@ -16,10 +16,7 @@ import (
 )
 
 var (
-	// ErrUserNotFound is a *pkg.NotFoundError so tests using errors.As
-	// against that type see the fake behave the same way the real Postgres
-	// datasource does.
-	ErrUserNotFound error = pkg.NewNotFoundError("user")
+	ErrUserNotFound error = apperr.NotFoundf("user")
 )
 
 // Set Errs["MethodName"] to force that method to fail.
@@ -41,9 +38,6 @@ func NewFakeDatabase() *FakeDatabase {
 		Errs:  make(map[string]error),
 	}
 }
-
-func (f *FakeDatabase) Connect() error    { return f.Errs["Connect"] }
-func (f *FakeDatabase) Disconnect() error { return f.Errs["Disconnect"] }
 
 func (f *FakeDatabase) GetUserByEmail(ctx context.Context, email string) (model.User, error) {
 	if err := f.Errs["GetUserByEmail"]; err != nil {
