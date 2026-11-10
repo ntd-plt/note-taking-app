@@ -92,6 +92,9 @@ func (f *FakeDatabase) UpdateUser(user model.User) error {
 // "hashed:", Compare checks that prefix. Deterministic and fast.
 type FakeHasher struct {
 	HashErr error
+	// Compares counts calls to Compare, so tests can check that a path does the
+	// same work as another.
+	Compares int
 }
 
 var _ hash.Hasher = (*FakeHasher)(nil)
@@ -104,6 +107,7 @@ func (h *FakeHasher) Hash(password []byte) ([]byte, error) {
 }
 
 func (h *FakeHasher) Compare(hash, password []byte) error {
+	h.Compares++
 	if string(hash) != "hashed:"+string(password) {
 		return errors.New("hash mismatch")
 	}

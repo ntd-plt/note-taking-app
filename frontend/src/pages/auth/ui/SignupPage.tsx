@@ -54,7 +54,7 @@ export function SignupPage() {
           <CardContent>
             {error && (
               <div className="mb-4 text-sm text-destructive">
-                {getAuthErrorMessage(error)}
+                {getAuthErrorMessage(error, { serverMessageFor400: true })}
               </div>
             )}
             <div className="flex flex-col gap-6">
@@ -62,6 +62,7 @@ export function SignupPage() {
                 <Label htmlFor="username">Username</Label>
                 <Input
                   id="username"
+                  maxLength={50}
                   type="text"
                   name="username"
                   placeholder="johndoe"
@@ -87,6 +88,8 @@ export function SignupPage() {
                 <Input
                   name="password"
                   id="password"
+                  minLength={6}
+                  maxLength={72}
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

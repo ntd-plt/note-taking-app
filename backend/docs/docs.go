@@ -62,7 +62,7 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "wrong email or password, the same for an unknown email",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -171,7 +171,7 @@ const docTemplate = `{
         },
         "/auth/signup": {
             "post": {
-                "description": "Creates an account, starts a session and sets it in the sid cookie (HttpOnly, SameSite=Lax). Returns the new user.",
+                "description": "Creates an account, starts a session and sets it in the sid cookie (HttpOnly, SameSite=Lax). Returns the new user. The name is trimmed and must be 1 to 50 characters; the password must be 6 to 72 bytes; the email must be a valid, deliverable address.",
                 "consumes": [
                     "application/json"
                 ],
@@ -806,7 +806,7 @@ const docTemplate = `{
                         "SessionCookie": []
                     }
                 ],
-                "description": "Updates the authenticated user's own profile (name and/or email). Partial update: omitted fields are left unchanged.",
+                "description": "Changes the logged-in user's name: trimmed, 1 to 50 characters. The email cannot be changed yet; a body with \"email\" gets 400.",
                 "consumes": [
                     "application/json"
                 ],
@@ -855,15 +855,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "409": {
-                        "description": "Conflict",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -1069,8 +1060,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "password": {
-                    "type": "string",
-                    "minLength": 6
+                    "type": "string"
                 }
             }
         },
@@ -1083,15 +1073,13 @@ const docTemplate = `{
             ],
             "properties": {
                 "email": {
-                    "type": "string",
-                    "maxLength": 254
+                    "type": "string"
                 },
                 "name": {
                     "type": "string"
                 },
                 "password": {
-                    "type": "string",
-                    "minLength": 6
+                    "type": "string"
                 }
             }
         },
@@ -1184,9 +1172,6 @@ const docTemplate = `{
         "internal_services.UpdateUserRequest": {
             "type": "object",
             "properties": {
-                "email": {
-                    "type": "string"
-                },
                 "name": {
                     "type": "string"
                 }

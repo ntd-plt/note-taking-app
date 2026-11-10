@@ -16,6 +16,7 @@ import (
 	"backend/internal/model"
 	"backend/internal/pkg"
 	"backend/internal/pkg/hash"
+	"backend/internal/services"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -37,12 +38,24 @@ func run() error {
 		return stderrors.New("refusing to seed a user when APP_ENV=production")
 	}
 
-	email := strings.ToLower(strings.TrimSpace(os.Getenv("SEED_USER_EMAIL")))
+	rawEmail := os.Getenv("SEED_USER_EMAIL")
 	password := os.Getenv("SEED_USER_PASSWORD")
-	name := strings.TrimSpace(os.Getenv("SEED_USER_NAME"))
-	if email == "" || password == "" || name == "" {
+	rawName := os.Getenv("SEED_USER_NAME")
+	if strings.TrimSpace(rawEmail) == "" || password == "" || strings.TrimSpace(rawName) == "" {
 		fmt.Println("seed-user: SEED_USER_EMAIL, SEED_USER_PASSWORD and SEED_USER_NAME are not all set in .env; skipping.")
 		return nil
+	}
+	// The same rules as signup, so the dev user is an account signup could make.
+	email, err := services.CheckEmailFormat(rawEmail)
+	if err != nil {
+		return fmt.Errorf("SEED_USER_EMAIL: %w", err)
+	}
+	name, err := services.CheckName(rawName)
+	if err != nil {
+		return fmt.Errorf("SEED_USER_NAME: %w", err)
+	}
+	if err := services.CheckPassword(password); err != nil {
+		return fmt.Errorf("SEED_USER_PASSWORD: %w", err)
 	}
 
 	// Read the sample tree first, so a mistake in the file fails before anything is created.

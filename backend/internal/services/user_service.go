@@ -2,11 +2,11 @@ package services
 
 import (
 	"backend/internal/database"
+	"backend/internal/errors"
 	"backend/internal/model"
 	"backend/internal/pkg"
 	stderrors "errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -86,16 +86,17 @@ func (s *UserService) GetUser(c *gin.Context) {
 	c.JSON(http.StatusOK, newUserResponse(user))
 }
 
-// UpdateUserRequest is a partial update: only the fields present in the JSON
-// body are changed. The password hash cannot be updated through this route.
+// UpdateUserRequest changes the user's name; omitting it changes nothing. The
+// email cannot be changed yet: that waits for a flow that confirms the new
+// address, so a request carrying "email" is refused rather than ignored.
 type UpdateUserRequest struct {
 	Name  *string `json:"name"`
-	Email *string `json:"email"`
+	Email *string `json:"email" swaggerignore:"true"`
 }
 
 // UpdateUser godoc
 // @Summary      Update the current user
-// @Description  Updates the authenticated user's own profile (name and/or email). Partial update: omitted fields are left unchanged.
+// @Description  Changes the logged-in user's name: trimmed, 1 to 50 characters. The email cannot be changed yet; a body with "email" gets 400.
 // @Tags         users
 // @Accept       json
 // @Produce      json
@@ -105,7 +106,6 @@ type UpdateUserRequest struct {
 // @Failure      400      {object}  map[string]string
 // @Failure      401      {object}  map[string]string
 // @Failure      404      {object}  map[string]string
-// @Failure      409      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /users/me [put]
 func (s *UserService) UpdateUser(c *gin.Context) {
@@ -118,6 +118,18 @@ func (s *UserService) UpdateUser(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if req.Email != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errors.ErrEmailChangeDisabled.Error()})
+		return
+	}
+	var name string
+	if req.Name != nil {
+		var err error
+		if name, err = CheckName(*req.Name); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	user, err := s.db.GetUserByID(id)
@@ -132,28 +144,10 @@ func (s *UserService) UpdateUser(c *gin.Context) {
 	}
 
 	if req.Name != nil {
-		name := strings.TrimSpace(*req.Name)
-		if name == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "name cannot be empty"})
-			return
-		}
 		user.Name = name
-	}
-	if req.Email != nil {
-		email := normalizeEmail(*req.Email)
-		if email == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "email cannot be empty"})
-			return
-		}
-		user.Email = email
 	}
 
 	if err := s.db.UpdateUser(user); err != nil {
-		var alreadyExists *pkg.AlreadyExistsError
-		if stderrors.As(err, &alreadyExists) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		}
 		var notFound *pkg.NotFoundError
 		if stderrors.As(err, &notFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})

@@ -125,4 +125,32 @@ describe('SignupPage', () => {
     })
     expect(mockNavigate).not.toHaveBeenCalled()
   })
+
+  it("shows the server's message on a 400 response", async () => {
+    server.use(
+      http.post('/api/v1/auth/signup', () =>
+        HttpResponse.json(
+          { error: 'name must be 1 to 50 characters' },
+          { status: 400 },
+        ),
+      ),
+    )
+    renderSignupPage()
+    submitSignupForm()
+
+    await waitFor(() => {
+      expect(screen.getByText('name must be 1 to 50 characters')).toBeDefined()
+    })
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('limits the name and password fields to what the server accepts', () => {
+    renderSignupPage()
+    expect(screen.getByLabelText(/username/i).getAttribute('maxlength')).toBe(
+      '50',
+    )
+    expect(screen.getByLabelText(/password/i).getAttribute('maxlength')).toBe(
+      '72',
+    )
+  })
 })

@@ -10,18 +10,11 @@ import (
 	stderrors "errors"
 	"log"
 	"net/http"
-	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
-
-// normalizeEmail trims whitespace and lowercases an email address so that
-// lookups and storage treat e.g. "Bob@Example.com" and "bob@example.com" as
-// the same address.
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
 
 // AuthSessions starts and ends login sessions.
 type AuthSessions interface {
@@ -37,6 +30,13 @@ type AuthService struct {
 	emailValidator EmailValidator
 	sessions       AuthSessions
 	cookie         session.Cookie
+
+	// dummyHash is compared against when a login names an unknown email, so
+	// that path costs one bcrypt comparison too and the response time does not
+	// tell whether an account exists. It is made once, by the same hasher, so it
+	// has the same cost as real hashes.
+	dummyOnce sync.Once
+	dummy     []byte
 }
 
 func NewAuthService(userService *UserService, hasher hash.Hasher, emailValidator EmailValidator, sessions AuthSessions, cookie session.Cookie) *AuthService {
@@ -59,7 +59,7 @@ func NewAuthService(userService *UserService, hasher hash.Hasher, emailValidator
 // @Success      200      {object}  UserResponse
 // @Header       200      {string}  Set-Cookie  "sid=<session id>"
 // @Failure      400      {object}  map[string]string
-// @Failure      401      {object}  map[string]string
+// @Failure      401      {object}  map[string]string  "wrong email or password, the same for an unknown email"
 // @Failure      403      {object}  map[string]string
 // @Failure      500      {object}  map[string]string
 // @Router       /auth/login [post]
@@ -71,8 +71,13 @@ func (s *AuthService) Login(c *gin.Context) {
 	}
 
 	user, err := s.login(req.Email, req.Password)
-	if err != nil {
+	if stderrors.Is(err, errors.ErrWrongPasswordOrEmail) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+	if err != nil {
+		log.Printf("logging in: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 	if !s.startSession(c, user) {
@@ -83,7 +88,7 @@ func (s *AuthService) Login(c *gin.Context) {
 
 // Signup godoc
 // @Summary      Sign up
-// @Description  Creates an account, starts a session and sets it in the sid cookie (HttpOnly, SameSite=Lax). Returns the new user.
+// @Description  Creates an account, starts a session and sets it in the sid cookie (HttpOnly, SameSite=Lax). Returns the new user. The name is trimmed and must be 1 to 50 characters; the password must be 6 to 72 bytes; the email must be a valid, deliverable address.
 // @Tags         auth
 // @Accept       json
 // @Produce      json
@@ -105,6 +110,10 @@ func (s *AuthService) Signup(c *gin.Context) {
 
 	user, err := s.signup(c.Request.Context(), req.Name, req.Email, req.Password)
 	if err != nil {
+		if stderrors.Is(err, errors.ErrInvalidName) || stderrors.Is(err, errors.ErrInvalidPassword) || stderrors.Is(err, errors.ErrInvalidEmailFormat) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		if stderrors.Is(err, errors.ErrEmailAlreadyExists) {
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
@@ -189,8 +198,16 @@ func (s *AuthService) startSession(c *gin.Context, user model.User) bool {
 	return true
 }
 
+// login returns ErrWrongPasswordOrEmail alike for an unknown email and a wrong
+// password, after the same amount of work, so neither the answer nor its timing
+// tells whether the account exists.
 func (s *AuthService) login(email, password string) (model.User, error) {
-	u, err := s.userService.GetUserByEmail(normalizeEmail(email))
+	u, err := s.userService.GetUserByEmail(NormalizeEmail(email))
+	var notFound *pkg.NotFoundError
+	if stderrors.As(err, &notFound) {
+		_ = s.hasher.Compare(s.dummyHash(), []byte(password))
+		return model.User{}, errors.ErrWrongPasswordOrEmail
+	}
 	if err != nil {
 		return model.User{}, err
 	}
@@ -200,10 +217,32 @@ func (s *AuthService) login(email, password string) (model.User, error) {
 	return u, nil
 }
 
-func (s *AuthService) signup(ctx context.Context, name, email, password string) (model.User, error) {
-	email = normalizeEmail(email)
+func (s *AuthService) dummyHash() []byte {
+	s.dummyOnce.Do(func() {
+		h, err := s.hasher.Hash([]byte("not-a-real-password"))
+		if err != nil {
+			log.Printf("making the dummy password hash: %v", err)
+			return
+		}
+		s.dummy = h
+	})
+	return s.dummy
+}
 
-	_, err := s.userService.GetUserByEmail(email)
+func (s *AuthService) signup(ctx context.Context, rawName, rawEmail, password string) (model.User, error) {
+	name, err := CheckName(rawName)
+	if err != nil {
+		return model.User{}, err
+	}
+	if err := CheckPassword(password); err != nil {
+		return model.User{}, err
+	}
+	email, err := CheckEmailFormat(rawEmail)
+	if err != nil {
+		return model.User{}, err
+	}
+
+	_, err = s.userService.GetUserByEmail(email)
 	if err == nil {
 		return model.User{}, errors.ErrEmailAlreadyExists
 	}
@@ -212,9 +251,8 @@ func (s *AuthService) signup(ctx context.Context, name, email, password string) 
 		return model.User{}, err
 	}
 
-	result, verifyErr := s.emailValidator.Verify(ctx, email)
-	if verifyErr == nil && (result.Classification == EmailVerificationUndeliverable || result.IsDisposable) {
-		return model.User{}, errors.ErrInvalidEmailAddress
+	if err := checkEmailDeliverable(ctx, s.emailValidator, email); err != nil {
+		return model.User{}, err
 	}
 
 	passwordHash, err := s.hasher.Hash([]byte(password))

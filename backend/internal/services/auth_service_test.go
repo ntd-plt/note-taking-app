@@ -26,6 +26,7 @@ var testCookie = session.Cookie{Secure: true, MaxAge: testSessionConfig.Absolute
 
 type authFixture struct {
 	r        *gin.Engine
+	hasher   *testutil.FakeHasher
 	db       *testutil.FakeDatabase
 	store    *testutil.FakeSessionStore
 	sessions *session.Service
@@ -39,7 +40,8 @@ func newAuthRouterWithValidator(db *testutil.FakeDatabase, ev *testutil.FakeEmai
 	gin.SetMode(gin.TestMode)
 	store := testutil.NewFakeSessionStore()
 	sessions := session.NewService(store, testSessionConfig)
-	authService := services.NewAuthService(services.NewUserService(db), &testutil.FakeHasher{}, ev, sessions, testCookie)
+	hasher := &testutil.FakeHasher{}
+	authService := services.NewAuthService(services.NewUserService(db), hasher, ev, sessions, testCookie)
 
 	r := gin.New()
 	r.POST("/auth/login", authService.Login)
@@ -50,7 +52,7 @@ func newAuthRouterWithValidator(db *testutil.FakeDatabase, ev *testutil.FakeEmai
 		id, _ := middleware.UserID(c)
 		c.String(http.StatusOK, id.String())
 	})
-	return &authFixture{r: r, db: db, store: store, sessions: sessions}
+	return &authFixture{r: r, hasher: hasher, db: db, store: store, sessions: sessions}
 }
 
 func addUser(db *testutil.FakeDatabase, email, password string) model.User {
@@ -603,5 +605,95 @@ func TestLogoutAllNeedsASession(t *testing.T) {
 	f := newAuthRouter(testutil.NewFakeDatabase())
 	if w := doJSON(t, f.r, http.MethodPost, "/auth/logout-all", nil); w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestLoginAnswersUnknownEmailAndWrongPasswordAlike(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	addUser(db, "alice@example.com", "secret123")
+	f := newAuthRouter(db)
+
+	wrong := doJSON(t, f.r, http.MethodPost, "/auth/login", pkg.LoginRequest{Email: "alice@example.com", Password: "nope-nope"})
+	comparesForKnown := f.hasher.Compares
+	unknown := doJSON(t, f.r, http.MethodPost, "/auth/login", pkg.LoginRequest{Email: "nobody@example.com", Password: "nope-nope"})
+
+	if wrong.Code != http.StatusUnauthorized || unknown.Code != http.StatusUnauthorized {
+		t.Fatalf("statuses = %d / %d, want 401 / 401", wrong.Code, unknown.Code)
+	}
+	if wrong.Body.String() != unknown.Body.String() {
+		t.Errorf("bodies differ:\n  wrong password: %s\n  unknown email:  %s", wrong.Body.String(), unknown.Body.String())
+	}
+	if !strings.Contains(unknown.Body.String(), "wrong email or password") {
+		t.Errorf("body = %s, want the generic message", unknown.Body.String())
+	}
+	// The unknown email still costs one password comparison, so timing tells nothing.
+	if got := f.hasher.Compares - comparesForKnown; got != 1 {
+		t.Errorf("an unknown email ran %d password comparisons, want 1 (like a known one)", got)
+	}
+}
+
+func TestLoginDatabaseErrorIsA500WithoutDetails(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	db.Errs["GetUserByEmail"] = errors.New("pq: connection refused")
+	f := newAuthRouter(db)
+
+	w := doJSON(t, f.r, http.MethodPost, "/auth/login", pkg.LoginRequest{Email: "alice@example.com", Password: "secret123"})
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "pq:") {
+		t.Errorf("response leaks the internal error: %s", w.Body.String())
+	}
+}
+
+func TestSignupAccountRules(t *testing.T) {
+	cases := []struct {
+		name     string
+		req      pkg.SignupRequest
+		want     int
+		wantText string
+	}{
+		{"blank name", pkg.SignupRequest{Name: "   ", Email: "a@example.com", Password: "secret123"}, http.StatusBadRequest, "name must be"},
+		{"51-character name", pkg.SignupRequest{Name: strings.Repeat("n", 51), Email: "a@example.com", Password: "secret123"}, http.StatusBadRequest, "name must be"},
+		{"50 emoji name", pkg.SignupRequest{Name: strings.Repeat("🙂", 50), Email: "a@example.com", Password: "secret123"}, http.StatusCreated, ""},
+		{"5-byte password", pkg.SignupRequest{Name: "Bob", Email: "a@example.com", Password: "12345"}, http.StatusBadRequest, "password must be"},
+		{"72-byte password", pkg.SignupRequest{Name: "Bob", Email: "a@example.com", Password: strings.Repeat("p", 72)}, http.StatusCreated, ""},
+		{"73-byte password", pkg.SignupRequest{Name: "Bob", Email: "a@example.com", Password: strings.Repeat("p", 73)}, http.StatusBadRequest, "password must be"},
+		{"19 emoji password (76 bytes)", pkg.SignupRequest{Name: "Bob", Email: "a@example.com", Password: strings.Repeat("🔑", 19)}, http.StatusBadRequest, "password must be"},
+		{"malformed email", pkg.SignupRequest{Name: "Bob", Email: "bob@", Password: "secret123"}, http.StatusBadRequest, "email must be"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAuthRouter(testutil.NewFakeDatabase())
+			w := doJSON(t, f.r, http.MethodPost, "/auth/signup", tc.req)
+			if w.Code != tc.want {
+				t.Fatalf("status = %d, want %d; body: %s", w.Code, tc.want, w.Body.String())
+			}
+			if tc.wantText != "" && !strings.Contains(w.Body.String(), tc.wantText) {
+				t.Errorf("body = %s, want it to mention %q", w.Body.String(), tc.wantText)
+			}
+			if tc.want != http.StatusCreated && len(f.db.Users) != 0 {
+				t.Errorf("a refused signup stored %d users", len(f.db.Users))
+			}
+		})
+	}
+}
+
+func TestSignupStoresTheTrimmedName(t *testing.T) {
+	db := testutil.NewFakeDatabase()
+	f := newAuthRouter(db)
+
+	w := doJSON(t, f.r, http.MethodPost, "/auth/signup", pkg.SignupRequest{Name: "  Bob  ", Email: "bob@example.com", Password: "secret123"})
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body: %s", w.Code, w.Body.String())
+	}
+	u, err := db.GetUserByEmail("bob@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Name != "Bob" {
+		t.Errorf("stored name = %q, want %q", u.Name, "Bob")
 	}
 }

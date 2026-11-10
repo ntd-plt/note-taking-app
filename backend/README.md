@@ -100,8 +100,8 @@ Public endpoints:
 
 | Method | Path                  | Purpose                                                            |
 | ------ | --------------------- | ------------------------------------------------------------------ |
-| POST   | `/api/v1/auth/signup` | Create an account and log in (sets the cookie); returns the user   |
-| POST   | `/api/v1/auth/login`  | Log in (sets the cookie); returns the user                         |
+| POST   | `/api/v1/auth/signup` | Create an account and log in (sets the cookie); returns the user. Name: trimmed, 1–50 characters; password: 6–72 bytes; email: valid and deliverable |
+| POST   | `/api/v1/auth/login`  | Log in (sets the cookie); returns the user. An unknown email and a wrong password get the same 401, after the same work |
 | POST   | `/api/v1/auth/logout` | End this session and clear the cookie                              |
 
 Protected endpoints (require a live session cookie, else 401):
@@ -110,7 +110,7 @@ Protected endpoints (require a live session cookie, else 401):
 | ------ | ------------------------------- | ------------------------------------------------------------------------------------------- |
 | POST   | `/api/v1/auth/logout-all`       | End every session of the user, on every device                                              |
 | GET    | `/api/v1/users/me`              | Get the current user                                                                        |
-| PUT    | `/api/v1/users/me`              | Update the current user                                                                     |
+| PUT    | `/api/v1/users/me`              | Change the current user's name (trimmed, 1–50 characters). The email can't be changed yet: a body with `email` gets 400 |
 | GET    | `/api/v1/workspace`             | The user's hidden workspace root; its `child_ids` are the top-level pages                    |
 | GET    | `/api/v1/pages`                 | Every page not in the trash, in document order, with `parent_id` and `parent_page_id` (sidebar) |
 | GET    | `/api/v1/items/:id`             | Open a page: the page, everything under it as a flat list, and its ancestor pages. For a block id, its page with `focus_id` set |
