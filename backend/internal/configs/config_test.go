@@ -3,6 +3,8 @@ package configs
 import (
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestLoadTrashRetention(t *testing.T) {
@@ -105,5 +107,39 @@ func TestSecureCookiesOutsideDevelopment(t *testing.T) {
 		if got := (&Config{AppEnv: env}).SecureCookies(); got != want {
 			t.Errorf("APP_ENV=%s: SecureCookies = %v, want %v", env, got, want)
 		}
+	}
+}
+
+func TestDSNEscapesTheParts(t *testing.T) {
+	for _, pass := range []string{"password", "p@ss/w:rd#?%", "with space", "mật khẩu", "a%20b"} {
+		cfg := &Config{DBUser: "app@user", DBPass: pass, DBHost: "db.example.com", DBPort: "5433", DBName: "notes"}
+		parsed, err := pgxpool.ParseConfig(cfg.DSN())
+		if err != nil {
+			t.Errorf("password %q: %v", pass, err)
+			continue
+		}
+		c := parsed.ConnConfig
+		if c.Password != pass || c.User != "app@user" || c.Host != "db.example.com" || c.Port != 5433 || c.Database != "notes" {
+			t.Errorf("password %q: parsed back as user=%q password=%q host=%q port=%d db=%q",
+				pass, c.User, c.Password, c.Host, c.Port, c.Database)
+		}
+	}
+}
+
+func TestDSNPrefersDatabaseURL(t *testing.T) {
+	cfg := &Config{DatabaseURL: "postgres://render:secret@render.example:5432/prod", DBHost: "localhost", DBPort: "5432"}
+	if got := cfg.DSN(); got != cfg.DatabaseURL {
+		t.Errorf("DSN() = %q, want DATABASE_URL", got)
+	}
+}
+
+func TestLoadReadsDatabaseURL(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://u:p@h:5432/d")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DSN() != "postgres://u:p@h:5432/d" {
+		t.Errorf("DSN() = %q", cfg.DSN())
 	}
 }

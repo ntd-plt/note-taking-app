@@ -64,7 +64,7 @@ func run() error {
 		return err
 	}
 
-	pool, err := database.NewPool(cfg)
+	pool, err := database.NewPool(context.Background(), cfg.DSN())
 	if err != nil {
 		return err
 	}

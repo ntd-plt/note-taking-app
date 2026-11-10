@@ -2,6 +2,8 @@ package configs
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -11,6 +13,10 @@ import (
 )
 
 type Config struct {
+	// DatabaseURL is a full connection URL (DATABASE_URL), as hosting providers
+	// such as Render give it. When set it wins over the DB* parts below.
+	DatabaseURL string
+
 	DBHost     string
 	DBPort     string
 	DBUser     string
@@ -89,6 +95,8 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
+		DatabaseURL: os.Getenv("DATABASE_URL"),
+
 		DBHost:     os.Getenv("POSTGRES_HOST"),
 		DBPort:     os.Getenv("POSTGRES_PORT"),
 		DBUser:     os.Getenv("POSTGRES_USER"),
@@ -105,6 +113,22 @@ func Load() (*Config, error) {
 		SessionAbsoluteTTL: absoluteTTL,
 		AllowedOrigins:     origins,
 	}, nil
+}
+
+// DSN is the Postgres connection URL: DatabaseURL when set, or else one built from
+// the DB* parts. The parts are escaped, so a password with characters such as
+// @ / : ? # or % still connects.
+func (c *Config) DSN() string {
+	if c.DatabaseURL != "" {
+		return c.DatabaseURL
+	}
+	u := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(c.DBUser, c.DBPass),
+		Host:   net.JoinHostPort(c.DBHost, c.DBPort),
+		Path:   "/" + c.DBName,
+	}
+	return u.String()
 }
 
 // positiveDuration reads a Go duration such as "720h" from the environment, or

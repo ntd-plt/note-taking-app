@@ -23,10 +23,11 @@ The `.env.example` defaults (`POSTGRES_HOST=localhost`, `POSTGRES_USER=postgres`
 
 | Key                 | Meaning                                                                      | Example                      |
 | ------------------- | ----------------------------------------------------------------------------- | ----------------------------- |
+| `DATABASE_URL`      | Full Postgres connection URL. When set it wins over the `POSTGRES_*` parts (hosting providers such as Render give one) | `postgres://user:pass@host:5432/db` |
 | `POSTGRES_HOST`     | Postgres host                                                                | `localhost`                  |
 | `POSTGRES_PORT`     | Postgres port                                                                | `5432`                       |
 | `POSTGRES_USER`     | Database role                                                                | `postgres`                   |
-| `POSTGRES_PASSWORD` | Role password                                                                | —                            |
+| `POSTGRES_PASSWORD` | Role password. The server escapes it, so any characters work there; `make migrate-*` and the Docker entrypoint paste it into a URL as is, so with `@ / : ? # %` in it, set `DATABASE_URL` instead | —                            |
 | `POSTGRES_DB`       | Database name                                                                | `notes_app`                  |
 | `SERVER_PORT`       | HTTP port for the API                                                        | `8080`                       |
 | `APP_ENV`           | `development` (default), `staging` or `production` — Swagger UI is served only in `development` | `development`                |

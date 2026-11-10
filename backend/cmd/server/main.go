@@ -6,6 +6,7 @@ import (
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
 	"backend/internal/session"
+	"context"
 	"log"
 )
 
@@ -26,7 +27,7 @@ func main() {
 		panic(err)
 	}
 
-	pool, err := database.NewPool(cfg)
+	pool, err := database.NewPool(context.Background(), cfg.DSN())
 	if err != nil {
 		panic(err)
 	}
