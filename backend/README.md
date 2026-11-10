@@ -95,6 +95,10 @@ Login and signup start a server-side session and set its id in the `sid` cookie 
 
 State-changing requests (anything but GET, HEAD, OPTIONS) that a browser sends from another site are refused with 403, using Go's `http.CrossOriginProtection`; origins in `ALLOWED_ORIGINS` are let through. Non-browser clients such as curl are not affected, but must keep the cookie themselves (`curl -c jar -b jar ...`).
 
+### Request bodies
+
+JSON bodies are read strictly: an unknown field or trailing data gets 400 naming the problem, so a typo never turns into a silently ignored option. When adding a request field, **deploy the backend first, then the frontend**; the other order makes the new field fail with 400 until the backend catches up.
+
 Public endpoints:
 
 | Method | Path                  | Purpose                                                            |

@@ -1,7 +1,8 @@
-package services_test
+package handlers_test
 
 import (
 	"backend/internal/configs"
+	"backend/internal/handlers"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -21,7 +22,8 @@ import (
 
 func newItemsRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := services.NewItemsService(db, configs.DefaultTrashRetention)
+	svc := services.NewItemsService(db, configs.DefaultTrashRetention)
+	pages, ops, trash := handlers.NewPagesHandler(svc), handlers.NewOpsHandler(svc), handlers.NewTrashHandler(svc)
 
 	r := gin.New()
 	r.Use(func(c *gin.Context) {
@@ -29,15 +31,15 @@ func newItemsRouter(db *testutil.FakeDatabase, userID *uuid.UUID) *gin.Engine {
 			middleware.SetUserID(c, *userID)
 		}
 	})
-	r.GET("/api/v1/items/:id", h.GetItem)
-	r.GET("/api/v1/workspace", h.GetWorkspace)
-	r.GET("/api/v1/pages", h.ListPages)
-	r.POST("/api/v1/ops", h.ApplyOps)
-	r.POST("/api/v1/items/:id/duplicate", h.DuplicateItem)
-	r.GET("/api/v1/trash", h.ListTrash)
-	r.DELETE("/api/v1/trash", h.EmptyTrash)
-	r.POST("/api/v1/trash/:id/restore", h.RestoreFromTrash)
-	r.DELETE("/api/v1/trash/:id", h.DeleteFromTrash)
+	r.GET("/api/v1/items/:id", pages.GetItem)
+	r.GET("/api/v1/workspace", pages.GetWorkspace)
+	r.GET("/api/v1/pages", pages.ListPages)
+	r.POST("/api/v1/ops", ops.ApplyOps)
+	r.POST("/api/v1/items/:id/duplicate", ops.DuplicateItem)
+	r.GET("/api/v1/trash", trash.ListTrash)
+	r.DELETE("/api/v1/trash", trash.EmptyTrash)
+	r.POST("/api/v1/trash/:id/restore", trash.RestoreFromTrash)
+	r.DELETE("/api/v1/trash/:id", trash.DeleteFromTrash)
 	return r
 }
 
@@ -137,7 +139,7 @@ func TestGetItemReturnsPageBlocksInOrderAndStopsAtChildPages(t *testing.T) {
 
 	w := doJSON(t, newItemsRouter(db, &tr.userID), http.MethodGet, itemPath(page), nil)
 	wantStatus(t, w, http.StatusOK)
-	resp := decode[services.ItemResponse](t, w)
+	resp := decode[handlers.ItemResponse](t, w)
 
 	if got, want := ids(resp.Items), []uuid.UUID{page, h, bullet, nested, child, last}; !slices.Equal(got, want) {
 		t.Fatalf("items = %v, want %v (the page, then document order, not into the child page)", got, want)
@@ -171,7 +173,7 @@ func TestGetItemForBlockOpensItsPageWithFocus(t *testing.T) {
 
 	w := doJSON(t, newItemsRouter(db, &tr.userID), http.MethodGet, itemPath(deep), nil)
 	wantStatus(t, w, http.StatusOK)
-	resp := decode[services.ItemResponse](t, w)
+	resp := decode[handlers.ItemResponse](t, w)
 
 	if resp.Items[0].ID != page {
 		t.Errorf("page = %v, want the block's page %v", resp.Items[0].ID, page)
@@ -193,7 +195,7 @@ func TestGetItemInsideTrashedPage(t *testing.T) {
 
 	w := doJSON(t, newItemsRouter(db, &tr.userID), http.MethodGet, itemPath(child), nil)
 	wantStatus(t, w, http.StatusOK)
-	if resp := decode[services.ItemResponse](t, w); !resp.InTrash {
+	if resp := decode[handlers.ItemResponse](t, w); !resp.InTrash {
 		t.Error("in_trash = false for a page inside a trashed page")
 	}
 }

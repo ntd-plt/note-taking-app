@@ -1,8 +1,8 @@
 package main
 
 import (
+	"backend/internal/handlers"
 	"backend/internal/middleware"
-	"backend/internal/services"
 	"backend/internal/session"
 
 	_ "backend/docs"
@@ -20,9 +20,11 @@ const requestDeadline = writeTimeout
 
 // RouterDeps is what the HTTP routes are built from.
 type RouterDeps struct {
-	Auth     *services.AuthService
-	Users    *services.UserService
-	Items    *services.ItemsService
+	Auth     *handlers.AuthHandler
+	Users    *handlers.UserHandler
+	Pages    *handlers.PagesHandler
+	Ops      *handlers.OpsHandler
+	Trash    *handlers.TrashHandler
 	Sessions middleware.SessionLookup
 	Cookie   session.Cookie
 	// AllowedOrigins may call the API cross-origin with the session cookie.
@@ -63,16 +65,16 @@ func NewRouter(d RouterDeps) (*gin.Engine, error) {
 		protected.GET("/users/me", d.Users.GetUser)
 		protected.PUT("/users/me", d.Users.UpdateUser)
 
-		protected.GET("/items/:id", d.Items.GetItem)
-		protected.POST("/items/:id/duplicate", d.Items.DuplicateItem)
-		protected.GET("/workspace", d.Items.GetWorkspace)
-		protected.GET("/pages", d.Items.ListPages)
-		protected.POST("/ops", d.Items.ApplyOps)
+		protected.GET("/items/:id", d.Pages.GetItem)
+		protected.POST("/items/:id/duplicate", d.Ops.DuplicateItem)
+		protected.GET("/workspace", d.Pages.GetWorkspace)
+		protected.GET("/pages", d.Pages.ListPages)
+		protected.POST("/ops", d.Ops.ApplyOps)
 
-		protected.GET("/trash", d.Items.ListTrash)
-		protected.DELETE("/trash", d.Items.EmptyTrash)
-		protected.POST("/trash/:id/restore", d.Items.RestoreFromTrash)
-		protected.DELETE("/trash/:id", d.Items.DeleteFromTrash)
+		protected.GET("/trash", d.Trash.ListTrash)
+		protected.DELETE("/trash", d.Trash.EmptyTrash)
+		protected.POST("/trash/:id/restore", d.Trash.RestoreFromTrash)
+		protected.DELETE("/trash/:id", d.Trash.DeleteFromTrash)
 	}
 	return router, nil
 }

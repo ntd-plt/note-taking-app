@@ -1,4 +1,6 @@
-package services
+// Package handlers is the HTTP layer: it decodes requests, calls the services and
+// writes their results or errors.
+package handlers
 
 import (
 	"log"

@@ -1,14 +1,12 @@
 package services
 
 import (
-	"net/http"
+	"context"
 	"time"
 
 	"backend/internal/database"
-	"backend/internal/middleware"
 	"backend/internal/model"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
@@ -23,115 +21,31 @@ func NewItemsService(db database.ItemsDataSource, trashRetention time.Duration) 
 	return &ItemsService{db: db, retention: trashRetention, now: time.Now}
 }
 
-// ItemResponse is a page ready to open in the editor. Items is the page itself
-// followed by everything under it in document order, each with its child_ids; child
-// pages are included but not what is inside them. Ancestors are the pages above it,
-// top-level first. FocusID is set when the requested id was a block, so the editor
-// can scroll to it.
-type ItemResponse struct {
-	Items     []model.Item `json:"items"`
-	Ancestors []model.Item `json:"ancestors"`
-	FocusID   *uuid.UUID   `json:"focus_id"`
-	InTrash   bool         `json:"in_trash"`
+// Opened is a page ready for the editor. FocusID is set when the requested id was
+// a block inside it.
+type Opened struct {
+	Items     []model.Item
+	Ancestors []model.Item
+	FocusID   *uuid.UUID
+	InTrash   bool
 }
 
-func currentUser(c *gin.Context) (uuid.UUID, bool) {
-	userID, ok := middleware.UserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "not logged in"})
-		return uuid.Nil, false
-	}
-	return userID, true
-}
-
-func itemIDParam(c *gin.Context) (uuid.UUID, bool) {
-	id, err := uuid.Parse(c.Param("id"))
+func (s *ItemsService) Open(ctx context.Context, userID, id uuid.UUID) (Opened, error) {
+	opened, err := s.db.OpenItem(ctx, userID, id)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid item id"})
-		return uuid.Nil, false
+		return Opened{}, err
 	}
-	return id, true
-}
-
-// GetItem godoc
-// @Summary      Open a page or block
-// @Description  For a page id, returns the page and everything under it as one flat list in document order (child pages included, not their content), plus its ancestor pages. For a block id, returns the page that contains the block, with focus_id set to the block. The workspace root cannot be opened.
-// @Tags         items
-// @Produce      json
-// @Security     SessionCookie
-// @Param        id   path      string  true  "Page or block id"
-// @Success      200  {object}  ItemResponse
-// @Failure      400  {object}  map[string]string
-// @Failure      401  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /items/{id} [get]
-func (s *ItemsService) GetItem(c *gin.Context) {
-	userID, ok := currentUser(c)
-	if !ok {
-		return
-	}
-	id, ok := itemIDParam(c)
-	if !ok {
-		return
-	}
-
-	opened, err := s.db.OpenItem(c.Request.Context(), userID, id)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
-
-	resp := ItemResponse{Items: opened.Items, Ancestors: opened.Ancestors, InTrash: opened.Location.InTrash}
+	out := Opened{Items: opened.Items, Ancestors: opened.Ancestors, InTrash: opened.Location.InTrash}
 	if opened.Location.Type != model.ItemTypePage {
-		resp.FocusID = &id
+		out.FocusID = &id
 	}
-	c.JSON(http.StatusOK, resp)
+	return out, nil
 }
 
-// GetWorkspace godoc
-// @Summary      Get the workspace root
-// @Description  Returns the user's hidden workspace item. Its child_ids are the top-level pages; create a top-level page with it as parent_id.
-// @Tags         items
-// @Produce      json
-// @Security     SessionCookie
-// @Success      200  {object}  model.Item
-// @Failure      401  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /workspace [get]
-func (s *ItemsService) GetWorkspace(c *gin.Context) {
-	userID, ok := currentUser(c)
-	if !ok {
-		return
-	}
-	ws, err := s.db.GetWorkspace(c.Request.Context(), userID)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, ws)
+func (s *ItemsService) Workspace(ctx context.Context, userID uuid.UUID) (model.Item, error) {
+	return s.db.GetWorkspace(ctx, userID)
 }
 
-// ListPages godoc
-// @Summary      List pages for the sidebar
-// @Description  Returns every page that is not in the trash, in document order. parent_id is the direct parent (a block, a page or the workspace); parent_page_id is the nearest page above, left out for a top-level page.
-// @Tags         items
-// @Produce      json
-// @Security     SessionCookie
-// @Success      200  {array}   model.Item
-// @Failure      401  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /pages [get]
-func (s *ItemsService) ListPages(c *gin.Context) {
-	userID, ok := currentUser(c)
-	if !ok {
-		return
-	}
-	pages, err := s.db.ListPages(c.Request.Context(), userID)
-	if err != nil {
-		writeError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, pages)
+func (s *ItemsService) Pages(ctx context.Context, userID uuid.UUID) ([]model.Item, error) {
+	return s.db.ListPages(ctx, userID)
 }

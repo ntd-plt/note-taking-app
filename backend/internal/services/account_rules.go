@@ -7,7 +7,6 @@ import (
 
 	"backend/internal/apperr"
 
-	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -56,13 +55,14 @@ func CheckPassword(password string) error {
 	return nil
 }
 
-// CheckEmailFormat returns the normalized address if it is well formed. It uses
-// gin's own validator, the one behind `binding:"email"` tags, so it can never
-// disagree with a request that binds an email.
+// emailRules uses go-playground's built-in email rule, the same one behind
+// `binding:"email"` tags.
+var emailRules = validator.New()
+
+// CheckEmailFormat returns the normalized address if it is well formed.
 func CheckEmailFormat(raw string) (string, error) {
 	email := NormalizeEmail(raw)
-	v, ok := binding.Validator.Engine().(*validator.Validate)
-	if !ok || v.Var(email, "required,email,max=254") != nil {
+	if emailRules.Var(email, "required,email,max=254") != nil {
 		return "", ErrInvalidEmailFormat
 	}
 	return email, nil

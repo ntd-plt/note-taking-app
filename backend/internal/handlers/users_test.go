@@ -1,4 +1,4 @@
-package services_test
+package handlers_test
 
 import (
 	"encoding/json"
@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"backend/internal/handlers"
 	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/services"
@@ -16,7 +17,7 @@ import (
 
 func newUsersRouter(db *testutil.FakeDatabase, user model.User) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := services.NewUserService(db)
+	h := handlers.NewUserHandler(services.NewUserService(db))
 	r := gin.New()
 	r.Use(func(c *gin.Context) { middleware.SetUserID(c, user.ID) })
 	r.PUT("/users/me", h.UpdateUser)
@@ -42,7 +43,7 @@ func TestUpdateUserChangesTheTrimmedName(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
-	var resp services.UserResponse
+	var resp handlers.UserResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}

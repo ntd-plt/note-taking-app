@@ -89,37 +89,14 @@ definitions:
   backend_internal_model.Props:
     additionalProperties: {}
     type: object
-  backend_internal_pkg.LoginRequest:
-    properties:
-      email:
-        type: string
-      password:
-        type: string
-    required:
-    - email
-    - password
-    type: object
-  backend_internal_pkg.SignupRequest:
-    properties:
-      email:
-        type: string
-      name:
-        type: string
-      password:
-        type: string
-    required:
-    - email
-    - name
-    - password
-    type: object
-  internal_services.ApplyOpsRequest:
+  internal_handlers.ApplyOpsRequest:
     properties:
       ops:
         items:
           $ref: '#/definitions/backend_internal_model.Op'
         type: array
     type: object
-  internal_services.ItemResponse:
+  internal_handlers.ItemResponse:
     properties:
       ancestors:
         items:
@@ -134,14 +111,37 @@ definitions:
           $ref: '#/definitions/backend_internal_model.Item'
         type: array
     type: object
-  internal_services.TrashResponse:
+  internal_handlers.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_handlers.SignupRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - name
+    - password
+    type: object
+  internal_handlers.TrashResponse:
     properties:
       pages:
         items:
-          $ref: '#/definitions/internal_services.TrashedPage'
+          $ref: '#/definitions/internal_handlers.TrashedPage'
         type: array
     type: object
-  internal_services.TrashedPage:
+  internal_handlers.TrashedPage:
     properties:
       child_ids:
         items:
@@ -168,12 +168,12 @@ definitions:
       user_id:
         type: string
     type: object
-  internal_services.UpdateUserRequest:
+  internal_handlers.UpdateUserRequest:
     properties:
       name:
         type: string
     type: object
-  internal_services.UserResponse:
+  internal_handlers.UserResponse:
     properties:
       created_at:
         type: string
@@ -206,7 +206,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/backend_internal_pkg.LoginRequest'
+          $ref: '#/definitions/internal_handlers.LoginRequest'
       produces:
       - application/json
       responses:
@@ -217,7 +217,7 @@ paths:
               description: sid=<session id>
               type: string
           schema:
-            $ref: '#/definitions/internal_services.UserResponse'
+            $ref: '#/definitions/internal_handlers.UserResponse'
         "400":
           description: Bad Request
           schema:
@@ -311,7 +311,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/backend_internal_pkg.SignupRequest'
+          $ref: '#/definitions/internal_handlers.SignupRequest'
       produces:
       - application/json
       responses:
@@ -322,7 +322,7 @@ paths:
               description: sid=<session id>
               type: string
           schema:
-            $ref: '#/definitions/internal_services.UserResponse'
+            $ref: '#/definitions/internal_handlers.UserResponse'
         "400":
           description: Bad Request
           schema:
@@ -374,7 +374,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_services.ItemResponse'
+            $ref: '#/definitions/internal_handlers.ItemResponse'
         "400":
           description: Bad Request
           schema:
@@ -481,7 +481,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_services.ApplyOpsRequest'
+          $ref: '#/definitions/internal_handlers.ApplyOpsRequest'
       produces:
       - application/json
       responses:
@@ -596,7 +596,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_services.TrashResponse'
+            $ref: '#/definitions/internal_handlers.TrashResponse'
         "401":
           description: Unauthorized
           schema:
@@ -712,7 +712,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_services.UserResponse'
+            $ref: '#/definitions/internal_handlers.UserResponse'
         "401":
           description: Unauthorized
           schema:
@@ -747,14 +747,14 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_services.UpdateUserRequest'
+          $ref: '#/definitions/internal_handlers.UpdateUserRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_services.UserResponse'
+            $ref: '#/definitions/internal_handlers.UserResponse'
         "400":
           description: Bad Request
           schema:

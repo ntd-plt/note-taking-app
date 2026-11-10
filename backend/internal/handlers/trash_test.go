@@ -1,4 +1,4 @@
-package services_test
+package handlers_test
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"backend/internal/handlers"
 	"backend/internal/middleware"
 	"backend/internal/model"
 	"backend/internal/services"
@@ -46,7 +47,7 @@ func TestTrashListRestoreAndDelete(t *testing.T) {
 
 	w := doJSON(t, r, http.MethodGet, "/api/v1/trash", nil)
 	wantStatus(t, w, http.StatusOK)
-	got := decode[services.TrashResponse](t, w)
+	got := decode[handlers.TrashResponse](t, w)
 	if len(got.Pages) != 2 || got.Pages[0].ID != b || got.Pages[1].ID != a {
 		t.Fatalf("trash = %+v, want B then A (Inside A not listed)", got.Pages)
 	}
@@ -90,7 +91,7 @@ func TestEmptyTrashEndpoint(t *testing.T) {
 	if _, ok := db.Items[keep]; !ok {
 		t.Error("emptying the trash removed a page that was not in it")
 	}
-	if got := decode[services.TrashResponse](t, doJSON(t, r, http.MethodGet, "/api/v1/trash", nil)); len(got.Pages) != 0 {
+	if got := decode[handlers.TrashResponse](t, doJSON(t, r, http.MethodGet, "/api/v1/trash", nil)); len(got.Pages) != 0 {
 		t.Errorf("trash = %+v, want empty", got.Pages)
 	}
 }
@@ -105,7 +106,7 @@ func TestExpiredPagesAreHiddenAndPurgedOnTheNextTrash(t *testing.T) {
 	age(tr, old, 31*24*time.Hour)
 
 	// Past the retention period: no longer listed, but still stored.
-	got := decode[services.TrashResponse](t, doJSON(t, r, http.MethodGet, "/api/v1/trash", nil))
+	got := decode[handlers.TrashResponse](t, doJSON(t, r, http.MethodGet, "/api/v1/trash", nil))
 	if len(got.Pages) != 0 {
 		t.Errorf("trash = %+v, want the expired page left out", got.Pages)
 	}
@@ -196,7 +197,7 @@ func TestTrashPurgeOutlivesADisconnectedClient(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(func(c *gin.Context) { middleware.SetUserID(c, userID) })
-	r.POST("/ops", services.NewItemsService(db, time.Hour).ApplyOps)
+	r.POST("/ops", handlers.NewOpsHandler(services.NewItemsService(db, time.Hour)).ApplyOps)
 
 	body := strings.NewReader(`{"ops":[{"op":"trash","id":"` + victim.String() + `"}]}`)
 	req := httptest.NewRequest(http.MethodPost, "/ops", body).WithContext(reqCtx)

@@ -35,7 +35,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/backend_internal_pkg.LoginRequest"
+                            "$ref": "#/definitions/internal_handlers.LoginRequest"
                         }
                     }
                 ],
@@ -43,7 +43,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.UserResponse"
+                            "$ref": "#/definitions/internal_handlers.UserResponse"
                         },
                         "headers": {
                             "Set-Cookie": {
@@ -189,7 +189,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/backend_internal_pkg.SignupRequest"
+                            "$ref": "#/definitions/internal_handlers.SignupRequest"
                         }
                     }
                 ],
@@ -197,7 +197,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.UserResponse"
+                            "$ref": "#/definitions/internal_handlers.UserResponse"
                         },
                         "headers": {
                             "Set-Cookie": {
@@ -282,7 +282,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.ItemResponse"
+                            "$ref": "#/definitions/internal_handlers.ItemResponse"
                         }
                     },
                     "400": {
@@ -428,7 +428,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_services.ApplyOpsRequest"
+                            "$ref": "#/definitions/internal_handlers.ApplyOpsRequest"
                         }
                     }
                 ],
@@ -550,7 +550,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.TrashResponse"
+                            "$ref": "#/definitions/internal_handlers.TrashResponse"
                         }
                     },
                     "401": {
@@ -768,7 +768,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.UserResponse"
+                            "$ref": "#/definitions/internal_handlers.UserResponse"
                         }
                     },
                     "401": {
@@ -824,7 +824,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_services.UpdateUserRequest"
+                            "$ref": "#/definitions/internal_handlers.UpdateUserRequest"
                         }
                     }
                 ],
@@ -832,7 +832,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.UserResponse"
+                            "$ref": "#/definitions/internal_handlers.UserResponse"
                         }
                     },
                     "400": {
@@ -1049,41 +1049,7 @@ const docTemplate = `{
             "type": "object",
             "additionalProperties": {}
         },
-        "backend_internal_pkg.LoginRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "password"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string"
-                }
-            }
-        },
-        "backend_internal_pkg.SignupRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "name",
-                "password"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_services.ApplyOpsRequest": {
+        "internal_handlers.ApplyOpsRequest": {
             "type": "object",
             "properties": {
                 "ops": {
@@ -1094,7 +1060,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_services.ItemResponse": {
+        "internal_handlers.ItemResponse": {
             "type": "object",
             "properties": {
                 "ancestors": {
@@ -1117,18 +1083,52 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_services.TrashResponse": {
+        "internal_handlers.LoginRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handlers.SignupRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "name",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handlers.TrashResponse": {
             "type": "object",
             "properties": {
                 "pages": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_services.TrashedPage"
+                        "$ref": "#/definitions/internal_handlers.TrashedPage"
                     }
                 }
             }
         },
-        "internal_services.TrashedPage": {
+        "internal_handlers.TrashedPage": {
             "type": "object",
             "properties": {
                 "child_ids": {
@@ -1169,7 +1169,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_services.UpdateUserRequest": {
+        "internal_handlers.UpdateUserRequest": {
             "type": "object",
             "properties": {
                 "name": {
@@ -1177,7 +1177,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_services.UserResponse": {
+        "internal_handlers.UserResponse": {
             "type": "object",
             "properties": {
                 "created_at": {

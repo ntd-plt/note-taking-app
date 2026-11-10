@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"backend/internal/handlers"
 	"backend/internal/services"
 	"backend/internal/session"
 	"backend/internal/testutil"
@@ -21,10 +22,13 @@ func testRouter(t *testing.T) *gin.Engine {
 	sessions := session.NewService(testutil.NewFakeSessionStore(), session.Config{IdleTTL: time.Hour, AbsoluteTTL: 24 * time.Hour})
 	cookie := session.Cookie{Secure: true, MaxAge: time.Hour}
 	users := services.NewUserService(db)
+	items := services.NewItemsService(db, time.Hour)
 	r, err := NewRouter(RouterDeps{
-		Auth:           services.NewAuthService(users, &testutil.FakeHasher{}, &testutil.FakeEmailValidator{}, sessions, cookie),
-		Users:          users,
-		Items:          services.NewItemsService(db, time.Hour),
+		Auth:           handlers.NewAuthHandler(services.NewAuthService(users, &testutil.FakeHasher{}, &testutil.FakeEmailValidator{}), sessions, cookie),
+		Users:          handlers.NewUserHandler(users),
+		Pages:          handlers.NewPagesHandler(items),
+		Ops:            handlers.NewOpsHandler(items),
+		Trash:          handlers.NewTrashHandler(items),
 		Sessions:       sessions,
 		Cookie:         cookie,
 		AllowedOrigins: []string{"https://app.example.com"},

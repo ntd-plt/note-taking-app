@@ -1,4 +1,4 @@
-package services_test
+package handlers_test
 
 import "context"
 

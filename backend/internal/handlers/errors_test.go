@@ -1,4 +1,4 @@
-package services
+package handlers
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"backend/internal/apperr"
+	"backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,10 +23,10 @@ func TestWriteError(t *testing.T) {
 		body string
 	}{
 		{"invalid", apperr.New(apperr.Invalid, "bad"), 400, `{"error":"bad"}`},
-		{"unauthorized", ErrWrongPasswordOrEmail, 401, `{"error":"wrong email or password"}`},
+		{"unauthorized", services.ErrWrongPasswordOrEmail, 401, `{"error":"wrong email or password"}`},
 		{"not found", apperr.NotFoundf("item"), 404, `{"error":"item not found"}`},
 		{"conflict with op index", apperr.New(apperr.Conflict, "taken").AtOp(2), 409, `{"error":"taken","op_index":2}`},
-		{"unprocessable", ErrInvalidEmailAddress, 422, `{"error":"the email address appears to be invalid or undeliverable"}`},
+		{"unprocessable", services.ErrInvalidEmailAddress, 422, `{"error":"the email address appears to be invalid or undeliverable"}`},
 		{"too large", apperr.New(apperr.TooLarge, "big"), 413, `{"error":"big"}`},
 		{"cause stays in logs", hidden, 400, `{"error":"item is not valid"}`},
 		{"plain error", errors.New("pq: connection refused"), 500, `{"error":"internal server error"}`},

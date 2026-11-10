@@ -13,12 +13,12 @@ backend/
 ├── cmd/server/
 │   ├── main.go          # @title/@version/@BasePath (/api/v1) + SessionCookie security scheme
 │   └── router.go        # mounts GET /swagger/*any
-├── internal/services/
-│   ├── auth_service.go     # @Router annotations for /auth/*
-│   ├── user_service.go     # @Router annotations for /users/me
-│   ├── items_service.go    # @Router annotations for /items/:id, /workspace, /pages
-│   ├── ops_service.go      # @Router annotations for /ops and /items/:id/duplicate, ApplyOpsRequest
-│   └── trash_service.go    # @Router annotations for /trash*, TrashResponse
+├── internal/handlers/      # the HTTP layer: annotations live next to the handlers
+│   ├── auth.go             # /auth/*, LoginRequest, SignupRequest
+│   ├── users.go            # /users/me, UserResponse, UpdateUserRequest
+│   ├── pages.go            # /items/:id, /workspace, /pages, ItemResponse
+│   ├── ops.go              # /ops and /items/:id/duplicate, ApplyOpsRequest
+│   └── trash.go            # /trash*, TrashResponse
 └── docs/                 # generated — do not edit by hand
     ├── docs.go           # embeds the spec, imported for side effects in router.go
     ├── swagger.json

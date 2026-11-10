@@ -3,6 +3,7 @@ package main
 import (
 	"backend/internal/configs"
 	"backend/internal/database"
+	"backend/internal/handlers"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
 	"backend/internal/session"
@@ -68,13 +69,15 @@ func run() error {
 	}
 
 	userService := services.NewUserService(userDataSource)
-	authService := services.NewAuthService(userService, hasher, emailValidator, sessions, cookie)
+	authService := services.NewAuthService(userService, hasher, emailValidator)
 	itemsService := services.NewItemsService(itemsDataSource, cfg.TrashRetention)
 
 	router, err := NewRouter(RouterDeps{
-		Auth:           authService,
-		Users:          userService,
-		Items:          itemsService,
+		Auth:           handlers.NewAuthHandler(authService, sessions, cookie),
+		Users:          handlers.NewUserHandler(userService),
+		Pages:          handlers.NewPagesHandler(itemsService),
+		Ops:            handlers.NewOpsHandler(itemsService),
+		Trash:          handlers.NewTrashHandler(itemsService),
 		Sessions:       sessions,
 		Cookie:         cookie,
 		AllowedOrigins: cfg.AllowedOrigins,
