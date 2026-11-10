@@ -143,3 +143,34 @@ func TestLoadReadsDatabaseURL(t *testing.T) {
 		t.Errorf("DSN() = %q", cfg.DSN())
 	}
 }
+
+func TestLoadPort(t *testing.T) {
+	cases := []struct {
+		env     string
+		want    string
+		wantErr bool
+	}{
+		{"", "8080", false},
+		{"10000", "10000", false},
+		{"http", "", true},
+		{"0", "", true},
+		{"70000", "", true},
+	}
+	for _, tc := range cases {
+		t.Setenv("PORT", tc.env)
+		cfg, err := Load()
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("PORT=%q: want an error", tc.env)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("PORT=%q: %v", tc.env, err)
+			continue
+		}
+		if cfg.Port != tc.want {
+			t.Errorf("PORT=%q: Port = %q, want %q", tc.env, cfg.Port, tc.want)
+		}
+	}
+}

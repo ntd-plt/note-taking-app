@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,12 +18,14 @@ type Config struct {
 	// such as Render give it. When set it wins over the DB* parts below.
 	DatabaseURL string
 
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPass     string
-	DBName     string
-	ServerPort string
+	DBHost string
+	DBPort string
+	DBUser string
+	DBPass string
+	DBName string
+	// Port is the HTTP port to listen on (PORT; hosting providers such as Render
+	// set it). Defaults to 8080.
+	Port string
 
 	// AppEnv is "development" or "production". Defaults to "development"
 	// (dev-safe) unless explicitly set otherwise via the APP_ENV env var.
@@ -49,6 +52,7 @@ type Config struct {
 }
 
 const (
+	DefaultPort               = "8080"
 	DefaultTrashRetention     = 30 * 24 * time.Hour
 	DefaultSessionIdleTTL     = 7 * 24 * time.Hour
 	DefaultSessionAbsoluteTTL = 30 * 24 * time.Hour
@@ -56,13 +60,13 @@ const (
 
 func Default() *Config {
 	return &Config{
-		DBHost:     "localhost",
-		DBPort:     "5432",
-		DBUser:     "postgres",
-		DBPass:     "password",
-		DBName:     "db",
-		ServerPort: "8080",
-		AppEnv:     "development",
+		DBHost: "localhost",
+		DBPort: "5432",
+		DBUser: "postgres",
+		DBPass: "password",
+		DBName: "db",
+		Port:   DefaultPort,
+		AppEnv: "development",
 
 		TrashRetention: DefaultTrashRetention,
 	}
@@ -89,6 +93,13 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = DefaultPort
+	}
+	if n, err := strconv.Atoi(port); err != nil || n < 1 || n > 65535 {
+		return nil, fmt.Errorf("PORT must be a port number between 1 and 65535, got %q", port)
+	}
 	origins := splitList(os.Getenv("ALLOWED_ORIGINS"))
 	if slices.Contains(origins, "*") {
 		return nil, fmt.Errorf("ALLOWED_ORIGINS must list exact origins such as https://app.example.com, not \"*\": the API is called with the session cookie")
@@ -97,13 +108,13 @@ func Load() (*Config, error) {
 	return &Config{
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 
-		DBHost:     os.Getenv("POSTGRES_HOST"),
-		DBPort:     os.Getenv("POSTGRES_PORT"),
-		DBUser:     os.Getenv("POSTGRES_USER"),
-		DBPass:     os.Getenv("POSTGRES_PASSWORD"),
-		DBName:     os.Getenv("POSTGRES_DB"),
-		ServerPort: os.Getenv("SERVER_PORT"),
-		AppEnv:     appEnv,
+		DBHost: os.Getenv("POSTGRES_HOST"),
+		DBPort: os.Getenv("POSTGRES_PORT"),
+		DBUser: os.Getenv("POSTGRES_USER"),
+		DBPass: os.Getenv("POSTGRES_PASSWORD"),
+		DBName: os.Getenv("POSTGRES_DB"),
+		Port:   port,
+		AppEnv: appEnv,
 
 		DisableEmailVerification: os.Getenv("DISABLE_EMAIL_VERIFICATION") == "true",
 

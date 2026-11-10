@@ -8,6 +8,10 @@ import (
 	"backend/internal/session"
 	"context"
 	"log"
+	"net"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 // @title           Note Taking App API
@@ -22,14 +26,26 @@ import (
 // @description                 Set by POST /auth/login or /auth/signup; the browser sends it by itself.
 
 func main() {
+	if err := run(); err != nil {
+		log.Printf("server: %v", err)
+		os.Exit(1)
+	}
+}
+
+// run starts the API and serves until SIGINT or SIGTERM, then shuts down
+// gracefully. Errors come back instead of panicking, so deferred cleanup runs.
+func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	cfg, err := configs.Load()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
-	pool, err := database.NewPool(context.Background(), cfg.DSN())
+	pool, err := database.NewPool(ctx, cfg.DSN())
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer pool.Close()
 
@@ -65,9 +81,14 @@ func main() {
 		EnableSwagger:  cfg.IsDevelopment(),
 	})
 	if err != nil {
-		panic(err)
+		return err
 	}
-	if err := router.Run(":8080"); err != nil {
-		panic(err)
+
+	addr := ":" + cfg.Port
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
 	}
+	log.Printf("listening on %s", addr)
+	return serve(ctx, newHTTPServer(addr, router), ln, shutdownGrace)
 }

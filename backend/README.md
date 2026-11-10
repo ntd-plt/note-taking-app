@@ -29,7 +29,7 @@ The `.env.example` defaults (`POSTGRES_HOST=localhost`, `POSTGRES_USER=postgres`
 | `POSTGRES_USER`     | Database role                                                                | `postgres`                   |
 | `POSTGRES_PASSWORD` | Role password. The server escapes it, so any characters work there; `make migrate-*` and the Docker entrypoint paste it into a URL as is, so with `@ / : ? # %` in it, set `DATABASE_URL` instead | —                            |
 | `POSTGRES_DB`       | Database name                                                                | `notes_app`                  |
-| `SERVER_PORT`       | HTTP port for the API                                                        | `8080`                       |
+| `PORT`              | HTTP port for the API. Hosting providers such as Render set it themselves     | `8080`                       |
 | `APP_ENV`           | `development` (default), `staging` or `production` — Swagger UI is served only in `development` | `development`                |
 | `ALLOWED_ORIGINS`   | Comma-separated browser origins allowed to call the API cross-origin with the session cookie. Leave empty when the frontend reaches the API through a proxy under its own domain (dev server, Docker nginx, Vercel rewrite). `*` is refused | `http://localhost:3000` |
 | `SESSION_IDLE_TTL`  | A session ends after this long without use (Go duration)                     | `168h` (7 days)              |
@@ -59,9 +59,7 @@ make build   # compiles to bin/server
 ./bin/server
 ```
 
-The API listens on `http://localhost:8080`.
-
-> The listen port is currently hardcoded to `:8080` in `cmd/server/main.go` — changing `SERVER_PORT` in `.env` has no effect yet.
+The API listens on `http://localhost:8080` (set `PORT` to change it). On SIGINT or SIGTERM it stops taking new requests and gives the ones in flight up to 10 seconds to finish.
 
 Once it's up, interactive API docs are at `http://localhost:8080/swagger/index.html` (`APP_ENV=development` only — see [`docs/SWAGGER.md`](../docs/SWAGGER.md)).
 
