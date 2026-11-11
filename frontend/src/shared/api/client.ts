@@ -1,5 +1,3 @@
-// src/shared/api/client.ts
-
 import humps from 'humps'
 
 const BASE_URL = import.meta.env.VITE_API_URL || ''
@@ -31,8 +29,8 @@ const reportsNoSessionItself = (path: string, method: string) =>
 
 async function request<T>(
   path: string,
-  options: RequestInit = {},
-  convertKeys = true,
+  options: RequestInit,
+  convertKeys: boolean,
 ): Promise<T> {
   const url = `${BASE_URL}${path}`
   const headers = new Headers(options.headers)
@@ -82,47 +80,38 @@ async function request<T>(
   return (convertKeys ? humps.camelizeKeys(json) : json) as T
 }
 
-export const apiClient = {
-  get: <T>(path: string, options?: RequestInit) =>
-    request<T>(path, { ...options, method: 'GET' }),
-  post: <T>(path: string, body?: any, options?: RequestInit) =>
-    request<T>(path, {
-      ...options,
-      method: 'POST',
-      body: body ? JSON.stringify(humps.decamelizeKeys(body)) : undefined,
-    }),
-  put: <T>(path: string, body?: any, options?: RequestInit) =>
-    request<T>(path, {
-      ...options,
-      method: 'PUT',
-      body: body ? JSON.stringify(humps.decamelizeKeys(body)) : undefined,
-    }),
-  patch: <T>(path: string, body?: any, options?: RequestInit) =>
-    request<T>(path, {
-      ...options,
-      method: 'PATCH',
-      body: body ? JSON.stringify(humps.decamelizeKeys(body)) : undefined,
-    }),
-  delete: <T>(path: string, options?: RequestInit) =>
-    request<T>(path, { ...options, method: 'DELETE' }),
+// makeClient builds a JSON client. With convertKeys, request bodies go out in
+// snake_case and responses come back in camelCase.
+function makeClient({ convertKeys }: { convertKeys: boolean }) {
+  const send =
+    (method: string) =>
+    <T>(path: string, body?: unknown, options?: RequestInit) =>
+      request<T>(
+        path,
+        {
+          ...options,
+          method,
+          body:
+            body === undefined
+              ? undefined
+              : JSON.stringify(convertKeys ? humps.decamelizeKeys(body) : body),
+        },
+        convertKeys,
+      )
+  return {
+    get: <T>(path: string, options?: RequestInit) =>
+      request<T>(path, { ...options, method: 'GET' }, convertKeys),
+    post: send('POST'),
+    put: send('PUT'),
+    patch: send('PATCH'),
+    delete: <T>(path: string, options?: RequestInit) =>
+      request<T>(path, { ...options, method: 'DELETE' }, convertKeys),
+  }
 }
+
+export const apiClient = makeClient({ convertKeys: true })
 
 // rawApiClient sends and returns JSON exactly as given, without converting keys
 // between camelCase and snake_case. Use it where payloads hold keys the client must
 // not rename, such as item props (`is_favorite`, BlockNote's `textColor`).
-export const rawApiClient = {
-  get: <T>(path: string, options?: RequestInit) =>
-    request<T>(path, { ...options, method: 'GET' }, false),
-  post: <T>(path: string, body?: unknown, options?: RequestInit) =>
-    request<T>(
-      path,
-      {
-        ...options,
-        method: 'POST',
-        body: body === undefined ? undefined : JSON.stringify(body),
-      },
-      false,
-    ),
-  delete: <T>(path: string, options?: RequestInit) =>
-    request<T>(path, { ...options, method: 'DELETE' }, false),
-}
+export const rawApiClient = makeClient({ convertKeys: false })
