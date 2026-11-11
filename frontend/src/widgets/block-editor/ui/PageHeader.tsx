@@ -18,6 +18,7 @@ import {
   registerOpenEditor,
 } from '#/entities/item'
 import type { Item } from '#/entities/item'
+import { useLatest } from '#/shared/hooks/useLatest'
 import { formatDate } from '#/shared/lib/format'
 import { SAVE_DELAY_MS } from '../model/pageSaver'
 
@@ -106,10 +107,7 @@ export function PageHeader({
   const [savingTitle, setSavingTitle] = React.useState(false)
   const timer = React.useRef<ReturnType<typeof setTimeout>>(undefined)
   const pendingName = React.useRef<string | null>(null)
-  const onSaveRef = React.useRef(onSave)
-  React.useEffect(() => {
-    onSaveRef.current = onSave
-  })
+  const onSaveRef = useLatest(onSave)
 
   const flushName = React.useCallback(async () => {
     clearTimeout(timer.current)
@@ -122,7 +120,7 @@ export function PageHeader({
     } finally {
       setSavingTitle(false)
     }
-  }, [])
+  }, [onSaveRef])
   React.useEffect(() => {
     const unregister = registerOpenEditor({ pageId: page.id, flush: flushName })
     return () => {

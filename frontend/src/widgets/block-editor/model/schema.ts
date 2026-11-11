@@ -34,3 +34,4 @@ export const schema = BlockNoteSchema.create({
 export type EditorSchema = typeof schema
 export type PageEditor = typeof schema.BlockNoteEditor
 export type EditorBlock = typeof schema.Block
+export type EditorPartialBlock = typeof schema.PartialBlock
