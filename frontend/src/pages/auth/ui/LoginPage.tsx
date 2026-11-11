@@ -77,7 +77,7 @@ export function LoginPage() {
           </CardContent>
           <CardFooter className="flex-col gap-2">
             <Button type="submit" className="w-full">
-              {!isPending ? <>Login</> : <>Submiting...</>}
+              {!isPending ? <>Login</> : <>Submitting...</>}
             </Button>
             <div className="flex w-full flex-row items-center justify-between">
               <a

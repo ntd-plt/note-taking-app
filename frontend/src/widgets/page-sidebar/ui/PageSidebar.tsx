@@ -7,6 +7,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { showUndoToast } from '#/shared/ui/undoToast'
 import { openSettings } from '#/shared/lib/settingsDialog'
+import { errorMessage } from '#/shared/lib/errors'
 import {
   ChevronRight,
   ChevronsUpDown,
@@ -18,12 +19,10 @@ import {
   PanelLeft,
   PanelLeftClose,
   Plus,
-  Search,
   Settings,
   Star,
   StarOff,
   Trash2,
-  User,
 } from 'lucide-react'
 import { logout, logoutAll } from '#/shared/api'
 import { endSession, useSession } from '#/shared/hooks/useSession'
@@ -120,7 +119,7 @@ function AccountMenu() {
     try {
       await (everywhere ? logoutAll() : logout())
     } catch (err) {
-      toast.error(`Couldn't log out: ${(err as Error).message}`)
+      toast.error(`Couldn't log out: ${errorMessage(err)}`)
       return
     }
     endSession(queryClient)
@@ -143,13 +142,6 @@ function AccountMenu() {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="start" sideOffset={6}>
-          <DropdownMenuItem
-            className="cursor-pointer px-2 py-1.5 text-xs"
-            onClick={() => void navigate({ to: '/profile' })}
-          >
-            <User className="mr-2 h-3.5 w-3.5 opacity-60" />
-            Profile Settings
-          </DropdownMenuItem>
           <DropdownMenuItem
             className="cursor-pointer px-2 py-1.5 text-xs"
             onClick={() => openSettings()}
@@ -271,7 +263,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
       ])
       await refresh(false)
     } catch (err) {
-      toast.error(`Couldn't update favorites: ${(err as Error).message}`)
+      toast.error(`Couldn't update favorites: ${errorMessage(err)}`)
     }
   }
 
@@ -283,7 +275,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
       await refresh()
       open(copy.id)
     } catch (err) {
-      toast.error(`Couldn't duplicate the page: ${(err as Error).message}`)
+      toast.error(`Couldn't duplicate the page: ${errorMessage(err)}`)
     }
   }
 
@@ -304,7 +296,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
       await refresh()
       if (reopen) open(page.id)
     } catch (err) {
-      toast.error(`Couldn't restore the page: ${(err as Error).message}`)
+      toast.error(`Couldn't restore the page: ${errorMessage(err)}`)
     }
   }
 
@@ -324,9 +316,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
         void undoTrash(page, parentId, reopen)
       })
     } catch (err) {
-      toast.error(
-        `Couldn't move the page to the trash: ${(err as Error).message}`,
-      )
+      toast.error(`Couldn't move the page to the trash: ${errorMessage(err)}`)
     }
   }
 
@@ -346,7 +336,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
       expand([parentId])
       open(id)
     } catch (err) {
-      toast.error(`Couldn't add a page: ${(err as Error).message}`)
+      toast.error(`Couldn't add a page: ${errorMessage(err)}`)
     }
   }
 
@@ -375,7 +365,7 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
       await send([op])
       if (placement.kind === 'onto') expand([placement.pageId])
     } catch (err) {
-      toast.error(`Couldn't move the page: ${(err as Error).message}`)
+      toast.error(`Couldn't move the page: ${errorMessage(err)}`)
     }
   }
 

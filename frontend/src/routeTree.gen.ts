@@ -13,7 +13,6 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SignupIndexRouteImport } from './routes/signup/index'
 import { Route as LoginIndexRouteImport } from './routes/login/index'
-import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedTrashIndexRouteImport } from './routes/_authenticated/trash/index'
 import { Route as AuthenticatedItemsIndexRouteImport } from './routes/_authenticated/items/index'
 import { Route as AuthenticatedTrashItemIdRouteImport } from './routes/_authenticated/trash/$itemId'
@@ -37,11 +36,6 @@ const LoginIndexRoute = LoginIndexRouteImport.update({
   id: '/login/',
   path: '/login/',
   getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedTrashIndexRoute = AuthenticatedTrashIndexRouteImport.update({
   id: '/trash/',
@@ -68,7 +62,6 @@ const AuthenticatedItemsItemIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/profile': typeof AuthenticatedProfileRoute
   '/login/': typeof LoginIndexRoute
   '/signup/': typeof SignupIndexRoute
   '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
@@ -78,7 +71,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/profile': typeof AuthenticatedProfileRoute
   '/login': typeof LoginIndexRoute
   '/signup': typeof SignupIndexRoute
   '/items/$itemId': typeof AuthenticatedItemsItemIdRoute
@@ -90,7 +82,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
-  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/login/': typeof LoginIndexRoute
   '/signup/': typeof SignupIndexRoute
   '/_authenticated/items/$itemId': typeof AuthenticatedItemsItemIdRoute
@@ -102,7 +93,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/profile'
     | '/login/'
     | '/signup/'
     | '/items/$itemId'
@@ -112,7 +102,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/profile'
     | '/login'
     | '/signup'
     | '/items/$itemId'
@@ -123,7 +112,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
-    | '/_authenticated/profile'
     | '/login/'
     | '/signup/'
     | '/_authenticated/items/$itemId'
@@ -169,13 +157,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/profile': {
-      id: '/_authenticated/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof AuthenticatedProfileRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/trash/': {
       id: '/_authenticated/trash/'
       path: '/trash'
@@ -208,7 +189,6 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
-  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedItemsItemIdRoute: typeof AuthenticatedItemsItemIdRoute
   AuthenticatedTrashItemIdRoute: typeof AuthenticatedTrashItemIdRoute
   AuthenticatedItemsIndexRoute: typeof AuthenticatedItemsIndexRoute
@@ -216,7 +196,6 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
-  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedItemsItemIdRoute: AuthenticatedItemsItemIdRoute,
   AuthenticatedTrashItemIdRoute: AuthenticatedTrashItemIdRoute,
   AuthenticatedItemsIndexRoute: AuthenticatedItemsIndexRoute,

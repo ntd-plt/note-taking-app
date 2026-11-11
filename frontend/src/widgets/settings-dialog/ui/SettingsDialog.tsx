@@ -2,7 +2,7 @@
 // listed on the left and the chosen one on the right. Only Appearance exists
 // for now. Changes apply at once; there is no Save.
 import type * as React from 'react'
-import { Monitor, Moon, Palette, Search, Sun } from 'lucide-react'
+import { Palette, Search } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Dialog,
@@ -20,7 +20,7 @@ import { ToggleGroup, ToggleGroupItem } from '#/components/ui/toggle-group'
 import { cn } from '#/lib/utils'
 import { useSettingsDialog } from '#/shared/lib/settingsDialog'
 import type { SettingsSection } from '#/shared/lib/settingsDialog'
-import { useTheme } from '#/shared/lib/theme'
+import { THEME_OPTIONS, useTheme } from '#/shared/lib/theme'
 import type { ThemePreference } from '#/shared/lib/theme'
 
 // Each section with its panel. A new section is one more entry here.
@@ -96,16 +96,6 @@ export function SettingsDialog() {
     </Dialog>
   )
 }
-
-const THEME_OPTIONS: Array<{
-  value: ThemePreference
-  label: string
-  icon: LucideIcon
-}> = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
-]
 
 function AppearanceSection() {
   const preference = useTheme((s) => s.preference)

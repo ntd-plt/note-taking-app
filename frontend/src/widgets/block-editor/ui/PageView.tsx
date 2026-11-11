@@ -6,6 +6,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { applyOps, itemKeys, useItem } from '#/entities/item'
 import type { Item, Op } from '#/entities/item'
+import { errorMessage } from '#/shared/lib/errors'
 import { BlockEditor } from './BlockEditor'
 import { PageHeader } from './PageHeader'
 
@@ -41,7 +42,8 @@ export function PageView({ itemId, trashBanner }: PageViewProps) {
     (err: unknown) => {
       if (reloading.current) return
       reloading.current = true
-      const reason = err instanceof Error ? `: ${err.message}` : ''
+      const message = errorMessage(err)
+      const reason = message ? `: ${message}` : ''
       toast.error(`Couldn't save your changes${reason}. The page was reloaded.`)
       void queryClient
         .invalidateQueries({ queryKey: itemKeys.item(itemId) })

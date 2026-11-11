@@ -2,6 +2,8 @@
 // that resolves to now. The pick is saved per browser in localStorage. The
 // inline script in index.html applies it before first paint, so keep the key,
 // the values and the colors here in step with that script.
+import { Monitor, Moon, Sun } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { create } from 'zustand'
 
 export type ThemePreference = 'light' | 'dark' | 'system'
@@ -16,7 +18,18 @@ export const THEME_COLORS: Record<ResolvedTheme, string> = {
   dark: '#0c0a09',
 }
 
-const PREFERENCES: readonly ThemePreference[] = ['light', 'dark', 'system']
+// The choices shown in the theme menu and the settings popup.
+export const THEME_OPTIONS: ReadonlyArray<{
+  value: ThemePreference
+  label: string
+  icon: LucideIcon
+}> = [
+  { value: 'light', label: 'Light', icon: Sun },
+  { value: 'dark', label: 'Dark', icon: Moon },
+  { value: 'system', label: 'System', icon: Monitor },
+]
+
+const PREFERENCES = THEME_OPTIONS.map((o) => o.value)
 
 // readPreference returns the saved pick, or 'system' when there is none or it
 // is not one we know.
