@@ -1,19 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-
-import useSignup from '../api/useSignup'
 import { PencilIcon } from 'lucide-react'
+import { Button } from '#/components/ui/button'
 import { getAuthErrorMessage } from '#/shared/lib/auth_errors'
+import useSignup from '../api/useSignup'
+import { AuthCard } from './AuthCard'
+import { FormField } from './FormField'
 
 export function SignupPage() {
   const navigate = useNavigate()
@@ -22,97 +14,63 @@ export function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  async function handleSignup() {
+  function handleSignup() {
     if (username && email && password) {
       mutate(
-        {
-          username,
-          email,
-          password,
-        },
-        {
-          onSuccess: () => {
-            navigate({ to: '/items' })
-          },
-        },
+        { username, email, password },
+        { onSuccess: () => void navigate({ to: '/items' }) },
       )
     }
   }
 
   return (
-    <form action={handleSignup} className="w-full">
-      <div className="flex min-h-screen items-center justify-center">
-        <Card className="w-full max-w-sm">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Create a new account</CardTitle>
-              <div>
-                <PencilIcon size={24} />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {error && (
-              <div className="mb-4 text-sm text-destructive">
-                {getAuthErrorMessage(error, { serverMessageFor400: true })}
-              </div>
-            )}
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="username">Username</Label>
-                <Input
-                  id="username"
-                  maxLength={50}
-                  type="text"
-                  name="username"
-                  placeholder="johndoe"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  name="email"
-                  placeholder="m@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  name="password"
-                  id="password"
-                  minLength={6}
-                  maxLength={72}
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter className="flex-col gap-2">
-            <Button type="submit" className="w-full">
-              {!isPending ? <>Sign Up</> : <>Submitting...</>}
-            </Button>
-            <div className="flex w-full flex-row items-center justify-between mt-2">
-              <span className="text-sm text-muted-foreground">
-                Already have an account?
-              </span>
-              <Button variant="link" asChild>
-                <Link to="/login">Login</Link>
-              </Button>
-            </div>
-          </CardFooter>
-        </Card>
-      </div>
-    </form>
+    <AuthCard
+      title="Create a new account"
+      icon={<PencilIcon size={24} />}
+      onSubmit={handleSignup}
+      error={error && getAuthErrorMessage(error, { serverMessageFor400: true })}
+      submitLabel="Sign Up"
+      pending={isPending}
+      footer={
+        <>
+          <span className="text-sm text-muted-foreground">
+            Already have an account?
+          </span>
+          <Button variant="link" asChild>
+            <Link to="/login">Login</Link>
+          </Button>
+        </>
+      }
+    >
+      <FormField
+        id="username"
+        label="Username"
+        maxLength={50}
+        type="text"
+        placeholder="johndoe"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        required
+      />
+      <FormField
+        id="email"
+        label="Email"
+        type="email"
+        placeholder="m@example.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        required
+      />
+      <FormField
+        id="password"
+        label="Password"
+        minLength={6}
+        maxLength={72}
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+      />
+    </AuthCard>
   )
 }

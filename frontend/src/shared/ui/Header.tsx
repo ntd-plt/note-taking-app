@@ -33,7 +33,38 @@ interface HeaderProps {
   onLogout?: () => void
 }
 
+type NavLinkTo = '/' | '/items'
+
+type NavItem = { label: string; signedInOnly?: boolean } & (
+  | {
+      to: NavLinkTo
+      // On wide screens the item opens this menu instead of linking.
+      menu?: Array<{ label: string; description: string; to: NavLinkTo }>
+    }
+  | { onClick: () => void }
+)
+
+// The main navigation, shown in the top bar on wide screens and along the
+// bottom on narrow ones.
+const NAV_ITEMS: NavItem[] = [
+  { label: 'Home', to: '/' },
+  {
+    label: 'Notes',
+    to: '/items',
+    menu: [
+      {
+        label: 'All Notes',
+        description: 'View and manage all your notes',
+        to: '/items',
+      },
+      { label: 'Create Note', description: 'Create a new note', to: '/items' },
+    ],
+  },
+  { label: 'Settings', onClick: () => openSettings(), signedInOnly: true },
+]
+
 export function Header({ className, user = null, onLogout }: HeaderProps) {
+  const navItems = NAV_ITEMS.filter((item) => user || !item.signedInOnly)
   return (
     <header
       className={cn(
@@ -59,64 +90,57 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
         {/* Navigation */}
         <NavigationMenu className="hidden md:flex">
           <NavigationMenuList>
-            <NavigationMenuItem>
-              <NavigationMenuLink asChild>
-                <Link
-                  to="/"
-                  className="flex items-center gap-1.5 rounded-2xl p-3 text-sm font-medium transition-all"
-                >
-                  Home
-                </Link>
-              </NavigationMenuLink>
-            </NavigationMenuItem>
-            <NavigationMenuItem>
-              <NavigationMenuTrigger className="text-sm font-medium">
-                Notes
-              </NavigationMenuTrigger>
-              <NavigationMenuContent>
-                <ul className="grid w-64 p-2">
-                  <li>
-                    <NavigationMenuLink asChild>
+            {navItems.map((item) => (
+              <NavigationMenuItem key={item.label}>
+                {'to' in item && item.menu ? (
+                  <>
+                    <NavigationMenuTrigger className="text-sm font-medium">
+                      {item.label}
+                    </NavigationMenuTrigger>
+                    <NavigationMenuContent>
+                      <ul className="grid w-64 p-2">
+                        {item.menu.map((entry) => (
+                          <li key={entry.label}>
+                            <NavigationMenuLink asChild>
+                              <Link
+                                to={entry.to}
+                                className="block select-none rounded-md p-3 hover:bg-muted"
+                              >
+                                <div className="text-sm font-medium">
+                                  {entry.label}
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {entry.description}
+                                </p>
+                              </Link>
+                            </NavigationMenuLink>
+                          </li>
+                        ))}
+                      </ul>
+                    </NavigationMenuContent>
+                  </>
+                ) : (
+                  <NavigationMenuLink asChild>
+                    {'to' in item ? (
                       <Link
-                        to="/items"
-                        className="block select-none rounded-md p-3 hover:bg-muted"
+                        to={item.to}
+                        className="flex items-center gap-1.5 rounded-2xl p-3 text-sm font-medium transition-all"
                       >
-                        <div className="text-sm font-medium">All Notes</div>
-                        <p className="text-sm text-muted-foreground">
-                          View and manage all your notes
-                        </p>
+                        {item.label}
                       </Link>
-                    </NavigationMenuLink>
-                  </li>
-                  <li>
-                    <NavigationMenuLink asChild>
-                      <Link
-                        to="/items"
-                        className="block select-none rounded-md p-3 hover:bg-muted"
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={item.onClick}
+                        className="flex cursor-pointer items-center gap-1.5 rounded-2xl p-3 text-sm font-medium transition-all"
                       >
-                        <div className="text-sm font-medium">Create Note</div>
-                        <p className="text-sm text-muted-foreground">
-                          Create a new note
-                        </p>
-                      </Link>
-                    </NavigationMenuLink>
-                  </li>
-                </ul>
-              </NavigationMenuContent>
-            </NavigationMenuItem>
-            {user && (
-              <NavigationMenuItem>
-                <NavigationMenuLink asChild>
-                  <button
-                    type="button"
-                    onClick={() => openSettings()}
-                    className="flex cursor-pointer items-center gap-1.5 rounded-2xl p-3 text-sm font-medium transition-all"
-                  >
-                    Settings
-                  </button>
-                </NavigationMenuLink>
+                        {item.label}
+                      </button>
+                    )}
+                  </NavigationMenuLink>
+                )}
               </NavigationMenuItem>
-            )}
+            ))}
           </NavigationMenuList>
         </NavigationMenu>
 
@@ -181,42 +205,38 @@ export function Header({ className, user = null, onLogout }: HeaderProps) {
       <div className="md:hidden border-t border-border">
         <div className="container mx-auto px-4 py-2">
           <nav className="flex items-center justify-around">
-            <Link
-              to="/"
-              className="flex flex-col items-center p-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-              activeProps={{
-                className: 'text-foreground',
-              }}
-            >
-              <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center mb-1">
-                <span className="text-primary font-bold text-xs">H</span>
-              </div>
-              Home
-            </Link>
-            <Link
-              to="/items"
-              className="flex flex-col items-center p-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-              activeProps={{
-                className: 'text-foreground',
-              }}
-            >
-              <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center mb-1">
-                <span className="text-primary font-bold text-xs">N</span>
-              </div>
-              Notes
-            </Link>
-            {user && (
-              <button
-                type="button"
-                onClick={() => openSettings()}
-                className="flex cursor-pointer flex-col items-center p-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-              >
+            {navItems.map((item) => {
+              const badge = (
                 <div className="h-6 w-6 rounded-md bg-primary/10 flex items-center justify-center mb-1">
-                  <span className="text-primary font-bold text-xs">S</span>
+                  <span className="text-primary font-bold text-xs">
+                    {item.label.charAt(0)}
+                  </span>
                 </div>
-                Settings
-              </button>
-            )}
+              )
+              return 'to' in item ? (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  className="flex flex-col items-center p-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                  activeProps={{
+                    className: 'text-foreground',
+                  }}
+                >
+                  {badge}
+                  {item.label}
+                </Link>
+              ) : (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.onClick}
+                  className="flex cursor-pointer flex-col items-center p-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  {badge}
+                  {item.label}
+                </button>
+              )
+            })}
           </nav>
         </div>
       </div>

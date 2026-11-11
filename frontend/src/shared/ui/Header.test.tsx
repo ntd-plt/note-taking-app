@@ -38,6 +38,14 @@ describe('Header', () => {
     expect(screen.getByRole('button', { name: 'Theme' })).toBeTruthy()
   })
 
+  it('links Home and Notes in both navs, and no Profile', () => {
+    render(<Header user={user} />)
+
+    expect(screen.getAllByRole('link', { name: /Home/ })).toHaveLength(2)
+    expect(screen.getByRole('link', { name: /^N\s*Notes$/ })).toBeTruthy()
+    expect(screen.queryByText(/Profile/)).toBeNull()
+  })
+
   it('opens the settings popup from the nav when logged in', () => {
     vi.useFakeTimers()
     try {

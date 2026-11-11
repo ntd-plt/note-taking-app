@@ -5,7 +5,6 @@ import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '#/components/ui/button'
-import { SidebarInset, SidebarProvider } from '#/components/ui/sidebar'
 import {
   pageIcon,
   pageName,
@@ -16,7 +15,7 @@ import {
 } from '#/entities/item'
 import type { Item } from '#/entities/item'
 import { PageView } from '#/widgets/block-editor'
-import { PageSidebar } from '#/widgets/page-sidebar'
+import { AppShell } from '#/widgets/page-sidebar'
 import { errorMessage } from '#/shared/lib/errors'
 import { formatDate } from '#/shared/lib/format'
 import { ConfirmDialog } from '#/shared/ui/ConfirmDialog'
@@ -234,11 +233,8 @@ function TrashPreview({ itemId }: { itemId: string }) {
 export function TrashPage() {
   const { itemId } = useParams({ strict: false })
   return (
-    <SidebarProvider>
-      <PageSidebar />
-      <SidebarInset className="flex h-screen flex-col overflow-hidden bg-background">
-        {itemId ? <TrashPreview itemId={itemId} /> : <TrashList />}
-      </SidebarInset>
-    </SidebarProvider>
+    <AppShell>
+      {itemId ? <TrashPreview itemId={itemId} /> : <TrashList />}
+    </AppShell>
   )
 }
