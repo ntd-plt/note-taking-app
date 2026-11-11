@@ -27,8 +27,8 @@ env: ## Create .env from .env.example if missing
 	@test -f .env || cp .env.example .env
 
 tools: ## Install swag (Swagger generator) and migrate (schema migrations) CLIs
-	go install github.com/swaggo/swag/cmd/swag@latest
-	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	go install github.com/swaggo/swag/cmd/swag@v1.16.6
+	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
 
 tidy: ## Download and tidy Go module dependencies
 	go mod download
@@ -44,10 +44,10 @@ db-drop: env ## Drop the Postgres database named in .env (POSTGRES_DB), terminat
 	@. ./.env; PGPASSWORD=$$POSTGRES_PASSWORD psql -h $$POSTGRES_HOST -p $$POSTGRES_PORT -U $$POSTGRES_USER -d postgres -c "DROP DATABASE IF EXISTS $$POSTGRES_DB;"
 
 migrate-up: env ## Apply all pending SQL migrations
-	@. ./.env; $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@$$POSTGRES_HOST:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable" up
+	@URL=$$(go run ./cmd/dburl -sslmode=disable) && $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "$$URL" up
 
 migrate-down: env ## Roll back the most recent migration
-	@. ./.env; $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@$$POSTGRES_HOST:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable" down 1
+	@URL=$$(go run ./cmd/dburl -sslmode=disable) && $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "$$URL" down 1
 
 migrate-create: ## Create a new migration pair: make migrate-create name=add_something
 	@test -n "$(name)" || (echo "usage: make migrate-create name=<migration_name>"; exit 1)

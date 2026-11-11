@@ -6,7 +6,7 @@ services:
     plan: free # Zero cost for staging
     buildCommand: |
       cd backend
-      go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+      go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
       go build -o bin/server ./cmd/server
     startCommand: |
       cd backend

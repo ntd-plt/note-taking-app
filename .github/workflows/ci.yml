@@ -37,6 +37,18 @@ jobs:
           cd backend
           go mod download
 
+      - name: Check Formatting
+        run: |
+          cd backend
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "Run gofmt on:"; echo "$unformatted"; exit 1; fi
+
+      - name: Check Swagger Docs Are Up To Date
+        run: |
+          cd backend
+          go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g cmd/server/main.go --output docs --parseDependency --parseInternal
+          git diff --exit-code docs/ || (echo "Swagger docs are stale: run make swagger and commit the result"; exit 1)
+
       - name: Run Vet
         run: |
           cd backend
