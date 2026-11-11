@@ -11,15 +11,10 @@ import (
 	"backend/internal/apperr"
 	"backend/internal/database"
 	"backend/internal/model"
+	"backend/internal/testutil"
 
 	"github.com/google/uuid"
 )
-
-func ptr[T any](v T) *T { return &v }
-
-func runs(s string) []any {
-	return []any{map[string]any{"type": "text", "text": s, "styles": map[string]any{}}}
-}
 
 // sameJSON compares values by their JSON form, since JSONB does not keep Go types
 // (ints come back as float64).
@@ -30,14 +25,6 @@ func sameJSON(a, b any) bool {
 	_ = json.Unmarshal(x, &u)
 	_ = json.Unmarshal(y, &v)
 	return reflect.DeepEqual(u, v)
-}
-
-func pageOp(id, parent uuid.UUID, pos *int, name string) model.Op {
-	return model.Op{Op: model.OpCreate, ID: id, Type: ptr(model.ItemTypePage), ParentID: &parent, Position: pos, Props: model.Props{"name": name}}
-}
-
-func blockOp(id, parent uuid.UUID, pos *int, s string) model.Op {
-	return model.Op{Op: model.OpCreate, ID: id, Type: ptr(model.ItemTypeParagraph), ParentID: &parent, Position: pos, Props: model.Props{"content": runs(s)}}
 }
 
 func mustGet(t *testing.T, db *database.PostgreItemsDataSource, user, id uuid.UUID) model.Item {
@@ -56,10 +43,10 @@ func TestPostgresApplyOps(t *testing.T) {
 	page, a, b, child := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 
 	if err := db.ApplyOps(ctx, me, []model.Op{
-		pageOp(page, ws, nil, "Page"),
-		blockOp(b, page, nil, "b"),
-		blockOp(a, page, ptr(0), "a"),
-		pageOp(child, b, nil, "Child"),
+		testutil.CreatePage(page, ws, nil, "Page"),
+		testutil.CreateBlock(b, page, nil, model.ItemTypeParagraph, "b"),
+		testutil.CreateBlock(a, page, testutil.Ptr(0), model.ItemTypeParagraph, "a"),
+		testutil.CreatePage(child, b, nil, "Child"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -69,8 +56,8 @@ func TestPostgresApplyOps(t *testing.T) {
 	before := mustGet(t, db, me, a)
 
 	if err := db.ApplyOps(ctx, me, []model.Op{
-		{Op: model.OpUpdate, ID: b, Type: ptr(model.ItemTypeHeading), Props: model.Props{"level": 1, "textColor": "red"}},
-		{Op: model.OpMove, ID: b, ParentID: &page, Position: ptr(0)},
+		{Op: model.OpUpdate, ID: b, Type: testutil.Ptr(model.ItemTypeHeading), Props: model.Props{"level": 1, "textColor": "red"}},
+		{Op: model.OpMove, ID: b, ParentID: &page, Position: testutil.Ptr(0)},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +67,7 @@ func TestPostgresApplyOps(t *testing.T) {
 	if after := mustGet(t, db, me, a); !after.UpdatedAt.Equal(before.UpdatedAt) {
 		t.Error("an untouched block got a new updated_at")
 	}
-	want := model.Props{"content": runs("b"), "level": 1, "textColor": "red"}
+	want := model.Props{"content": model.TextContent("b"), "level": 1, "textColor": "red"}
 	if got := mustGet(t, db, me, b); got.Type != model.ItemTypeHeading || !sameJSON(got.Props, want) {
 		t.Errorf("turn into = %+v, want props %v", got, want)
 	}
@@ -111,14 +98,14 @@ func TestPostgresApplyOpsRollsBack(t *testing.T) {
 	me := newUser(t, pool)
 	ws := workspaceOf(t, db, me).ID
 	page, a := uuid.New(), uuid.New()
-	if err := db.ApplyOps(ctx, me, []model.Op{pageOp(page, ws, nil, "Page"), blockOp(a, page, nil, "a")}); err != nil {
+	if err := db.ApplyOps(ctx, me, []model.Op{testutil.CreatePage(page, ws, nil, "Page"), testutil.CreateBlock(a, page, nil, model.ItemTypeParagraph, "a")}); err != nil {
 		t.Fatal(err)
 	}
 
 	added := uuid.New()
 	err := db.ApplyOps(ctx, me, []model.Op{
-		blockOp(added, page, nil, "added"),
-		{Op: model.OpUpdate, ID: a, Props: model.Props{"content": runs("changed")}},
+		testutil.CreateBlock(added, page, nil, model.ItemTypeParagraph, "added"),
+		{Op: model.OpUpdate, ID: a, Props: model.Props{"content": model.TextContent("changed")}},
 		{Op: model.OpMove, ID: page, ParentID: &a},
 	})
 	if te, ok := apperr.As(err); !ok || te.Kind != apperr.Conflict || te.OpIndex == nil || *te.OpIndex != 2 {
@@ -127,7 +114,7 @@ func TestPostgresApplyOpsRollsBack(t *testing.T) {
 	if _, err := db.GetItem(ctx, me, added); !isNotFound(err) {
 		t.Error("the create before the rejected op was kept")
 	}
-	if got := mustGet(t, db, me, a); !sameJSON(got.Props["content"], runs("a")) {
+	if got := mustGet(t, db, me, a); !sameJSON(got.Props["content"], model.TextContent("a")) {
 		t.Error("the update before the rejected op was kept")
 	}
 	if got := mustGet(t, db, me, page).ChildIDs; !slices.Equal(got, []uuid.UUID{a}) {
@@ -145,7 +132,7 @@ func TestPostgresApplyOpsChecksChildIDs(t *testing.T) {
 	me := newUser(t, pool)
 	ws := workspaceOf(t, db, me).ID
 	page := uuid.New()
-	if err := db.ApplyOps(ctx, me, []model.Op{pageOp(page, ws, nil, "Page")}); err != nil {
+	if err := db.ApplyOps(ctx, me, []model.Op{testutil.CreatePage(page, ws, nil, "Page")}); err != nil {
 		t.Fatal(err)
 	}
 	// A child the page does not list: any batch touching the page must fail.
@@ -153,7 +140,7 @@ func TestPostgresApplyOpsChecksChildIDs(t *testing.T) {
 		"INSERT INTO items (id, user_id, parent_id, type) VALUES ($1, $2, $3, 'paragraph')", uuid.New(), me, page); err != nil {
 		t.Fatal(err)
 	}
-	err := db.ApplyOps(ctx, me, []model.Op{blockOp(uuid.New(), page, nil, "x")})
+	err := db.ApplyOps(ctx, me, []model.Op{testutil.CreateBlock(uuid.New(), page, nil, model.ItemTypeParagraph, "x")})
 	if _, isAppErr := apperr.As(err); err == nil || isAppErr {
 		t.Errorf("err = %v, want an internal child_ids error", err)
 	}
@@ -164,7 +151,7 @@ func TestPostgresConcurrentBatchesKeepChildIDs(t *testing.T) {
 	me := newUser(t, pool)
 	ws := workspaceOf(t, db, me).ID
 	page := uuid.New()
-	if err := db.ApplyOps(ctx, me, []model.Op{pageOp(page, ws, nil, "Page")}); err != nil {
+	if err := db.ApplyOps(ctx, me, []model.Op{testutil.CreatePage(page, ws, nil, "Page")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -174,7 +161,7 @@ func TestPostgresConcurrentBatchesKeepChildIDs(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs <- db.ApplyOps(ctx, me, []model.Op{blockOp(uuid.New(), page, ptr(0), "x")})
+			errs <- db.ApplyOps(ctx, me, []model.Op{testutil.CreateBlock(uuid.New(), page, testutil.Ptr(0), model.ItemTypeParagraph, "x")})
 		}()
 	}
 	wg.Wait()
@@ -195,11 +182,11 @@ func TestPostgresDuplicate(t *testing.T) {
 	ws := workspaceOf(t, db, me).ID
 	page, a, child, after := uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	if err := db.ApplyOps(ctx, me, []model.Op{
-		pageOp(page, ws, nil, "Page"),
+		testutil.CreatePage(page, ws, nil, "Page"),
 		{Op: model.OpUpdate, ID: page, Props: model.Props{"is_favorite": true}},
-		blockOp(a, page, nil, "a"),
-		pageOp(child, a, nil, "Child"),
-		pageOp(after, ws, nil, "After"),
+		testutil.CreateBlock(a, page, nil, model.ItemTypeParagraph, "a"),
+		testutil.CreatePage(child, a, nil, "Child"),
+		testutil.CreatePage(after, ws, nil, "After"),
 	}); err != nil {
 		t.Fatal(err)
 	}

@@ -58,12 +58,12 @@ func ListTrash(s Store) ([]model.Item, error) {
 
 // DeleteFromTrash removes a page in the trash for good, with everything in it.
 func DeleteFromTrash(s Store, id uuid.UUID) error {
-	pages, err := s.Trashed()
+	it, err := s.Get(id)
+	if apperr.Is(err, apperr.NotFound) || err == nil && it.TrashedAt == nil {
+		return apperr.New(apperr.NotFound, "page is not in the trash")
+	}
 	if err != nil {
 		return err
-	}
-	if !slices.ContainsFunc(pages, func(p model.Item) bool { return p.ID == id }) {
-		return apperr.New(apperr.NotFound, "page is not in the trash")
 	}
 	return s.Delete(id)
 }
@@ -75,15 +75,14 @@ func EmptyTrash(s Store, before *time.Time) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	n := 0
+	var ids []uuid.UUID
 	for _, p := range pages {
-		if before != nil && !p.TrashedAt.Before(*before) {
-			continue
+		if before == nil || p.TrashedAt.Before(*before) {
+			ids = append(ids, p.ID)
 		}
-		if err := s.Delete(p.ID); err != nil {
-			return n, err
-		}
-		n++
 	}
-	return n, nil
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	return len(ids), s.DeleteMany(ids)
 }

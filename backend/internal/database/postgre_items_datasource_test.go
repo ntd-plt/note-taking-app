@@ -15,6 +15,7 @@ import (
 	"backend/internal/apperr"
 	"backend/internal/database"
 	"backend/internal/model"
+	"backend/internal/testutil"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -134,7 +135,7 @@ func mustInsert(t *testing.T, db *database.PostgreItemsDataSource, userID uuid.U
 	t.Helper()
 	ops := make([]model.Op, len(b.items))
 	for i, it := range b.items {
-		ops[i] = model.Op{Op: model.OpCreate, ID: it.ID, Type: ptr(it.Type), ParentID: it.ParentID, Props: it.Props}
+		ops[i] = model.Op{Op: model.OpCreate, ID: it.ID, Type: testutil.Ptr(it.Type), ParentID: it.ParentID, Props: it.Props}
 	}
 	if err := db.ApplyOps(ctx, userID, ops); err != nil {
 		t.Fatalf("creating: %v", err)
@@ -555,7 +556,7 @@ func TestPostgresQueriesStopWhenTheRequestIsCanceled(t *testing.T) {
 		t.Errorf("GetUserByID with a canceled context: err = %v, want context.Canceled", err)
 	}
 	ws := workspaceOf(t, db, me)
-	op := model.Op{Op: model.OpCreate, ID: uuid.New(), Type: ptr(model.ItemTypePage), ParentID: &ws.ID}
+	op := model.Op{Op: model.OpCreate, ID: uuid.New(), Type: testutil.Ptr(model.ItemTypePage), ParentID: &ws.ID}
 	if err := db.ApplyOps(canceled, me, []model.Op{op}); !errors.Is(err, context.Canceled) {
 		t.Errorf("ApplyOps with a canceled context: err = %v, want context.Canceled", err)
 	}

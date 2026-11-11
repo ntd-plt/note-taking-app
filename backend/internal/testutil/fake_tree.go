@@ -75,6 +75,15 @@ func (s *fakeTreeStore) Delete(id uuid.UUID) error {
 	return nil
 }
 
+func (s *fakeTreeStore) DeleteMany(ids []uuid.UUID) error {
+	for _, id := range ids {
+		if err := s.Delete(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *fakeTreeStore) Trashed() ([]model.Item, error) {
 	var out []model.Item
 	for _, it := range s.f.Items {

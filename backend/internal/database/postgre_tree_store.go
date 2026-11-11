@@ -70,6 +70,11 @@ func (s *pgTreeStore) Delete(id uuid.UUID) error {
 	return err
 }
 
+func (s *pgTreeStore) DeleteMany(ids []uuid.UUID) error {
+	_, err := s.tx.Exec(s.ctx, "DELETE FROM items WHERE id = ANY($1) AND user_id = $2", ids, s.userID)
+	return err
+}
+
 func (s *pgTreeStore) Trashed() ([]model.Item, error) {
 	rows, err := s.tx.Query(s.ctx, "SELECT "+itemColumns+
 		" FROM items i WHERE i.user_id = $1 AND i.type = 'page' AND i.trashed_at IS NOT NULL", s.userID)

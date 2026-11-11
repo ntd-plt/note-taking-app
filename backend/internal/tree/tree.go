@@ -38,6 +38,8 @@ type Store interface {
 	Save(it model.Item) error
 	// Delete removes an item and everything still below it.
 	Delete(id uuid.UUID) error
+	// DeleteMany is Delete for several items in one go.
+	DeleteMany(ids []uuid.UUID) error
 	// Trashed returns the pages in the trash: the ones stamped with trashed_at,
 	// not the pages inside them.
 	Trashed() ([]model.Item, error)

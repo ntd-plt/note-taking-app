@@ -183,7 +183,7 @@ func TestBuildItemsDefaultsAndText(t *testing.T) {
 	if !reflect.DeepEqual(rows[0].Props, want) {
 		t.Errorf("page props = %v, want the defaults %v", rows[0].Props, want)
 	}
-	if got := rows[1].Props; got["textColor"] != "red" || !reflect.DeepEqual(got["content"], textContent("hi")) {
+	if got := rows[1].Props; got["textColor"] != "red" || !reflect.DeepEqual(got["content"], model.TextContent("hi")) {
 		t.Errorf("paragraph props = %v", got)
 	}
 	if got := rows[2].Props; got["checked"] != false {

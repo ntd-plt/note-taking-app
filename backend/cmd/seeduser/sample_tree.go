@@ -91,13 +91,6 @@ func validateNode(n node) error {
 	return err
 }
 
-func textContent(text string) []any {
-	if text == "" {
-		return []any{}
-	}
-	return []any{map[string]any{"type": "text", "text": text, "styles": map[string]any{}}}
-}
-
 func emptyParagraph(parent uuid.UUID) model.Item {
 	props, _ := model.CompleteProps(model.ItemTypeParagraph, nil)
 	return model.Item{ID: uuid.New(), ParentID: &parent, Type: model.ItemTypeParagraph, Props: props}
@@ -114,7 +107,7 @@ func buildItems(parent uuid.UUID, nodes []node) (items []model.Item, ids []uuid.
 			if props == nil {
 				props = model.Props{}
 			}
-			props[model.PropContent] = textContent(n.Text)
+			props[model.PropContent] = model.TextContent(n.Text)
 		}
 		props, _ = model.CompleteProps(n.Type, props)
 		it := model.Item{ID: uuid.New(), ParentID: &p, Type: n.Type, Props: props}
