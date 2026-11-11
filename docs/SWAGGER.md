@@ -11,14 +11,14 @@ The backend uses [`swaggo/swag`](https://github.com/swaggo/swag) to generate an 
 ```
 backend/
 ├── cmd/server/
-│   ├── main.go          # @title/@version/@BasePath (/api/v1) + BearerAuth security scheme
+│   ├── main.go          # @title/@version/@BasePath (/api/v1) + SessionCookie security scheme
 │   └── router.go        # mounts GET /swagger/*any
-├── internal/services/
-│   ├── auth_service.go     # @Router annotations for /auth/*
-│   ├── user_service.go     # @Router annotations for /users/me
-│   ├── items_service.go    # @Router annotations for /items/:id, /workspace, /pages
-│   ├── ops_service.go      # @Router annotations for /ops and /items/:id/duplicate, ApplyOpsRequest
-│   └── trash_service.go    # @Router annotations for /trash*, TrashResponse
+├── internal/handlers/      # the HTTP layer: annotations live next to the handlers
+│   ├── auth.go             # /auth/*, LoginRequest, SignupRequest
+│   ├── users.go            # /users/me, UserResponse, UpdateUserRequest
+│   ├── pages.go            # /items/:id, /workspace, /pages, ItemResponse
+│   ├── ops.go              # /ops and /items/:id/duplicate, ApplyOpsRequest
+│   └── trash.go            # /trash*, TrashResponse
 └── docs/                 # generated — do not edit by hand
     ├── docs.go           # embeds the spec, imported for side effects in router.go
     ├── swagger.json
@@ -40,10 +40,13 @@ Then open **http://localhost:8080/swagger/index.html**. Requires a running Postg
 
 ## Dev-only: the UI is not served in production
 
-`router.NewRouter` takes an `enableSwagger bool` and only registers `GET /swagger/*any` when it's `true`. `main.go` derives this from config:
+`NewRouter` takes `RouterDeps.EnableSwagger` and only registers `GET /swagger/*any` when it's `true`. `main.go` derives this from config:
 
 ```go
-router := NewRouter(authService, userService, itemsService, tokenService, cfg.IsDevelopment())
+router, err := NewRouter(RouterDeps{
+	// ...
+	EnableSwagger: cfg.IsDevelopment(),
+})
 ```
 
 This is driven by the `APP_ENV` env var (`internal/configs/config.go`):
@@ -90,7 +93,7 @@ _ "backend/docs"
    // @Tags         widgets
    // @Accept       json
    // @Produce      json
-   // @Security     BearerAuth
+   // @Security     SessionCookie
    // @Param        request  body      CreateWidgetRequest  true  "Widget to create"
    // @Success      201      {object}  model.Widget
    // @Failure      400      {object}  map[string]string
@@ -99,7 +102,7 @@ _ "backend/docs"
    func (h *WidgetsHandler) CreateWidget(c *gin.Context) { ... }
    ```
 
-3. Omit `@Security BearerAuth` for routes outside the `protected` group (`/auth/*`).
+3. Omit `@Security SessionCookie` for public routes (`/auth/login`, `/auth/signup`, `/auth/logout`).
 4. Run `make swagger` and confirm the new path shows up in `docs/swagger.json`.
 
 ---
@@ -109,4 +112,4 @@ _ "backend/docs"
 - **`swag` CLI vs. `swaggo/swag` library version must match.** The generated `docs.go` uses fields (`LeftDelim`/`RightDelim` on `swag.Spec`) that only exist in newer `swaggo/swag` releases. `make tools` keeps the CLI binary current, but not the library dependency recorded in `go.mod` — if `go build`/`make build` fails on `docs/docs.go` with "unknown field" errors, run `go get github.com/swaggo/swag@latest github.com/swaggo/gin-swagger@latest` once to bring the library dependency in line with the CLI version, then `make tidy`.
 - **`@Router` paths are relative to the base path.** `main.go` sets `@BasePath /api/v1`, so annotate `/items`, not `/api/v1/items`.
 - **Only routed endpoints are annotated.** Don't annotate a handler that isn't wired into `router.go` — it would document a route that doesn't exist.
-- **Auth scheme**: JWT is passed as `Authorization: Bearer <token>`, declared once in `main.go` via `@securityDefinitions.apikey BearerAuth`, and referenced per-route with `@Security BearerAuth`.
+- **Auth scheme**: the session id travels in the `sid` cookie, declared once in `main.go` via `@securityDefinitions.apikey SessionCookie` (`@in cookie`) and referenced per-route with `@Security SessionCookie`. Swagger UI can't set that cookie itself: call `POST /auth/login` (or `/auth/signup`) from the UI first, and the browser sends the cookie on the following requests, because the UI is served from the API's own origin.

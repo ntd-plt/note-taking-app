@@ -1,13 +1,10 @@
-import { apiClient } from './client'
-import type {
-  AuthState,
-  LoginCredentials,
-  RegisterCredentials,
-  AuthResponse,
-  User,
-} from '../models'
+// Login, signup and logout against the backend's session cookie. The browser
+// keeps the cookie (HttpOnly, so this code never sees it); who is logged in is
+// always asked of the server through GET /users/me.
+import { ApiError, apiClient } from './client'
+import type { LoginCredentials, SignupCredentials, User } from '../models'
 
-// client has camelized the snake_case keys.
+// The user as the API returns it, after the client camelized its keys.
 interface UserApiResponse {
   id: string
   name: string
@@ -16,164 +13,47 @@ interface UserApiResponse {
   updatedAt?: string
 }
 
-/**
- * Fetches the authenticated user's profile from the backend and maps it onto
- * the frontend User shape (backend `name` -> `username`).
- */
-export async function fetchCurrentUser(): Promise<User> {
-  const data = await apiClient.get<UserApiResponse>('/api/v1/users/me')
-  return {
-    id: data.id,
-    username: data.name,
-    email: data.email,
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-  }
-}
+const toUser = (data: UserApiResponse): User => ({
+  id: data.id,
+  username: data.name,
+  email: data.email,
+  createdAt: data.createdAt,
+  updatedAt: data.updatedAt,
+})
 
-function decodeJwt(token: string): any {
+// fetchCurrentUser returns the logged-in user, or null when there is no live
+// session.
+export async function fetchCurrentUser(): Promise<User | null> {
   try {
-    const base64Url = token.split('.')[1]
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
-    const jsonPayload = decodeURIComponent(
-      window
-        .atob(base64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join(''),
-    )
-    return JSON.parse(jsonPayload)
-  } catch (e) {
-    return null
-  }
-}
-
-export async function validateSession(): Promise<AuthState> {
-  try {
-    const token = localStorage.getItem('auth_token')
-    if (!token) {
-      return {
-        user: null,
-        isAuthenticated: false,
-      }
-    }
-
-    const decoded = decodeJwt(token)
-    if (!decoded || (decoded.exp && decoded.exp * 1000 < Date.now())) {
-      localStorage.removeItem('auth_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('user_profile')
-      return {
-        user: null,
-        isAuthenticated: false,
-      }
-    }
-
-    let user = null
-    const profileStr = localStorage.getItem('user_profile')
-    if (profileStr) {
-      try {
-        user = JSON.parse(profileStr)
-      } catch {}
-    }
-
-    if (!user) {
-      user = {
-        id: decoded.user_id || 'abc-123',
-        username: 'user',
-        email: 'user@example.com',
-      }
-      localStorage.setItem('user_profile', JSON.stringify(user))
-    }
-
-    return {
-      user,
-      isAuthenticated: true,
-    }
+    return toUser(await apiClient.get<UserApiResponse>('/api/v1/users/me'))
   } catch (error) {
-    console.error('Session validation failed:', error)
-  }
-  return {
-    user: null,
-    isAuthenticated: false,
+    if (error instanceof ApiError && error.status === 401) return null
+    throw error
   }
 }
 
-export async function login(
-  credentials: LoginCredentials,
-): Promise<AuthResponse> {
-  const data = await apiClient.post<{
-    accessToken: string
-    refreshToken: string
-  }>('/api/v1/auth/login', credentials)
-  if (data.accessToken) {
-    localStorage.setItem('auth_token', data.accessToken)
-    if (data.refreshToken) {
-      localStorage.setItem('refresh_token', data.refreshToken)
-    }
+export async function login(credentials: LoginCredentials): Promise<User> {
+  return toUser(
+    await apiClient.post<UserApiResponse>('/api/v1/auth/login', credentials),
+  )
+}
 
-    const decoded = decodeJwt(data.accessToken)
-    const userId = decoded?.user_id || 'abc-123'
-
-    // Pull the real profile from the backend before the session starts, so
-    // the app enters with the persisted name/email instead of values guessed
-    // from the login form. Fall back to those guesses if the call fails.
-    let user: User = {
-      id: userId,
-      username: credentials.email.split('@')[0],
+export async function signup(credentials: SignupCredentials): Promise<User> {
+  return toUser(
+    await apiClient.post<UserApiResponse>('/api/v1/auth/signup', {
+      name: credentials.username,
       email: credentials.email,
-    }
-    try {
-      user = await fetchCurrentUser()
-    } catch (error) {
-      console.error('Failed to load user profile after login:', error)
-    }
-    localStorage.setItem('user_profile', JSON.stringify(user))
-
-    return {
-      token: data.accessToken,
-      user,
-    }
-  }
-  throw new Error('Login failed')
+      password: credentials.password,
+    }),
+  )
 }
 
-export async function register(
-  credentials: RegisterCredentials,
-): Promise<AuthResponse> {
-  const payload = {
-    name: credentials.username,
-    email: credentials.email,
-    password: credentials.password,
-  }
-  const data = await apiClient.post<{
-    accessToken: string
-    refreshToken: string
-  }>('/api/v1/auth/signup', payload)
-  if (data.accessToken) {
-    localStorage.setItem('auth_token', data.accessToken)
-    if (data.refreshToken) {
-      localStorage.setItem('refresh_token', data.refreshToken)
-    }
-
-    const decoded = decodeJwt(data.accessToken)
-    const user = {
-      id: decoded?.user_id || 'abc-123',
-      username: credentials.username,
-      email: credentials.email,
-    }
-    localStorage.setItem('user_profile', JSON.stringify(user))
-
-    return {
-      token: data.accessToken,
-      user,
-    }
-  }
-  throw new Error('Registration failed')
-}
-
+// logout ends this browser's session.
 export async function logout(): Promise<void> {
-  localStorage.removeItem('auth_token')
-  localStorage.removeItem('refresh_token')
-  localStorage.removeItem('user_profile')
+  await apiClient.post<null>('/api/v1/auth/logout')
+}
+
+// logoutAll ends every session of the user, on every device.
+export async function logoutAll(): Promise<void> {
+  await apiClient.post<null>('/api/v1/auth/logout-all')
 }

@@ -4,21 +4,26 @@ import (
 	"errors"
 	"testing"
 
-	"backend/internal/pkg"
+	"backend/internal/apperr"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestTranslateErr(t *testing.T) {
-	if err := translateErr(&pgconn.PgError{Code: pgCheckViolation, ConstraintName: "items_page_props"}); !errors.Is(err, ErrInvalidItem) {
-		t.Errorf("check violation: err = %v, want ErrInvalidItem", err)
+	cases := map[string]struct {
+		code string
+		kind apperr.Kind
+		msg  string
+	}{
+		"check violation":       {pgCheckViolation, apperr.Invalid, "item is not valid"},
+		"foreign key violation": {pgForeignKeyViolation, apperr.Invalid, "parent must be one of your items"},
+		"unique violation":      {pgUniqueViolation, apperr.Conflict, "item already exists"},
 	}
-	if err := translateErr(&pgconn.PgError{Code: pgForeignKeyViolation}); !errors.Is(err, ErrInvalidParent) {
-		t.Errorf("foreign key violation: err = %v, want ErrInvalidParent", err)
-	}
-	var exists *pkg.AlreadyExistsError
-	if err := translateErr(&pgconn.PgError{Code: pgUniqueViolation}); !errors.As(err, &exists) {
-		t.Errorf("unique violation: err = %v, want AlreadyExistsError", err)
+	for name, tc := range cases {
+		e, ok := apperr.As(translateErr(&pgconn.PgError{Code: tc.code, ConstraintName: "items_page_props"}))
+		if !ok || e.Kind != tc.kind || e.Msg != tc.msg {
+			t.Errorf("%s: got %+v, want kind %v %q", name, e, tc.kind, tc.msg)
+		}
 	}
 	other := errors.New("boom")
 	if err := translateErr(other); err != other {

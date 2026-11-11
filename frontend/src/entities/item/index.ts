@@ -15,7 +15,7 @@ export {
 } from './api/itemApi'
 export {
   itemKeys,
-  changesPages,
+  invalidateTree,
   useItem,
   usePages,
   useWorkspace,
@@ -26,4 +26,4 @@ export {
   useDeleteFromTrash,
   useEmptyTrash,
 } from './api/queries'
-export type { ApplyOpsInput } from './api/queries'
+export type { ApplyOpsInput, EditorRefresh } from './api/queries'

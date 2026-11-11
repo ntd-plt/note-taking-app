@@ -1,8 +1,9 @@
 package database
 
 import (
+	"backend/internal/apperr"
 	"backend/internal/model"
-	"backend/internal/pkg"
+	"backend/internal/tree"
 	"context"
 	"errors"
 	"fmt"
@@ -13,17 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const MaxTreeDepth = tree.MaxTreeDepth
+
 const (
-	pgForeignKeyViolation = "23503"
-	pgUniqueViolation     = "23505"
-	pgCheckViolation      = "23514"
-
 	itemColumns = "i.id, i.user_id, i.parent_id, i.type, i.child_ids, i.props, i.trashed_at, i.created_at, i.updated_at"
-)
-
-var (
-	ErrInvalidParent = errors.New("parent must be one of your items")
-	ErrInvalidItem   = errors.New("item is not valid")
 )
 
 type PostgreItemsDataSource struct {
@@ -44,7 +38,7 @@ func scanItem(row pgx.Row, extra ...any) (model.Item, error) {
 	dest := append([]any{&it.ID, &it.UserID, &it.ParentID, &it.Type, &it.ChildIDs, &it.Props, &it.TrashedAt, &it.CreatedAt, &it.UpdatedAt}, extra...)
 	err := row.Scan(dest...)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return model.Item{}, pkg.NewNotFoundError("item")
+		return model.Item{}, apperr.NotFoundf("item")
 	}
 	return it, err
 }
@@ -54,23 +48,25 @@ func translateErr(err error) error {
 	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
 		case pgForeignKeyViolation:
-			return ErrInvalidParent
+			return apperr.New(apperr.Invalid, "parent must be one of your items")
 		case pgUniqueViolation:
-			return pkg.NewAlreadyExistsError("item")
+			return apperr.New(apperr.Conflict, "item already exists")
 		case pgCheckViolation:
-			return fmt.Errorf("%w: %s", ErrInvalidItem, pgErr.ConstraintName)
+			e := apperr.New(apperr.Invalid, "item is not valid")
+			e.Err = fmt.Errorf("check constraint %s", pgErr.ConstraintName)
+			return e
 		}
 	}
 	return err
 }
 
-func (db *PostgreItemsDataSource) GetWorkspace(userID uuid.UUID) (model.Item, error) {
-	return scanItem(db.conn.QueryRow(context.Background(),
+func (db *PostgreItemsDataSource) GetWorkspace(ctx context.Context, userID uuid.UUID) (model.Item, error) {
+	return scanItem(db.conn.QueryRow(ctx,
 		"SELECT "+itemColumns+" FROM items i WHERE i.user_id = $1 AND i.type = 'workspace'", userID))
 }
 
-func (db *PostgreItemsDataSource) GetItem(userID, id uuid.UUID) (model.Item, error) {
-	return getItem(context.Background(), db.conn, userID, id)
+func (db *PostgreItemsDataSource) GetItem(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
+	return getItem(ctx, db.conn, userID, id)
 }
 
 func getItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.Item, error) {
@@ -78,29 +74,28 @@ func getItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.Item, 
 		"SELECT "+itemColumns+" FROM items i WHERE i.id = $1 AND i.user_id = $2", id, userID))
 }
 
-func (db *PostgreItemsDataSource) OpenItem(userID, id uuid.UUID) (OpenedItem, error) {
-	ctx := context.Background()
+func (db *PostgreItemsDataSource) OpenItem(ctx context.Context, userID, id uuid.UUID) (model.OpenedItem, error) {
 	tx, err := db.conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var out OpenedItem
+	var out model.OpenedItem
 	if out.Location, err = resolveItem(ctx, tx, userID, id); err != nil {
-		return OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	if out.Items, err = pageTree(ctx, tx, userID, out.Location.PageID); err != nil {
-		return OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	if out.Ancestors, err = ancestors(ctx, tx, userID, out.Location.PageID); err != nil {
-		return OpenedItem{}, err
+		return model.OpenedItem{}, err
 	}
 	return out, tx.Commit(ctx)
 }
 
-func (db *PostgreItemsDataSource) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, error) {
-	return resolveItem(context.Background(), db.conn, userID, id)
+func (db *PostgreItemsDataSource) ResolveItem(ctx context.Context, userID, id uuid.UUID) (model.ItemLocation, error) {
+	return resolveItem(ctx, db.conn, userID, id)
 }
 
 func resolveItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.ItemLocation, error) {
@@ -123,14 +118,14 @@ func resolveItem(ctx context.Context, q querier, userID, id uuid.UUID) (model.It
 		return loc, err
 	}
 	if typ == nil || pageID == nil {
-		return loc, pkg.NewNotFoundError("item")
+		return loc, apperr.NotFoundf("item")
 	}
 	loc.Type, loc.PageID = *typ, *pageID
 	return loc, nil
 }
 
-func (db *PostgreItemsDataSource) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, error) {
-	return pageTree(context.Background(), db.conn, userID, pageID)
+func (db *PostgreItemsDataSource) GetPageTree(ctx context.Context, userID, pageID uuid.UUID) ([]model.Item, error) {
+	return pageTree(ctx, db.conn, userID, pageID)
 }
 
 func pageTree(ctx context.Context, q querier, userID, pageID uuid.UUID) ([]model.Item, error) {
@@ -139,7 +134,7 @@ func pageTree(ctx context.Context, q querier, userID, pageID uuid.UUID) ([]model
 		return nil, err
 	}
 	if page.Type != model.ItemTypePage {
-		return nil, pkg.NewNotFoundError("page")
+		return nil, apperr.NotFoundf("item")
 	}
 	items := []model.Item{page}
 
@@ -179,8 +174,8 @@ func collectItems(rows pgx.Rows) ([]model.Item, error) {
 	return items, rows.Err()
 }
 
-func (db *PostgreItemsDataSource) Ancestors(userID, id uuid.UUID) ([]model.Item, error) {
-	return ancestors(context.Background(), db.conn, userID, id)
+func (db *PostgreItemsDataSource) Ancestors(ctx context.Context, userID, id uuid.UUID) ([]model.Item, error) {
+	return ancestors(ctx, db.conn, userID, id)
 }
 
 func ancestors(ctx context.Context, q querier, userID, id uuid.UUID) ([]model.Item, error) {
@@ -201,12 +196,12 @@ func ancestors(ctx context.Context, q querier, userID, id uuid.UUID) ([]model.It
 	return collectItems(rows)
 }
 
-func (db *PostgreItemsDataSource) ListPages(userID uuid.UUID) ([]model.Item, error) {
+func (db *PostgreItemsDataSource) ListPages(ctx context.Context, userID uuid.UUID) ([]model.Item, error) {
 	// Start from the user's pages (idx_items_user_pages) and walk each one up to the
 	// workspace, collecting its position at every level, rather than walking down
 	// through every block. A page is left out when it or any item above it is in
 	// the trash, or when the walk never reaches the workspace.
-	rows, err := db.conn.Query(context.Background(), `
+	rows, err := db.conn.Query(ctx, `
 		WITH RECURSIVE up(page_id, cur, cur_parent, parent_page_id, path, trashed, depth) AS (
 			SELECT p.id, p.id, p.parent_id, NULL::uuid, ARRAY[]::int[], p.trashed_at IS NOT NULL, 0
 			FROM items p WHERE p.user_id = $1 AND p.type = 'page'

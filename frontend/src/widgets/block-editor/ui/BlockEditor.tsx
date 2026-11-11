@@ -22,7 +22,9 @@ import {
   restoreFromTrash,
 } from '#/entities/item'
 import type { OpenedItem, Op } from '#/entities/item'
+import { useLatest } from '#/shared/hooks/useLatest'
 import { fromBlockNote, toBlockNote } from '../model/blocks'
+import { appendChild, appendToDocument } from '../model/editorOps'
 import type { BNBlock } from '../model/blocks'
 import { PageSaver } from '../model/pageSaver'
 import type { TrashedBlock } from '../model/pageSaver'
@@ -84,29 +86,15 @@ function putBack(editor: PageEditor, pageId: string, t: TrashedBlock) {
     type: 'page' as const,
     props: t.props as { name: string; icon: string },
   }
-  const parent = t.parentId === pageId ? null : editor.getBlock(t.parentId)
-  if (parent) {
-    const last = parent.children.at(-1)
-    if (last) editor.insertBlocks([block], last, 'after')
-    else editor.updateBlock(parent, { children: [block] })
-    return
-  }
-  const doc = editor.document
-  const last = doc.at(-1)
-  if (!last) editor.replaceBlocks(doc, [block])
-  else if (isEmptyParagraph(last)) editor.insertBlocks([block], last, 'before')
-  else editor.insertBlocks([block], last, 'after')
+  if (t.parentId !== pageId && editor.getBlock(t.parentId))
+    appendChild(editor, t.parentId, block)
+  else appendToDocument(editor, block)
 }
-
-const isEmptyParagraph = (b: EditorBlock) =>
-  b.type === 'paragraph' &&
-  b.children.length === 0 &&
-  (!Array.isArray(b.content) || b.content.length === 0)
 
 export interface BlockEditorProps {
   opened: OpenedItem
   editable: boolean
-  send: (ops: Op[], refreshPages: boolean) => Promise<void>
+  send: (ops: Op[]) => Promise<void>
   onSaveFailed: (err: unknown) => void
   onSavingChange: (saving: boolean) => void
   // Scrolls to and focuses this block once loaded, then calls onFocused.
@@ -138,15 +126,12 @@ export function BlockEditor({
     trailingBlock: true,
   })
 
-  const onReadyRef = React.useRef(onReady)
+  const onReadyRef = useLatest(onReady)
   React.useEffect(() => {
     onReadyRef.current?.(editor)
-  }, [editor])
+  }, [editor, onReadyRef])
 
-  const callbacks = React.useRef({ send, onSaveFailed, onSavingChange })
-  React.useEffect(() => {
-    callbacks.current = { send, onSaveFailed, onSavingChange }
-  })
+  const callbacks = useLatest({ send, onSaveFailed, onSavingChange })
 
   // A child page removed in the editor goes to the trash on the next save; the
   // toast offers to put it back. Once the editor is gone, Undo restores the
@@ -177,17 +162,14 @@ export function BlockEditor({
       },
     )
   }
-  const onTrashedRef = React.useRef(onTrashed)
-  React.useEffect(() => {
-    onTrashedRef.current = onTrashed
-  })
+  const onTrashedRef = useLatest(onTrashed)
 
   const [saver] = React.useState(
     () =>
       new PageSaver({
         saved: fromBlockNote(pageId, editor.document as unknown as BNBlock[]),
         read: () => fromBlockNote(pageId, editor.document),
-        send: (ops, refresh) => callbacks.current.send(ops, refresh),
+        send: (ops) => callbacks.current.send(ops),
         onError: (err) => callbacks.current.onSaveFailed(err),
         onSavingChange: (s) => callbacks.current.onSavingChange(s),
         onTrashed: (pages) => onTrashedRef.current(pages),
@@ -219,10 +201,7 @@ export function BlockEditor({
     })
   })
 
-  const onFocusedRef = React.useRef(onFocused)
-  React.useEffect(() => {
-    onFocusedRef.current = onFocused
-  })
+  const onFocusedRef = useLatest(onFocused)
   React.useEffect(() => {
     if (!focusId) return
     const frame = requestAnimationFrame(() => {
@@ -237,7 +216,7 @@ export function BlockEditor({
       onFocusedRef.current?.()
     })
     return () => cancelAnimationFrame(frame)
-  }, [editor, focusId])
+  }, [editor, focusId, onFocusedRef])
 
   return (
     <DragStartContext.Provider value={drag.start}>

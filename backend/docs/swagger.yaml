@@ -89,54 +89,14 @@ definitions:
   backend_internal_model.Props:
     additionalProperties: {}
     type: object
-  backend_internal_pkg.AuthResponse:
-    properties:
-      access_token:
-        type: string
-      refresh_token:
-        type: string
-    type: object
-  backend_internal_pkg.LoginRequest:
-    properties:
-      email:
-        type: string
-      password:
-        minLength: 6
-        type: string
-    required:
-    - email
-    - password
-    type: object
-  backend_internal_pkg.RefreshTokenRequest:
-    properties:
-      token:
-        type: string
-    required:
-    - token
-    type: object
-  backend_internal_pkg.SignupResponse:
-    properties:
-      email:
-        maxLength: 254
-        type: string
-      name:
-        type: string
-      password:
-        minLength: 6
-        type: string
-    required:
-    - email
-    - name
-    - password
-    type: object
-  internal_services.ApplyOpsRequest:
+  internal_handlers.ApplyOpsRequest:
     properties:
       ops:
         items:
           $ref: '#/definitions/backend_internal_model.Op'
         type: array
     type: object
-  internal_services.ItemResponse:
+  internal_handlers.ItemResponse:
     properties:
       ancestors:
         items:
@@ -151,14 +111,37 @@ definitions:
           $ref: '#/definitions/backend_internal_model.Item'
         type: array
     type: object
-  internal_services.TrashResponse:
+  internal_handlers.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  internal_handlers.SignupRequest:
+    properties:
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - name
+    - password
+    type: object
+  internal_handlers.TrashResponse:
     properties:
       pages:
         items:
-          $ref: '#/definitions/internal_services.TrashedPage'
+          $ref: '#/definitions/internal_handlers.TrashedPage'
         type: array
     type: object
-  internal_services.TrashedPage:
+  internal_handlers.TrashedPage:
     properties:
       child_ids:
         items:
@@ -185,14 +168,12 @@ definitions:
       user_id:
         type: string
     type: object
-  internal_services.UpdateUserRequest:
+  internal_handlers.UpdateUserRequest:
     properties:
-      email:
-        type: string
       name:
         type: string
     type: object
-  internal_services.UserResponse:
+  internal_handlers.UserResponse:
     properties:
       created_at:
         type: string
@@ -207,7 +188,9 @@ definitions:
     type: object
 info:
   contact: {}
-  description: API for managing users and their pages and blocks.
+  description: |-
+    API for managing users and their pages and blocks.
+    Authentication: log in with POST /auth/login (or sign up), which sets the session in the HttpOnly "sid" cookie. The browser sends it with every later request, including from this page. State-changing requests from other sites are refused.
   title: Note Taking App API
   version: "1.0"
 paths:
@@ -215,21 +198,26 @@ paths:
     post:
       consumes:
       - application/json
-      description: Authenticates a user and returns access/refresh tokens
+      description: Checks the email and password, starts a session and sets it in
+        the sid cookie (HttpOnly, SameSite=Lax). Returns the user.
       parameters:
       - description: Login credentials
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/backend_internal_pkg.LoginRequest'
+          $ref: '#/definitions/internal_handlers.LoginRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
+          headers:
+            Set-Cookie:
+              description: sid=<session id>
+              type: string
           schema:
-            $ref: '#/definitions/backend_internal_pkg.AuthResponse'
+            $ref: '#/definitions/internal_handlers.UserResponse'
         "400":
           description: Bad Request
           schema:
@@ -237,7 +225,19 @@ paths:
               type: string
             type: object
         "401":
-          description: Unauthorized
+          description: wrong email or password, the same for an unknown email
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
           schema:
             additionalProperties:
               type: string
@@ -245,61 +245,92 @@ paths:
       summary: Log in
       tags:
       - auth
-  /auth/refresh-token:
+  /auth/logout:
     post:
-      consumes:
-      - application/json
-      description: Exchanges a refresh token for a new access token
-      parameters:
-      - description: Refresh token
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/backend_internal_pkg.RefreshTokenRequest'
-      produces:
-      - application/json
+      description: Ends the session in the sid cookie and clears the cookie. Succeeds
+        without a session too.
       responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/backend_internal_pkg.AuthResponse'
-        "400":
-          description: Bad Request
+        "204":
+          description: No Content
+        "403":
+          description: Forbidden
           schema:
             additionalProperties:
               type: string
             type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Log out
+      tags:
+      - auth
+  /auth/logout-all:
+    post:
+      description: Ends every session of the logged-in user, on every device, and
+        clears the sid cookie.
+      responses:
+        "204":
+          description: No Content
         "401":
           description: Unauthorized
           schema:
             additionalProperties:
               type: string
             type: object
-      summary: Refresh access token
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - SessionCookie: []
+      summary: Log out of all devices
       tags:
       - auth
   /auth/signup:
     post:
       consumes:
       - application/json
-      description: Creates a new user account and returns access/refresh tokens
+      description: Creates an account, starts a session and sets it in the sid cookie
+        (HttpOnly, SameSite=Lax). Returns the new user. The name is trimmed and must
+        be 1 to 50 characters; the password must be 6 to 72 bytes; the email must
+        be a valid, deliverable address.
       parameters:
       - description: Signup details
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/backend_internal_pkg.SignupResponse'
+          $ref: '#/definitions/internal_handlers.SignupRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
+          headers:
+            Set-Cookie:
+              description: sid=<session id>
+              type: string
           schema:
-            $ref: '#/definitions/backend_internal_pkg.AuthResponse'
+            $ref: '#/definitions/internal_handlers.UserResponse'
         "400":
           description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
           schema:
             additionalProperties:
               type: string
@@ -343,7 +374,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_services.ItemResponse'
+            $ref: '#/definitions/internal_handlers.ItemResponse'
         "400":
           description: Bad Request
           schema:
@@ -369,7 +400,7 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: Open a page or block
       tags:
       - items
@@ -422,7 +453,7 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: Duplicate a page or block
       tags:
       - items
@@ -450,7 +481,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_services.ApplyOpsRequest'
+          $ref: '#/definitions/internal_handlers.ApplyOpsRequest'
       produces:
       - application/json
       responses:
@@ -489,7 +520,7 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: Apply a batch of changes
       tags:
       - items
@@ -520,7 +551,7 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: List pages for the sidebar
       tags:
       - items
@@ -550,7 +581,7 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: Empty the trash
       tags:
       - trash
@@ -565,7 +596,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_services.TrashResponse'
+            $ref: '#/definitions/internal_handlers.TrashResponse'
         "401":
           description: Unauthorized
           schema:
@@ -579,7 +610,7 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: List the trash
       tags:
       - trash
@@ -621,7 +652,7 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: Delete a page for good
       tags:
       - trash
@@ -667,7 +698,7 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: Restore a page from the trash
       tags:
       - trash
@@ -681,7 +712,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_services.UserResponse'
+            $ref: '#/definitions/internal_handlers.UserResponse'
         "401":
           description: Unauthorized
           schema:
@@ -701,29 +732,29 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: Get the current user
       tags:
       - users
     put:
       consumes:
       - application/json
-      description: 'Updates the authenticated user''s own profile (name and/or email).
-        Partial update: omitted fields are left unchanged.'
+      description: 'Changes the logged-in user''s name: trimmed, 1 to 50 characters.
+        The email cannot be changed yet; a body with "email" gets 400.'
       parameters:
       - description: Fields to update
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_services.UpdateUserRequest'
+          $ref: '#/definitions/internal_handlers.UpdateUserRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_services.UserResponse'
+            $ref: '#/definitions/internal_handlers.UserResponse'
         "400":
           description: Bad Request
           schema:
@@ -742,12 +773,6 @@ paths:
             additionalProperties:
               type: string
             type: object
-        "409":
-          description: Conflict
-          schema:
-            additionalProperties:
-              type: string
-            type: object
         "500":
           description: Internal Server Error
           schema:
@@ -755,7 +780,7 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: Update the current user
       tags:
       - users
@@ -789,14 +814,15 @@ paths:
               type: string
             type: object
       security:
-      - BearerAuth: []
+      - SessionCookie: []
       summary: Get the workspace root
       tags:
       - items
 securityDefinitions:
-  BearerAuth:
-    description: Type "Bearer" followed by a space and the JWT access token.
-    in: header
-    name: Authorization
+  SessionCookie:
+    description: Set by POST /auth/login or /auth/signup; the browser sends it by
+      itself.
+    in: cookie
+    name: sid
     type: apiKey
 swagger: "2.0"

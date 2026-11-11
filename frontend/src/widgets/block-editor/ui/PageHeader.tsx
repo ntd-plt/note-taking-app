@@ -18,6 +18,8 @@ import {
   registerOpenEditor,
 } from '#/entities/item'
 import type { Item } from '#/entities/item'
+import { useLatest } from '#/shared/hooks/useLatest'
+import { formatDate } from '#/shared/lib/format'
 import { SAVE_DELAY_MS } from '../model/pageSaver'
 
 const EMOJI_LIST = [
@@ -37,15 +39,6 @@ const EMOJI_LIST = [
   '⚡',
   '🍀',
 ]
-
-const formatDate = (s: string) =>
-  new Date(s).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 
 const separator = (
   <span className="text-muted-foreground/40 font-normal select-none">
@@ -114,10 +107,7 @@ export function PageHeader({
   const [savingTitle, setSavingTitle] = React.useState(false)
   const timer = React.useRef<ReturnType<typeof setTimeout>>(undefined)
   const pendingName = React.useRef<string | null>(null)
-  const onSaveRef = React.useRef(onSave)
-  React.useEffect(() => {
-    onSaveRef.current = onSave
-  })
+  const onSaveRef = useLatest(onSave)
 
   const flushName = React.useCallback(async () => {
     clearTimeout(timer.current)
@@ -130,7 +120,7 @@ export function PageHeader({
     } finally {
       setSavingTitle(false)
     }
-  }, [])
+  }, [onSaveRef])
   React.useEffect(() => {
     const unregister = registerOpenEditor({ pageId: page.id, flush: flushName })
     return () => {
@@ -168,7 +158,7 @@ export function PageHeader({
         <div className="flex shrink-0 items-center gap-3 whitespace-nowrap text-[10px] font-medium text-muted-foreground/70">
           <span className="flex items-center gap-1">
             <Calendar className="h-3 w-3" />
-            Updated {formatDate(page.updatedAt)}
+            Updated {formatDate(page.updatedAt, { time: true })}
           </span>
           <span className="h-3 w-px bg-border/30" />
           {busy ? (

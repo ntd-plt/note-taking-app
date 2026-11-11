@@ -1,13 +1,12 @@
 package tree_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/model"
-	"backend/internal/pkg"
-	"backend/internal/tree"
+	"backend/internal/testutil"
 
 	"github.com/google/uuid"
 )
@@ -24,9 +23,9 @@ func (f *fixture) trashedChild() (page, b1, child, inside, deep uuid.UUID) {
 	page, _, _, b1, _ = f.page()
 	child, inside, deep = uuid.New(), uuid.New(), uuid.New()
 	f.apply(
-		createPage(child, b1, nil, "Child"),
-		createBlock(inside, child, nil, model.ItemTypeParagraph, "inside"),
-		createPage(deep, inside, nil, "Deep"),
+		testutil.CreatePage(child, b1, nil, "Child"),
+		testutil.CreateBlock(inside, child, nil, model.ItemTypeParagraph, "inside"),
+		testutil.CreatePage(deep, inside, nil, "Deep"),
 		update(child, model.Props{"is_favorite": true}),
 	)
 	f.apply(trash(child))
@@ -52,7 +51,7 @@ func TestRestoreToTheEndOfTheTopLevel(t *testing.T) {
 	if it.Props["is_favorite"] != true {
 		t.Error("the restored page lost its favorite flag")
 	}
-	if pages, _ := f.db.ListPages(f.user); len(pages) != 3 {
+	if pages, _ := f.db.ListPages(ctx, f.user); len(pages) != 3 {
 		t.Errorf("sidebar = %d pages, want Page, Child and Deep", len(pages))
 	}
 }
@@ -61,9 +60,9 @@ func TestRestoreToItsOldPlace(t *testing.T) {
 	f := newFixture(t)
 	_, b1, child, _, _ := f.trashedChild()
 	other := uuid.New()
-	f.apply(createBlock(other, b1, nil, model.ItemTypeParagraph, "other"))
+	f.apply(testutil.CreateBlock(other, b1, nil, model.ItemTypeParagraph, "other"))
 
-	f.apply(restore(child, &b1, ptr(0)))
+	f.apply(restore(child, &b1, testutil.Ptr(0)))
 	wantIDs(t, "b1", f.children(b1), child, other)
 	if f.item(child).TrashedAt != nil {
 		t.Error("still in the trash")
@@ -74,8 +73,8 @@ func TestTrashAndRestoreInOneBatch(t *testing.T) {
 	f := newFixture(t)
 	page, a, b, _, c := f.page()
 	sub := uuid.New()
-	f.apply(createPage(sub, page, ptr(1), "Sub"))
-	f.apply(trash(sub), restore(sub, &page, ptr(1)))
+	f.apply(testutil.CreatePage(sub, page, testutil.Ptr(1), "Sub"))
+	f.apply(trash(sub), restore(sub, &page, testutil.Ptr(1)))
 	wantIDs(t, "page", f.children(page), a, sub, b, c)
 }
 
@@ -84,25 +83,25 @@ func TestRestoreRejections(t *testing.T) {
 	page, b1, child, inside, deep := f.trashedChild()
 	block := f.children(page)[0]
 
-	f.reject(tree.Conflict, 0, restore(page, nil, nil)) // not in the trash
-	f.reject(tree.Conflict, 0, restore(deep, nil, nil)) // inside a trashed page
-	f.reject(tree.Invalid, 0, restore(block, nil, nil)) // a block
-	f.reject(tree.NotFound, 0, restore(uuid.New(), nil, nil))
-	f.reject(tree.Conflict, 0, restore(child, &inside, nil)) // into itself
-	f.reject(tree.Conflict, 0, restore(child, &b1, ptr(5)))  // position out of range
+	f.reject(apperr.Conflict, 0, restore(page, nil, nil)) // not in the trash
+	f.reject(apperr.Conflict, 0, restore(deep, nil, nil)) // inside a trashed page
+	f.reject(apperr.Invalid, 0, restore(block, nil, nil)) // a block
+	f.reject(apperr.NotFound, 0, restore(uuid.New(), nil, nil))
+	f.reject(apperr.Conflict, 0, restore(child, &inside, nil))         // into itself
+	f.reject(apperr.Conflict, 0, restore(child, &b1, testutil.Ptr(5))) // position out of range
 	other := uuid.New()
-	f.apply(createPage(other, f.ws, nil, "Other"), trash(other))
-	f.reject(tree.Conflict, 0, restore(child, &other, nil)) // into another trashed page
+	f.apply(testutil.CreatePage(other, f.ws, nil, "Other"), trash(other))
+	f.reject(apperr.Conflict, 0, restore(child, &other, nil)) // into another trashed page
 }
 
 func TestListAndDeleteFromTrash(t *testing.T) {
 	f := newFixture(t)
 	_, _, child, inside, deep := f.trashedChild()
 	later := uuid.New()
-	f.apply(createPage(later, f.ws, nil, "Later"))
+	f.apply(testutil.CreatePage(later, f.ws, nil, "Later"))
 	f.apply(trash(later))
 
-	pages, err := f.db.ListTrash(f.user)
+	pages, err := f.db.ListTrash(ctx, f.user)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,14 +112,13 @@ func TestListAndDeleteFromTrash(t *testing.T) {
 	// Most recent first, and Deep (inside Child) is not listed on its own.
 	wantIDs(t, "trash", ids, later, child)
 
-	var nf *pkg.NotFoundError
-	if err := f.db.DeleteFromTrash(f.user, deep); !errors.As(err, &nf) {
+	if err := f.db.DeleteFromTrash(ctx, f.user, deep); !apperr.Is(err, apperr.NotFound) {
 		t.Errorf("deleting a page inside a trashed page: err = %v, want not found", err)
 	}
-	if err := f.db.DeleteFromTrash(f.user, uuid.New()); !errors.As(err, &nf) {
+	if err := f.db.DeleteFromTrash(ctx, f.user, uuid.New()); !apperr.Is(err, apperr.NotFound) {
 		t.Errorf("deleting an unknown page: err = %v, want not found", err)
 	}
-	if err := f.db.DeleteFromTrash(f.user, child); err != nil {
+	if err := f.db.DeleteFromTrash(ctx, f.user, child); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []uuid.UUID{child, inside, deep} {
@@ -128,7 +126,7 @@ func TestListAndDeleteFromTrash(t *testing.T) {
 			t.Errorf("%s survived deleting the page that held it", id)
 		}
 	}
-	if pages, _ := f.db.ListTrash(f.user); len(pages) != 1 {
+	if pages, _ := f.db.ListTrash(ctx, f.user); len(pages) != 1 {
 		t.Errorf("trash = %d pages, want 1", len(pages))
 	}
 }
@@ -137,14 +135,14 @@ func TestEmptyTrash(t *testing.T) {
 	f := newFixture(t)
 	_, _, child, _, _ := f.trashedChild()
 	recent := uuid.New()
-	f.apply(createPage(recent, f.ws, nil, "Recent"), trash(recent))
+	f.apply(testutil.CreatePage(recent, f.ws, nil, "Recent"), trash(recent))
 	// Child was trashed long ago.
 	old := f.item(child)
-	old.TrashedAt = ptr(time.Now().Add(-40 * 24 * time.Hour))
+	old.TrashedAt = testutil.Ptr(time.Now().Add(-40 * 24 * time.Hour))
 	f.db.Items[child] = old
 
 	before := time.Now().Add(-30 * 24 * time.Hour)
-	n, err := f.db.EmptyTrash(f.user, &before)
+	n, err := f.db.EmptyTrash(ctx, f.user, &before)
 	if err != nil || n != 1 {
 		t.Fatalf("purge removed %d (%v), want 1", n, err)
 	}
@@ -155,15 +153,15 @@ func TestEmptyTrash(t *testing.T) {
 		t.Error("the recent page was removed")
 	}
 
-	n, err = f.db.EmptyTrash(f.user, nil)
+	n, err = f.db.EmptyTrash(ctx, f.user, nil)
 	if err != nil || n != 1 {
 		t.Fatalf("empty removed %d (%v), want 1", n, err)
 	}
-	if pages, _ := f.db.ListTrash(f.user); len(pages) != 0 {
+	if pages, _ := f.db.ListTrash(ctx, f.user); len(pages) != 0 {
 		t.Errorf("trash = %+v, want empty", pages)
 	}
 	// Other pages are untouched.
-	if pages, _ := f.db.ListPages(f.user); len(pages) != 1 {
+	if pages, _ := f.db.ListPages(ctx, f.user); len(pages) != 1 {
 		t.Errorf("sidebar = %d pages, want only Page", len(pages))
 	}
 }

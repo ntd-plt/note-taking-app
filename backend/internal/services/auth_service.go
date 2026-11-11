@@ -1,208 +1,92 @@
 package services
 
 import (
-	"backend/internal/errors"
-	"backend/internal/pkg"
-	"backend/internal/pkg/hash"
 	"context"
-	stderrors "errors"
-	"net/http"
-	"strings"
+	"log"
+	"sync"
 
-	"github.com/gin-gonic/gin"
+	"backend/internal/apperr"
+	"backend/internal/model"
+	"backend/internal/pkg/hash"
 )
 
-// normalizeEmail trims whitespace and lowercases an email address so that
-// lookups and storage treat e.g. "Bob@Example.com" and "bob@example.com" as
-// the same address.
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
-
 type AuthService struct {
-	userService    *UserService
+	users          UserStore
 	hasher         hash.Hasher
-	tokenService   TokenService
 	emailValidator EmailValidator
+
+	// dummyHash keeps a login with an unknown email as slow as one with a wrong
+	// password, so timing doesn't reveal which accounts exist.
+	dummyOnce sync.Once
+	dummy     []byte
 }
 
-func NewAuthService(userService *UserService, hasher hash.Hasher, tokenService TokenService, emailValidator EmailValidator) *AuthService {
-	return &AuthService{
-		userService:    userService,
-		hasher:         hasher,
-		tokenService:   tokenService,
-		emailValidator: emailValidator,
-	}
+func NewAuthService(users UserStore, hasher hash.Hasher, emailValidator EmailValidator) *AuthService {
+	return &AuthService{users: users, hasher: hasher, emailValidator: emailValidator}
 }
 
-// Login godoc
-// @Summary      Log in
-// @Description  Authenticates a user and returns access/refresh tokens
-// @Tags         auth
-// @Accept       json
-// @Produce      json
-// @Param        request  body      pkg.LoginRequest  true  "Login credentials"
-// @Success      200      {object}  pkg.AuthResponse
-// @Failure      400      {object}  map[string]string
-// @Failure      401      {object}  map[string]string
-// @Router       /auth/login [post]
-func (s *AuthService) Login(c *gin.Context) {
-	var req pkg.LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+// Login answers an unknown email and a wrong password alike, after the same work.
+func (s *AuthService) Login(ctx context.Context, email, password string) (model.User, error) {
+	u, err := s.users.GetUserByEmail(ctx, NormalizeEmail(email))
+	if apperr.Is(err, apperr.NotFound) {
+		_ = s.hasher.Compare(s.dummyHash(), []byte(password))
+		return model.User{}, ErrWrongPasswordOrEmail
 	}
-
-	token, err := s.login(req.Email, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, pkg.NewAuthResponse(token.AccessToken, token.RefreshToken))
-}
-
-func (s *AuthService) Logout() error {
-	return nil
-}
-
-// Signup godoc
-// @Summary      Sign up
-// @Description  Creates a new user account and returns access/refresh tokens
-// @Tags         auth
-// @Accept       json
-// @Produce      json
-// @Param        request  body      pkg.SignupResponse  true  "Signup details"
-// @Success      200      {object}  pkg.AuthResponse
-// @Failure      400      {object}  map[string]string
-// @Failure      409      {object}  map[string]string
-// @Failure      422      {object}  map[string]string
-// @Failure      500      {object}  map[string]string
-// @Router       /auth/signup [post]
-func (s *AuthService) Signup(c *gin.Context) {
-	var req pkg.SignupResponse
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	err := s.signup(c.Request.Context(), req.Name, req.Email, req.Password)
-	if err != nil {
-		if stderrors.Is(err, errors.ErrEmailAlreadyExists) {
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-			return
-		}
-		if stderrors.Is(err, errors.ErrInvalidEmailAddress) {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		return
-	}
-
-	token, err := s.login(req.Email, req.Password)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
-		return
-	}
-
-	c.JSON(http.StatusOK, pkg.NewAuthResponse(token.AccessToken, token.RefreshToken))
-}
-
-// RefreshToken godoc
-// @Summary      Refresh access token
-// @Description  Exchanges a refresh token for a new access token
-// @Tags         auth
-// @Accept       json
-// @Produce      json
-// @Param        request  body      pkg.RefreshTokenRequest  true  "Refresh token"
-// @Success      200      {object}  pkg.AuthResponse
-// @Failure      400      {object}  map[string]string
-// @Failure      401      {object}  map[string]string
-// @Router       /auth/refresh-token [post]
-func (s *AuthService) RefreshToken(c *gin.Context) {
-	var req pkg.RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	token, err := s.refreshToken(req.Token)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, pkg.NewAuthResponse(token, ""))
-}
-
-func (s *AuthService) login(email, password string) (*pkg.AuthResponse, error) {
-	email = normalizeEmail(email)
-
-	u, err := s.userService.GetUserByEmail(email)
-	if err != nil {
-		return nil, err
+		return model.User{}, err
 	}
 	if err := s.hasher.Compare(u.PasswordHash, []byte(password)); err != nil {
-		return nil, errors.ErrWrongPasswordOrEmail
+		return model.User{}, ErrWrongPasswordOrEmail
 	}
-
-	accessToken, err := s.tokenService.GenerateAccessToken(u.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	refreshToken, err := s.tokenService.GenerateRefreshToken(u.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	return pkg.NewAuthResponse(accessToken, refreshToken), nil
+	return u, nil
 }
 
-func (s *AuthService) signup(ctx context.Context, name, email, password string) error {
-	email = normalizeEmail(email)
+func (s *AuthService) Signup(ctx context.Context, rawName, rawEmail, password string) (model.User, error) {
+	name, err := CheckName(rawName)
+	if err != nil {
+		return model.User{}, err
+	}
+	if err := CheckPassword(password); err != nil {
+		return model.User{}, err
+	}
+	email, err := CheckEmailFormat(rawEmail)
+	if err != nil {
+		return model.User{}, err
+	}
 
-	_, err := s.userService.GetUserByEmail(email)
+	_, err = s.users.GetUserByEmail(ctx, email)
 	if err == nil {
-		return errors.ErrEmailAlreadyExists
+		return model.User{}, ErrEmailAlreadyExists
 	}
-	var notFoundError *pkg.NotFoundError
-	if !stderrors.As(err, &notFoundError) {
-		return err
+	if !apperr.Is(err, apperr.NotFound) {
+		return model.User{}, err
 	}
-
-	result, verifyErr := s.emailValidator.Verify(ctx, email)
-	if verifyErr == nil && (result.Classification == EmailVerificationUndeliverable || result.IsDisposable) {
-		return errors.ErrInvalidEmailAddress
+	if err := checkEmailDeliverable(ctx, s.emailValidator, email); err != nil {
+		return model.User{}, err
 	}
 
 	passwordHash, err := s.hasher.Hash([]byte(password))
 	if err != nil {
-		return err
+		return model.User{}, err
 	}
-
-	if _, err := s.userService.CreateUser(name, email, passwordHash); err != nil {
-		var alreadyExists *pkg.AlreadyExistsError
-		if stderrors.As(err, &alreadyExists) {
-			return errors.ErrEmailAlreadyExists
+	user := model.NewUser(name, email, passwordHash)
+	if err := s.users.AddUser(ctx, user); err != nil {
+		if apperr.Is(err, apperr.Conflict) {
+			return model.User{}, ErrEmailAlreadyExists
 		}
-		return err
+		return model.User{}, err
 	}
-
-	return nil
+	return user, nil
 }
 
-func (s *AuthService) refreshToken(token string) (string, error) {
-	userID, err := s.tokenService.ValidateRefreshToken(token)
-	if err != nil {
-		return "", err
-	}
-
-	accessToken, err := s.tokenService.GenerateAccessToken(userID)
-	if err != nil {
-		return "", err
-	}
-
-	return accessToken, nil
+func (s *AuthService) dummyHash() []byte {
+	s.dummyOnce.Do(func() {
+		h, err := s.hasher.Hash([]byte("not-a-real-password"))
+		if err != nil {
+			log.Printf("making the dummy password hash: %v", err)
+			return
+		}
+		s.dummy = h
+	})
+	return s.dummy
 }

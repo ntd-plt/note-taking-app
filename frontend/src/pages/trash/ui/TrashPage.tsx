@@ -5,7 +5,6 @@ import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '#/components/ui/button'
-import { SidebarInset, SidebarProvider } from '#/components/ui/sidebar'
 import {
   pageIcon,
   pageName,
@@ -16,22 +15,15 @@ import {
 } from '#/entities/item'
 import type { Item } from '#/entities/item'
 import { PageView } from '#/widgets/block-editor'
-import { PageSidebar } from '#/widgets/page-sidebar'
-import { ConfirmDialog } from './ConfirmDialog'
+import { AppShell } from '#/widgets/page-sidebar'
+import { errorMessage } from '#/shared/lib/errors'
+import { formatDate } from '#/shared/lib/format'
+import { ConfirmDialog } from '#/shared/ui/ConfirmDialog'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
 export const daysLeft = (purgeAt: string, now = Date.now()) =>
   Math.max(0, Math.ceil((Date.parse(purgeAt) - now) / DAY_MS))
-
-const formatDate = (s: string) =>
-  new Date(s).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-
-const message = (err: unknown) => (err instanceof Error ? err.message : '')
 
 // The restore and delete actions, shared by the list and the preview.
 function useTrashActions() {
@@ -44,7 +36,7 @@ function useTrashActions() {
         toast.success(`Restored "${pageName(page)}"`)
         return true
       } catch (err) {
-        toast.error(`Couldn't restore the page: ${message(err)}`)
+        toast.error(`Couldn't restore the page: ${errorMessage(err)}`)
         return false
       }
     },
@@ -54,7 +46,7 @@ function useTrashActions() {
         toast.success(`Deleted "${pageName(page)}" for good`)
         return true
       } catch (err) {
-        toast.error(`Couldn't delete the page: ${message(err)}`)
+        toast.error(`Couldn't delete the page: ${errorMessage(err)}`)
         return false
       }
     },
@@ -169,7 +161,7 @@ function TrashList() {
           else
             empty.mutate(undefined, {
               onError: (err) =>
-                toast.error(`Couldn't empty the trash: ${message(err)}`),
+                toast.error(`Couldn't empty the trash: ${errorMessage(err)}`),
             })
         }}
       />
@@ -241,11 +233,8 @@ function TrashPreview({ itemId }: { itemId: string }) {
 export function TrashPage() {
   const { itemId } = useParams({ strict: false })
   return (
-    <SidebarProvider>
-      <PageSidebar />
-      <SidebarInset className="flex h-screen flex-col overflow-hidden bg-background">
-        {itemId ? <TrashPreview itemId={itemId} /> : <TrashList />}
-      </SidebarInset>
-    </SidebarProvider>
+    <AppShell>
+      {itemId ? <TrashPreview itemId={itemId} /> : <TrashList />}
+    </AppShell>
   )
 }

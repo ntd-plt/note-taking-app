@@ -70,6 +70,11 @@ func (s *pgTreeStore) Delete(id uuid.UUID) error {
 	return err
 }
 
+func (s *pgTreeStore) DeleteMany(ids []uuid.UUID) error {
+	_, err := s.tx.Exec(s.ctx, "DELETE FROM items WHERE id = ANY($1) AND user_id = $2", ids, s.userID)
+	return err
+}
+
 func (s *pgTreeStore) Trashed() ([]model.Item, error) {
 	rows, err := s.tx.Query(s.ctx, "SELECT "+itemColumns+
 		" FROM items i WHERE i.user_id = $1 AND i.type = 'page' AND i.trashed_at IS NOT NULL", s.userID)
@@ -105,8 +110,7 @@ func (s *pgTreeStore) CheckChildIDs(parentIDs []uuid.UUID) error {
 
 // inTree runs fn on a tree.Store inside one transaction holding the user's tree
 // lock, and commits only if fn succeeds.
-func (db *PostgreItemsDataSource) inTree(userID uuid.UUID, fn func(s tree.Store, workspaceID uuid.UUID, now time.Time) error) error {
-	ctx := context.Background()
+func (db *PostgreItemsDataSource) inTree(ctx context.Context, userID uuid.UUID, fn func(s tree.Store, workspaceID uuid.UUID, now time.Time) error) error {
 	tx, err := db.conn.Begin(ctx)
 	if err != nil {
 		return err
@@ -125,16 +129,16 @@ func (db *PostgreItemsDataSource) inTree(userID uuid.UUID, fn func(s tree.Store,
 	return tx.Commit(ctx)
 }
 
-func (db *PostgreItemsDataSource) ApplyOps(userID uuid.UUID, ops []model.Op) error {
-	return db.inTree(userID, func(s tree.Store, workspaceID uuid.UUID, now time.Time) error {
+func (db *PostgreItemsDataSource) ApplyOps(ctx context.Context, userID uuid.UUID, ops []model.Op) error {
+	return db.inTree(ctx, userID, func(s tree.Store, workspaceID uuid.UUID, now time.Time) error {
 		return tree.Apply(s, workspaceID, ops, now)
 	})
 }
 
 // ListTrash reads under the tree lock too, so it never sees half a batch.
-func (db *PostgreItemsDataSource) ListTrash(userID uuid.UUID) ([]model.Item, error) {
+func (db *PostgreItemsDataSource) ListTrash(ctx context.Context, userID uuid.UUID) ([]model.Item, error) {
 	var pages []model.Item
-	err := db.inTree(userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
+	err := db.inTree(ctx, userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
 		var err error
 		pages, err = tree.ListTrash(s)
 		return err
@@ -142,15 +146,15 @@ func (db *PostgreItemsDataSource) ListTrash(userID uuid.UUID) ([]model.Item, err
 	return pages, err
 }
 
-func (db *PostgreItemsDataSource) DeleteFromTrash(userID, id uuid.UUID) error {
-	return db.inTree(userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
+func (db *PostgreItemsDataSource) DeleteFromTrash(ctx context.Context, userID, id uuid.UUID) error {
+	return db.inTree(ctx, userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
 		return tree.DeleteFromTrash(s, id)
 	})
 }
 
-func (db *PostgreItemsDataSource) EmptyTrash(userID uuid.UUID, before *time.Time) (int, error) {
+func (db *PostgreItemsDataSource) EmptyTrash(ctx context.Context, userID uuid.UUID, before *time.Time) (int, error) {
 	var n int
-	err := db.inTree(userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
+	err := db.inTree(ctx, userID, func(s tree.Store, _ uuid.UUID, _ time.Time) error {
 		var err error
 		n, err = tree.EmptyTrash(s, before)
 		return err
@@ -158,9 +162,9 @@ func (db *PostgreItemsDataSource) EmptyTrash(userID uuid.UUID, before *time.Time
 	return n, err
 }
 
-func (db *PostgreItemsDataSource) Duplicate(userID, id uuid.UUID) (model.Item, error) {
+func (db *PostgreItemsDataSource) Duplicate(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
 	var copied model.Item
-	err := db.inTree(userID, func(s tree.Store, workspaceID uuid.UUID, now time.Time) error {
+	err := db.inTree(ctx, userID, func(s tree.Store, workspaceID uuid.UUID, now time.Time) error {
 		var err error
 		copied, err = tree.Duplicate(s, workspaceID, id, now)
 		return err

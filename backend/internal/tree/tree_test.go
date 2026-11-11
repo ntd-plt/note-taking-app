@@ -1,13 +1,13 @@
 package tree_test
 
 import (
-	"errors"
 	"maps"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
+	"backend/internal/apperr"
 	"backend/internal/model"
 	"backend/internal/testutil"
 	"backend/internal/tree"
@@ -17,34 +17,15 @@ import (
 
 type fixture struct {
 	t    *testing.T
-	db   *testutil.FakeDatabase
+	db   *testutil.FakeItemStore
 	user uuid.UUID
 	ws   uuid.UUID
 }
 
 func newFixture(t *testing.T) *fixture {
-	db := testutil.NewFakeDatabase()
+	db := testutil.NewFakeItemStore()
 	user := uuid.New()
 	return &fixture{t: t, db: db, user: user, ws: db.Workspace(user).ID}
-}
-
-func ptr[T any](v T) *T { return &v }
-
-func text(s string) []any {
-	return []any{map[string]any{"type": "text", "text": s, "styles": map[string]any{}}}
-}
-
-func createPage(id, parent uuid.UUID, pos *int, name string) model.Op {
-	return model.Op{Op: model.OpCreate, ID: id, Type: ptr(model.ItemTypePage), ParentID: &parent, Position: pos,
-		Props: model.Props{"name": name}}
-}
-
-func createBlock(id, parent uuid.UUID, pos *int, typ model.ItemType, s string) model.Op {
-	props := model.Props{"content": text(s)}
-	if typ == model.ItemTypeHeading {
-		props["level"] = 1
-	}
-	return model.Op{Op: model.OpCreate, ID: id, Type: &typ, ParentID: &parent, Position: pos, Props: props}
 }
 
 func update(id uuid.UUID, props model.Props) model.Op {
@@ -57,23 +38,23 @@ func move(id, parent uuid.UUID, pos *int) model.Op {
 
 func (f *fixture) apply(ops ...model.Op) {
 	f.t.Helper()
-	if err := f.db.ApplyOps(f.user, ops); err != nil {
+	if err := f.db.ApplyOps(ctx, f.user, ops); err != nil {
 		f.t.Fatalf("apply: %v", err)
 	}
 }
 
-// reject applies ops, wants a *tree.Error of the given kind at index, and checks
+// reject applies ops, wants an apperr of the given kind at index, and checks
 // that nothing changed.
-func (f *fixture) reject(kind tree.Kind, index int, ops ...model.Op) {
+func (f *fixture) reject(kind apperr.Kind, index int, ops ...model.Op) {
 	f.t.Helper()
 	before := maps.Clone(f.db.Items)
-	err := f.db.ApplyOps(f.user, ops)
-	var te *tree.Error
-	if !errors.As(err, &te) {
-		f.t.Fatalf("err = %v, want a *tree.Error", err)
+	err := f.db.ApplyOps(ctx, f.user, ops)
+	e, ok := apperr.As(err)
+	if !ok || e.OpIndex == nil {
+		f.t.Fatalf("err = %v, want an apperr naming an operation", err)
 	}
-	if te.Kind != kind || te.Index != index {
-		f.t.Errorf("rejected with kind %d at %d (%s), want kind %d at %d", te.Kind, te.Index, te.Msg, kind, index)
+	if e.Kind != kind || *e.OpIndex != index {
+		f.t.Errorf("rejected with kind %d at %d (%s), want kind %d at %d", e.Kind, *e.OpIndex, e.Msg, kind, index)
 	}
 	if !reflect.DeepEqual(before, f.db.Items) {
 		f.t.Error("a rejected batch changed the tree")
@@ -102,11 +83,11 @@ func wantIDs(t *testing.T, what string, got []uuid.UUID, want ...uuid.UUID) {
 func (f *fixture) page() (page, a, b, b1, c uuid.UUID) {
 	page, a, b, b1, c = uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	f.apply(
-		createPage(page, f.ws, nil, "Page"),
-		createBlock(a, page, nil, model.ItemTypeParagraph, "a"),
-		createBlock(b, page, nil, model.ItemTypeBulletListItem, "b"),
-		createBlock(b1, b, nil, model.ItemTypeBulletListItem, "b1"),
-		createBlock(c, page, nil, model.ItemTypeParagraph, "c"),
+		testutil.CreatePage(page, f.ws, nil, "Page"),
+		testutil.CreateBlock(a, page, nil, model.ItemTypeParagraph, "a"),
+		testutil.CreateBlock(b, page, nil, model.ItemTypeBulletListItem, "b"),
+		testutil.CreateBlock(b1, b, nil, model.ItemTypeBulletListItem, "b1"),
+		testutil.CreateBlock(c, page, nil, model.ItemTypeParagraph, "c"),
 	)
 	return
 }
@@ -120,9 +101,9 @@ func TestCreatePositions(t *testing.T) {
 
 	first, mid, end := uuid.New(), uuid.New(), uuid.New()
 	f.apply(
-		createBlock(first, page, ptr(0), model.ItemTypeQuote, "first"),
-		createBlock(mid, page, ptr(3), model.ItemTypeQuote, "mid"),
-		createBlock(end, page, ptr(5), model.ItemTypeQuote, "end"),
+		testutil.CreateBlock(first, page, testutil.Ptr(0), model.ItemTypeQuote, "first"),
+		testutil.CreateBlock(mid, page, testutil.Ptr(3), model.ItemTypeQuote, "mid"),
+		testutil.CreateBlock(end, page, testutil.Ptr(5), model.ItemTypeQuote, "end"),
 	)
 	wantIDs(t, "page", f.children(page), first, a, b, mid, c, end)
 }
@@ -131,9 +112,9 @@ func TestCreateFillsProps(t *testing.T) {
 	f := newFixture(t)
 	page, check := uuid.New(), uuid.New()
 	f.apply(
-		model.Op{Op: model.OpCreate, ID: page, Type: ptr(model.ItemTypePage), ParentID: &f.ws,
+		model.Op{Op: model.OpCreate, ID: page, Type: testutil.Ptr(model.ItemTypePage), ParentID: &f.ws,
 			Props: model.Props{"is_favorite": "yes", "cover": "sky.png"}},
-		model.Op{Op: model.OpCreate, ID: check, Type: ptr(model.ItemTypeCheckListItem), ParentID: &page},
+		model.Op{Op: model.OpCreate, ID: check, Type: testutil.Ptr(model.ItemTypeCheckListItem), ParentID: &page},
 	)
 	want := model.Props{"name": model.DefaultPageName, "icon": model.DefaultPageIcon, "is_favorite": false, "cover": "sky.png"}
 	if got := f.item(page).Props; !reflect.DeepEqual(got, want) {
@@ -148,16 +129,16 @@ func TestUpdateMergesProps(t *testing.T) {
 	f := newFixture(t)
 	page, a, b, _, c := f.page()
 	check := uuid.New()
-	f.apply(model.Op{Op: model.OpCreate, ID: check, Type: ptr(model.ItemTypeCheckListItem), ParentID: &page,
+	f.apply(model.Op{Op: model.OpCreate, ID: check, Type: testutil.Ptr(model.ItemTypeCheckListItem), ParentID: &page,
 		Props: model.Props{"checked": true, "textColor": "red"}})
 	before := maps.Clone(f.db.Items)
 
 	f.apply(
-		update(c, model.Props{"content": text("changed"), "backgroundColor": "blue"}),
+		update(c, model.Props{"content": model.TextContent("changed"), "backgroundColor": "blue"}),
 		update(check, model.Props{"checked": "yes", "textColor": nil}),
 		update(page, model.Props{"name": "  Renamed  ", "icon": "", "is_favorite": true}),
 	)
-	if got := f.item(c).Props; !reflect.DeepEqual(got, model.Props{"content": text("changed"), "backgroundColor": "blue"}) {
+	if got := f.item(c).Props; !reflect.DeepEqual(got, model.Props{"content": model.TextContent("changed"), "backgroundColor": "blue"}) {
 		t.Errorf("c props = %v", got)
 	}
 	if got := f.item(check).Props; got["checked"] != true || got["textColor"] != "red" {
@@ -182,20 +163,20 @@ func TestUpdateTurnInto(t *testing.T) {
 	f := newFixture(t)
 	_, a, b, _, _ := f.page()
 
-	f.apply(model.Op{Op: model.OpUpdate, ID: a, Type: ptr(model.ItemTypeHeading), Props: model.Props{"level": 2}})
-	if got := f.item(a); got.Type != model.ItemTypeHeading || got.Props["level"] != 2 || !reflect.DeepEqual(got.Props["content"], text("a")) {
+	f.apply(model.Op{Op: model.OpUpdate, ID: a, Type: testutil.Ptr(model.ItemTypeHeading), Props: model.Props{"level": 2}})
+	if got := f.item(a); got.Type != model.ItemTypeHeading || got.Props["level"] != 2 || !reflect.DeepEqual(got.Props["content"], model.TextContent("a")) {
 		t.Errorf("turn into heading: %+v; want level 2 and the text kept", got)
 	}
-	f.apply(model.Op{Op: model.OpUpdate, ID: a, Type: ptr(model.ItemTypeParagraph)})
+	f.apply(model.Op{Op: model.OpUpdate, ID: a, Type: testutil.Ptr(model.ItemTypeParagraph)})
 	if got := f.item(a); got.Type != model.ItemTypeParagraph || got.Props["level"] != 2 {
 		t.Errorf("turn back: %+v; want the level key kept", got)
 	}
-	f.apply(model.Op{Op: model.OpUpdate, ID: b, Type: ptr(model.ItemTypeCheckListItem)})
+	f.apply(model.Op{Op: model.OpUpdate, ID: b, Type: testutil.Ptr(model.ItemTypeCheckListItem)})
 	if got := f.item(b).Props["checked"]; got != false {
 		t.Errorf("turn into checklist: checked = %v, want the default", got)
 	}
-	f.reject(tree.Invalid, 0, model.Op{Op: model.OpUpdate, ID: b, Type: ptr(model.ItemTypeHeading)})
-	f.reject(tree.Invalid, 0, model.Op{Op: model.OpUpdate, ID: b, Type: ptr(model.ItemTypeHeading), Props: model.Props{"level": 7}})
+	f.reject(apperr.Invalid, 0, model.Op{Op: model.OpUpdate, ID: b, Type: testutil.Ptr(model.ItemTypeHeading)})
+	f.reject(apperr.Invalid, 0, model.Op{Op: model.OpUpdate, ID: b, Type: testutil.Ptr(model.ItemTypeHeading), Props: model.Props{"level": 7}})
 }
 
 func TestMovePositions(t *testing.T) {
@@ -203,9 +184,9 @@ func TestMovePositions(t *testing.T) {
 	page, a, b, b1, c := f.page()
 
 	// Within one parent the position is the final index.
-	f.apply(move(a, page, ptr(2)))
+	f.apply(move(a, page, testutil.Ptr(2)))
 	wantIDs(t, "page", f.children(page), b, c, a)
-	f.apply(move(a, page, ptr(0)))
+	f.apply(move(a, page, testutil.Ptr(0)))
 	wantIDs(t, "page", f.children(page), a, b, c)
 
 	// Tab on c: it becomes b's last child.
@@ -218,11 +199,11 @@ func TestMovePositions(t *testing.T) {
 
 	// A page can move under a block, and back to the top level.
 	other := uuid.New()
-	f.apply(createPage(other, f.ws, nil, "Other"))
+	f.apply(testutil.CreatePage(other, f.ws, nil, "Other"))
 	f.apply(move(other, b1, nil))
 	wantIDs(t, "workspace", f.children(f.ws), page)
 	wantIDs(t, "b1", f.children(b1), other)
-	f.apply(move(other, f.ws, ptr(0)))
+	f.apply(move(other, f.ws, testutil.Ptr(0)))
 	wantIDs(t, "workspace", f.children(f.ws), other, page)
 }
 
@@ -232,28 +213,28 @@ func TestPageAtEndGoesBeforeTrailingParagraph(t *testing.T) {
 	f := newFixture(t)
 	page, a, trailing := uuid.New(), uuid.New(), uuid.New()
 	f.apply(
-		createPage(page, f.ws, nil, "Page"),
-		createBlock(a, page, nil, model.ItemTypeParagraph, "a"),
-		model.Op{Op: model.OpCreate, ID: trailing, Type: ptr(model.ItemTypeParagraph), ParentID: &page},
+		testutil.CreatePage(page, f.ws, nil, "Page"),
+		testutil.CreateBlock(a, page, nil, model.ItemTypeParagraph, "a"),
+		model.Op{Op: model.OpCreate, ID: trailing, Type: testutil.Ptr(model.ItemTypeParagraph), ParentID: &page},
 	)
 
 	child, other, block := uuid.New(), uuid.New(), uuid.New()
-	f.apply(createPage(child, page, nil, "Child"))
+	f.apply(testutil.CreatePage(child, page, nil, "Child"))
 	wantIDs(t, "after create", f.children(page), a, child, trailing)
 
-	f.apply(createPage(other, f.ws, nil, "Other"), move(other, page, nil))
+	f.apply(testutil.CreatePage(other, f.ws, nil, "Other"), move(other, page, nil))
 	wantIDs(t, "after move", f.children(page), a, child, other, trailing)
 
-	f.apply(createBlock(block, page, nil, model.ItemTypeQuote, "q"))
+	f.apply(testutil.CreateBlock(block, page, nil, model.ItemTypeQuote, "q"))
 	wantIDs(t, "a block still goes last", f.children(page), a, child, other, trailing, block)
 
 	// The last child is no longer an empty paragraph, so a page goes last too.
 	last := uuid.New()
-	f.apply(createPage(last, page, nil, "Last"))
+	f.apply(testutil.CreatePage(last, page, nil, "Last"))
 	wantIDs(t, "no trailing paragraph", f.children(page), a, child, other, trailing, block, last)
 
 	// An explicit position is always taken as given.
-	f.apply(move(child, page, ptr(5)))
+	f.apply(move(child, page, testutil.Ptr(5)))
 	wantIDs(t, "explicit position", f.children(page), a, other, trailing, block, last, child)
 }
 
@@ -262,9 +243,9 @@ func TestDeleteBlockTrashesChildPages(t *testing.T) {
 	page, a, b, b1, c := f.page()
 	child, inChild, deepPage := uuid.New(), uuid.New(), uuid.New()
 	f.apply(
-		createPage(child, b1, nil, "Child"),
-		createBlock(inChild, child, nil, model.ItemTypeParagraph, "inside"),
-		createPage(deepPage, inChild, nil, "Deep"),
+		testutil.CreatePage(child, b1, nil, "Child"),
+		testutil.CreateBlock(inChild, child, nil, model.ItemTypeParagraph, "inside"),
+		testutil.CreatePage(deepPage, inChild, nil, "Deep"),
 	)
 
 	f.apply(model.Op{Op: model.OpDelete, ID: b})
@@ -281,12 +262,12 @@ func TestDeleteBlockTrashesChildPages(t *testing.T) {
 	if d := f.item(deepPage); *d.ParentID != inChild || d.TrashedAt != nil {
 		t.Error("a page inside the trashed page should stay where it is")
 	}
-	if pages, _ := f.db.ListPages(f.user); len(pages) != 1 {
+	if pages, _ := f.db.ListPages(ctx, f.user); len(pages) != 1 {
 		t.Errorf("sidebar = %+v, want only Page", pages)
 	}
 
 	// Undo re-creates the block with the same id.
-	f.apply(createBlock(b, page, ptr(1), model.ItemTypeBulletListItem, "b"))
+	f.apply(testutil.CreateBlock(b, page, testutil.Ptr(1), model.ItemTypeBulletListItem, "b"))
 	wantIDs(t, "page", f.children(page), a, b, c)
 }
 
@@ -294,7 +275,7 @@ func TestTrashPage(t *testing.T) {
 	f := newFixture(t)
 	page, _, _, b1, _ := f.page()
 	child := uuid.New()
-	f.apply(createPage(child, b1, nil, "Child"))
+	f.apply(testutil.CreatePage(child, b1, nil, "Child"))
 
 	f.apply(model.Op{Op: model.OpTrash, ID: child})
 	wantIDs(t, "b1", f.children(b1))
@@ -309,47 +290,47 @@ func TestRejections(t *testing.T) {
 	page, a, b, b1, c := f.page()
 	trashed, inTrash := uuid.New(), uuid.New()
 	f.apply(
-		createPage(trashed, f.ws, nil, "Trashed"),
-		createBlock(inTrash, trashed, nil, model.ItemTypeParagraph, "x"),
+		testutil.CreatePage(trashed, f.ws, nil, "Trashed"),
+		testutil.CreateBlock(inTrash, trashed, nil, model.ItemTypeParagraph, "x"),
 		model.Op{Op: model.OpTrash, ID: trashed},
 	)
 	other := &fixture{t: t, db: f.db, user: uuid.New()}
 	other.ws = f.db.Workspace(other.user).ID
 	theirs := uuid.New()
-	other.apply(createPage(theirs, other.ws, nil, "Theirs"))
+	other.apply(testutil.CreatePage(theirs, other.ws, nil, "Theirs"))
 	big := strings.Repeat("x", 40<<10)
 	f.apply(update(c, model.Props{"note": big}))
-	good := update(a, model.Props{"content": text("ok")})
+	good := update(a, model.Props{"content": model.TextContent("ok")})
 
 	cases := []struct {
 		name string
-		kind tree.Kind
+		kind apperr.Kind
 		op   model.Op
 	}{
-		{"unknown type", tree.Invalid, createBlock(uuid.New(), page, nil, "codeBlock", "x")},
-		{"another user's item", tree.NotFound, update(theirs, model.Props{"name": "x"})},
-		{"another user's parent", tree.NotFound, createBlock(uuid.New(), theirs, nil, model.ItemTypeParagraph, "x")},
-		{"unknown item", tree.NotFound, model.Op{Op: model.OpDelete, ID: uuid.New()}},
-		{"the workspace", tree.NotFound, move(f.ws, page, nil)},
-		{"edit inside a trashed page", tree.Conflict, update(inTrash, model.Props{"content": text("y")})},
-		{"create inside a trashed page", tree.Conflict, createBlock(uuid.New(), inTrash, nil, model.ItemTypeParagraph, "x")},
-		{"move into a trashed page", tree.Conflict, move(a, trashed, nil)},
-		{"trash a trashed page", tree.Conflict, model.Op{Op: model.OpTrash, ID: trashed}},
-		{"create past the end", tree.Conflict, createBlock(uuid.New(), page, ptr(4), model.ItemTypeParagraph, "x")},
-		{"move past the end", tree.Conflict, move(a, page, ptr(3))},
-		{"cycle", tree.Conflict, move(b, b1, nil)},
-		{"into itself", tree.Conflict, move(b, b, nil)},
-		{"page into its own block", tree.Conflict, move(page, b1, nil)},
-		{"delete a page", tree.Invalid, model.Op{Op: model.OpDelete, ID: page}},
-		{"trash a block", tree.Invalid, model.Op{Op: model.OpTrash, ID: a}},
-		{"block into page", tree.Invalid, model.Op{Op: model.OpUpdate, ID: a, Type: ptr(model.ItemTypePage)}},
-		{"page into block", tree.Invalid, model.Op{Op: model.OpUpdate, ID: page, Type: ptr(model.ItemTypeQuote)}},
-		{"block at the top level", tree.Invalid, createBlock(uuid.New(), f.ws, nil, model.ItemTypeParagraph, "x")},
-		{"block moved to the top level", tree.Invalid, move(a, f.ws, nil)},
-		{"heading without level", tree.Invalid, model.Op{Op: model.OpCreate, ID: uuid.New(), Type: ptr(model.ItemTypeHeading), ParentID: &page}},
-		{"props too large after merge", tree.Invalid, update(c, model.Props{"more": big})},
-		{"existing id", tree.Conflict, createBlock(a, page, nil, model.ItemTypeParagraph, "x")},
-		{"another user's id", tree.Conflict, createBlock(theirs, page, nil, model.ItemTypeParagraph, "x")},
+		{"unknown type", apperr.Invalid, testutil.CreateBlock(uuid.New(), page, nil, "codeBlock", "x")},
+		{"another user's item", apperr.NotFound, update(theirs, model.Props{"name": "x"})},
+		{"another user's parent", apperr.NotFound, testutil.CreateBlock(uuid.New(), theirs, nil, model.ItemTypeParagraph, "x")},
+		{"unknown item", apperr.NotFound, model.Op{Op: model.OpDelete, ID: uuid.New()}},
+		{"the workspace", apperr.NotFound, move(f.ws, page, nil)},
+		{"edit inside a trashed page", apperr.Conflict, update(inTrash, model.Props{"content": model.TextContent("y")})},
+		{"create inside a trashed page", apperr.Conflict, testutil.CreateBlock(uuid.New(), inTrash, nil, model.ItemTypeParagraph, "x")},
+		{"move into a trashed page", apperr.Conflict, move(a, trashed, nil)},
+		{"trash a trashed page", apperr.Conflict, model.Op{Op: model.OpTrash, ID: trashed}},
+		{"create past the end", apperr.Conflict, testutil.CreateBlock(uuid.New(), page, testutil.Ptr(4), model.ItemTypeParagraph, "x")},
+		{"move past the end", apperr.Conflict, move(a, page, testutil.Ptr(3))},
+		{"cycle", apperr.Conflict, move(b, b1, nil)},
+		{"into itself", apperr.Conflict, move(b, b, nil)},
+		{"page into its own block", apperr.Conflict, move(page, b1, nil)},
+		{"delete a page", apperr.Invalid, model.Op{Op: model.OpDelete, ID: page}},
+		{"trash a block", apperr.Invalid, model.Op{Op: model.OpTrash, ID: a}},
+		{"block into page", apperr.Invalid, model.Op{Op: model.OpUpdate, ID: a, Type: testutil.Ptr(model.ItemTypePage)}},
+		{"page into block", apperr.Invalid, model.Op{Op: model.OpUpdate, ID: page, Type: testutil.Ptr(model.ItemTypeQuote)}},
+		{"block at the top level", apperr.Invalid, testutil.CreateBlock(uuid.New(), f.ws, nil, model.ItemTypeParagraph, "x")},
+		{"block moved to the top level", apperr.Invalid, move(a, f.ws, nil)},
+		{"heading without level", apperr.Invalid, model.Op{Op: model.OpCreate, ID: uuid.New(), Type: testutil.Ptr(model.ItemTypeHeading), ParentID: &page}},
+		{"props too large after merge", apperr.TooLarge, update(c, model.Props{"more": big})},
+		{"existing id", apperr.Conflict, testutil.CreateBlock(a, page, nil, model.ItemTypeParagraph, "x")},
+		{"another user's id", apperr.Conflict, testutil.CreateBlock(theirs, page, nil, model.ItemTypeParagraph, "x")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -365,14 +346,14 @@ func TestOpsSeeEarlierOpsInTheBatch(t *testing.T) {
 	page, _, _, _, c := f.page()
 	x := uuid.New()
 	f.apply(
-		createBlock(x, page, ptr(1), model.ItemTypeParagraph, "x"),
+		testutil.CreateBlock(x, page, testutil.Ptr(1), model.ItemTypeParagraph, "x"),
 		move(c, x, nil),
 		model.Op{Op: model.OpDelete, ID: x},
 	)
 	if _, ok := f.db.Items[c]; ok {
 		t.Error("c should have been deleted with x")
 	}
-	f.reject(tree.NotFound, 0, update(x, model.Props{"content": text("gone")}))
+	f.reject(apperr.NotFound, 0, update(x, model.Props{"content": model.TextContent("gone")}))
 }
 
 func TestDuplicatePage(t *testing.T) {
@@ -380,14 +361,14 @@ func TestDuplicatePage(t *testing.T) {
 	page, a, b, b1, _ := f.page()
 	child, after := uuid.New(), uuid.New()
 	f.apply(
-		createPage(child, b1, nil, "Child"),
+		testutil.CreatePage(child, b1, nil, "Child"),
 		update(child, model.Props{"is_favorite": true}),
-		createPage(after, f.ws, nil, "After"),
+		testutil.CreatePage(after, f.ws, nil, "After"),
 		update(page, model.Props{"is_favorite": true}),
 	)
 	before := len(f.db.Items)
 
-	copied, err := f.db.Duplicate(f.user, page)
+	copied, err := f.db.Duplicate(ctx, f.user, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +397,7 @@ func TestDuplicatePage(t *testing.T) {
 		t.Errorf("copied child page = %+v", cchild)
 	}
 
-	again, err := f.db.Duplicate(f.user, page)
+	again, err := f.db.Duplicate(ctx, f.user, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -430,7 +411,7 @@ func TestDuplicateBlockAndRejections(t *testing.T) {
 	f := newFixture(t)
 	page, a, b, _, c := f.page()
 
-	copied, err := f.db.Duplicate(f.user, b)
+	copied, err := f.db.Duplicate(ctx, f.user, b)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -440,11 +421,10 @@ func TestDuplicateBlockAndRejections(t *testing.T) {
 	}
 
 	f.apply(model.Op{Op: model.OpTrash, ID: page})
-	var te *tree.Error
-	if _, err := f.db.Duplicate(f.user, a); !errors.As(err, &te) || te.Kind != tree.Conflict {
+	if _, err := f.db.Duplicate(ctx, f.user, a); !apperr.Is(err, apperr.Conflict) {
 		t.Errorf("duplicate inside the trash: err = %v", err)
 	}
-	if _, err := f.db.Duplicate(f.user, f.ws); !errors.As(err, &te) || te.Kind != tree.NotFound {
+	if _, err := f.db.Duplicate(ctx, f.user, f.ws); !apperr.Is(err, apperr.NotFound) {
 		t.Errorf("duplicate the workspace: err = %v", err)
 	}
 }

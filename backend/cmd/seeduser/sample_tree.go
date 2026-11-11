@@ -80,22 +80,15 @@ func validateNode(n node) error {
 			return fmt.Errorf(`%s: use "text" or props.content, not both`, n.Type)
 		}
 	}
-	for _, rule := range model.PropRules(n.Type) {
-		if v, ok := n.Props[rule.Key]; ok {
+	for key, v := range n.Props {
+		if rule, ok := model.RuleFor(n.Type, key); ok {
 			if _, valid := rule.Check(v); !valid {
-				return fmt.Errorf(`%s: props.%s is not valid`, n.Type, rule.Key)
+				return fmt.Errorf(`%s: props.%s is not valid`, n.Type, key)
 			}
 		}
 	}
 	_, err := model.CompleteProps(n.Type, n.Props)
 	return err
-}
-
-func textContent(text string) []any {
-	if text == "" {
-		return []any{}
-	}
-	return []any{map[string]any{"type": "text", "text": text, "styles": map[string]any{}}}
 }
 
 func emptyParagraph(parent uuid.UUID) model.Item {
@@ -114,7 +107,7 @@ func buildItems(parent uuid.UUID, nodes []node) (items []model.Item, ids []uuid.
 			if props == nil {
 				props = model.Props{}
 			}
-			props[model.PropContent] = textContent(n.Text)
+			props[model.PropContent] = model.TextContent(n.Text)
 		}
 		props, _ = model.CompleteProps(n.Type, props)
 		it := model.Item{ID: uuid.New(), ParentID: &p, Type: n.Type, Props: props}

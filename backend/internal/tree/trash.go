@@ -4,8 +4,8 @@ import (
 	"slices"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/model"
-	"backend/internal/pkg"
 
 	"github.com/google/uuid"
 )
@@ -23,18 +23,17 @@ func (e *engine) restore(op model.Op) error {
 		return err
 	}
 	if it.Type != model.ItemTypePage {
-		return e.fail(Invalid, "only pages are restored from the trash")
+		return e.fail(apperr.Invalid, "only pages are restored from the trash")
 	}
 	if it.TrashedAt == nil {
 		if _, err := e.chain(it); err != nil {
-			return e.fail(Conflict, "this page is inside a page in the trash; restore that page instead")
+			return e.fail(apperr.Conflict, "this page is inside a page in the trash; restore that page instead")
 		}
-		return e.fail(Conflict, "page is not in the trash")
+		return e.fail(apperr.Conflict, "page is not in the trash")
 	}
 	parentID := op.ParentID
 	if parentID == nil {
-		wsID := e.ws.ID
-		parentID = &wsID
+		parentID = e.workspaceID()
 	}
 	if _, err := e.parentFor(parentID, model.ItemTypePage); err != nil {
 		return err
@@ -59,12 +58,12 @@ func ListTrash(s Store) ([]model.Item, error) {
 
 // DeleteFromTrash removes a page in the trash for good, with everything in it.
 func DeleteFromTrash(s Store, id uuid.UUID) error {
-	pages, err := s.Trashed()
+	it, err := s.Get(id)
+	if apperr.Is(err, apperr.NotFound) || err == nil && it.TrashedAt == nil {
+		return apperr.New(apperr.NotFound, "page is not in the trash")
+	}
 	if err != nil {
 		return err
-	}
-	if !slices.ContainsFunc(pages, func(p model.Item) bool { return p.ID == id }) {
-		return pkg.NewNotFoundError("page in the trash")
 	}
 	return s.Delete(id)
 }
@@ -76,15 +75,14 @@ func EmptyTrash(s Store, before *time.Time) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	n := 0
+	var ids []uuid.UUID
 	for _, p := range pages {
-		if before != nil && !p.TrashedAt.Before(*before) {
-			continue
+		if before == nil || p.TrashedAt.Before(*before) {
+			ids = append(ids, p.ID)
 		}
-		if err := s.Delete(p.ID); err != nil {
-			return n, err
-		}
-		n++
 	}
-	return n, nil
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	return len(ids), s.DeleteMany(ids)
 }

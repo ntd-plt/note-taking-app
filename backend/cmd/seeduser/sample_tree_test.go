@@ -12,15 +12,15 @@ import (
 	"github.com/google/uuid"
 )
 
-func seedFake(t *testing.T, nodes []node) (*testutil.FakeDatabase, uuid.UUID, []model.Item) {
+func seedFake(t *testing.T, nodes []node) (*testutil.FakeItemStore, uuid.UUID, []model.Item) {
 	t.Helper()
-	db := testutil.NewFakeDatabase()
-	user := model.New()
-	if err := db.AddUser(*user); err != nil {
+	users, db := testutil.NewFakeStores()
+	user := model.NewUser("Seed", uuid.NewString()+"@example.com", []byte("h"))
+	if err := users.AddUser(ctx, user); err != nil {
 		t.Fatal(err)
 	}
 	rows, _ := buildItems(db.Workspace(user.ID).ID, nodes)
-	if err := db.ApplyOps(user.ID, createOps(rows)); err != nil {
+	if err := db.ApplyOps(ctx, user.ID, createOps(rows)); err != nil {
 		t.Fatal(err)
 	}
 	return db, user.ID, rows
@@ -55,7 +55,7 @@ func TestEmbeddedSampleTreeUsesEveryTypeAndNestsPages(t *testing.T) {
 		default:
 			underBlock = true
 		}
-		if crumbs, _ := db.Ancestors(userID, it.ID); len(crumbs) >= 2 {
+		if crumbs, _ := db.Ancestors(ctx, userID, it.ID); len(crumbs) >= 2 {
 			deep = true
 		}
 	}
@@ -118,7 +118,7 @@ func TestSeededPagesListInDocumentOrder(t *testing.T) {
 	}
 	db, userID, _ := seedFake(t, nodes)
 
-	pages, err := db.ListPages(userID)
+	pages, err := db.ListPages(ctx, userID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestBuildItemsDefaultsAndText(t *testing.T) {
 	if !reflect.DeepEqual(rows[0].Props, want) {
 		t.Errorf("page props = %v, want the defaults %v", rows[0].Props, want)
 	}
-	if got := rows[1].Props; got["textColor"] != "red" || !reflect.DeepEqual(got["content"], textContent("hi")) {
+	if got := rows[1].Props; got["textColor"] != "red" || !reflect.DeepEqual(got["content"], model.TextContent("hi")) {
 		t.Errorf("paragraph props = %v", got)
 	}
 	if got := rows[2].Props; got["checked"] != false {

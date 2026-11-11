@@ -6,23 +6,13 @@ export interface User {
   updatedAt?: string
 }
 
-export interface AuthState {
-  isAuthenticated: boolean
-  user: User | null
-}
-
 export interface LoginCredentials {
   email: string
-  password?: string // Optional if we support OAuth/other forms, but typically required
+  password: string
 }
 
-export interface RegisterCredentials {
+export interface SignupCredentials {
   username: string
   email: string
-  password?: string
-}
-
-export interface AuthResponse {
-  token: string
-  user: User
+  password: string
 }

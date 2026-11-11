@@ -36,6 +36,8 @@ const SIDEBAR_KEYBOARD_SHORTCUT = 'b'
 const SIDEBAR_WIDTH_DEFAULT = 256
 const SIDEBAR_WIDTH_MIN = 180
 const SIDEBAR_WIDTH_MAX = 480
+// Dragging the rail narrower than this hides the sidebar.
+const SIDEBAR_COLLAPSE_WIDTH = 120
 
 const clampSidebarWidth = (w: number) =>
   Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(w)))
@@ -337,7 +339,7 @@ function SidebarTrigger({
 }
 
 function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
-  const { toggleSidebar, state, setWidth, resetWidth, setIsResizing } =
+  const { toggleSidebar, state, setOpen, setWidth, resetWidth, setIsResizing } =
     useSidebar()
 
   const handlePointerDown = React.useCallback(
@@ -356,12 +358,20 @@ function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
 
       setIsResizing(true)
 
+      // Below the threshold the sidebar hides; dragging back out shows it
+      // again. The saved width stays the last one above the threshold.
+      let hidden = false
       const handleMove = (moveEvent: PointerEvent) => {
         const next =
           side === 'right'
             ? window.innerWidth - moveEvent.clientX
             : moveEvent.clientX
-        setWidth(next)
+        const hide = next < SIDEBAR_COLLAPSE_WIDTH
+        if (hide !== hidden) {
+          hidden = hide
+          setOpen(!hide)
+        }
+        if (!hide) setWidth(next)
       }
 
       const handleUp = () => {
@@ -373,7 +383,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
       window.addEventListener('pointermove', handleMove)
       window.addEventListener('pointerup', handleUp)
     },
-    [state, toggleSidebar, setWidth, setIsResizing],
+    [state, toggleSidebar, setOpen, setWidth, setIsResizing],
   )
 
   return (
@@ -384,7 +394,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
       tabIndex={-1}
       onPointerDown={handlePointerDown}
       onDoubleClick={resetWidth}
-      title="Drag to resize · double-click to reset"
+      title="Drag to resize or hide · double-click to reset"
       className={cn(
         'absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2',
         'cursor-col-resize group-data-[state=collapsed]:cursor-e-resize',

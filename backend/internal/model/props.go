@@ -92,6 +92,24 @@ func PropRules(t ItemType) []PropRule {
 	return nil
 }
 
+// TextContent is BlockNote inline content holding one unstyled run of text.
+func TextContent(text string) []any {
+	if text == "" {
+		return []any{}
+	}
+	return []any{map[string]any{"type": "text", "text": text, "styles": map[string]any{}}}
+}
+
+// RuleFor returns the rule a type has for key, if it relies on that key.
+func RuleFor(t ItemType, key string) (PropRule, bool) {
+	for _, r := range PropRules(t) {
+		if r.Key == key {
+			return r, true
+		}
+	}
+	return PropRule{}, false
+}
+
 // MissingPropError means a type's required key has no acceptable value.
 type MissingPropError struct {
 	Type ItemType

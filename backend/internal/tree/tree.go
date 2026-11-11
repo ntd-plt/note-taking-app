@@ -7,14 +7,13 @@ package tree
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"maps"
 	"reflect"
 	"slices"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/model"
-	"backend/internal/pkg"
 
 	"github.com/google/uuid"
 )
@@ -29,16 +28,18 @@ const (
 // Store reads and writes one user's items inside a transaction. The caller holds
 // the user's tree lock for as long as the Store is used.
 type Store interface {
-	// Get returns one of the user's items, or a *pkg.NotFoundError.
+	// Get returns one of the user's items, or an apperr NotFound.
 	Get(id uuid.UUID) (model.Item, error)
 	// Descendants returns every item below id, at any depth.
 	Descendants(id uuid.UUID) ([]model.Item, error)
-	// Insert adds a new item; an id already in use gives a *pkg.AlreadyExistsError.
+	// Insert adds a new item; an id already in use gives an apperr Conflict.
 	Insert(it model.Item) error
 	// Save writes every column of an existing item.
 	Save(it model.Item) error
 	// Delete removes an item and everything still below it.
 	Delete(id uuid.UUID) error
+	// DeleteMany is Delete for several items in one go.
+	DeleteMany(ids []uuid.UUID) error
 	// Trashed returns the pages in the trash: the ones stamped with trashed_at,
 	// not the pages inside them.
 	Trashed() ([]model.Item, error)
@@ -46,24 +47,6 @@ type Store interface {
 	// of its children that are not in the trash.
 	CheckChildIDs(parentIDs []uuid.UUID) error
 }
-
-// Kind says why an operation was rejected.
-type Kind int
-
-const (
-	Invalid Kind = iota
-	NotFound
-	Conflict
-)
-
-// Error is a rejected operation. Index is its position in the batch.
-type Error struct {
-	Index int
-	Kind  Kind
-	Msg   string
-}
-
-func (e *Error) Error() string { return fmt.Sprintf("operation %d: %s", e.Index, e.Msg) }
 
 type engine struct {
 	s       Store
@@ -76,7 +59,7 @@ type engine struct {
 }
 
 func newEngine(s Store, workspaceID uuid.UUID, now time.Time) (*engine, error) {
-	e := &engine{s: s, now: now, cache: map[uuid.UUID]model.Item{}, gone: map[uuid.UUID]bool{}, touched: map[uuid.UUID]bool{}}
+	e := &engine{s: s, now: now, index: -1, cache: map[uuid.UUID]model.Item{}, gone: map[uuid.UUID]bool{}, touched: map[uuid.UUID]bool{}}
 	ws, err := s.Get(workspaceID)
 	if err != nil {
 		return nil, err
@@ -86,29 +69,33 @@ func newEngine(s Store, workspaceID uuid.UUID, now time.Time) (*engine, error) {
 	return e, nil
 }
 
-func (e *engine) fail(kind Kind, format string, args ...any) error {
-	return &Error{Index: e.index, Kind: kind, Msg: fmt.Sprintf(format, args...)}
+// fail rejects the current operation; index is -1 outside a batch (Duplicate).
+func (e *engine) fail(kind apperr.Kind, format string, args ...any) error {
+	err := apperr.New(kind, format, args...)
+	if e.index >= 0 {
+		return err.AtOp(e.index)
+	}
+	return err
 }
 
 // get returns an item other than the workspace; what names it in errors.
 func (e *engine) get(id uuid.UUID, what string) (model.Item, error) {
 	if id == e.ws.ID {
-		return model.Item{}, e.fail(NotFound, "%s not found", what)
+		return model.Item{}, e.fail(apperr.NotFound, "%s not found", what)
 	}
 	return e.getAny(id, what)
 }
 
 func (e *engine) getAny(id uuid.UUID, what string) (model.Item, error) {
 	if e.gone[id] {
-		return model.Item{}, e.fail(NotFound, "%s not found", what)
+		return model.Item{}, e.fail(apperr.NotFound, "%s not found", what)
 	}
 	if it, ok := e.cache[id]; ok {
 		return it, nil
 	}
 	it, err := e.s.Get(id)
-	var nf *pkg.NotFoundError
-	if errors.As(err, &nf) {
-		return model.Item{}, e.fail(NotFound, "%s not found", what)
+	if apperr.Is(err, apperr.NotFound) {
+		return model.Item{}, e.fail(apperr.NotFound, "%s not found", what)
 	}
 	if err != nil {
 		return model.Item{}, err
@@ -123,10 +110,10 @@ func (e *engine) chain(it model.Item) ([]uuid.UUID, error) {
 	ids := []uuid.UUID{it.ID}
 	for it.ParentID != nil {
 		if it.TrashedAt != nil {
-			return nil, e.fail(Conflict, "item is in the trash")
+			return nil, e.fail(apperr.Conflict, "item is in the trash")
 		}
 		if len(ids) > MaxTreeDepth {
-			return nil, e.fail(Invalid, "items are nested too deeply")
+			return nil, e.fail(apperr.Invalid, "items are nested too deeply")
 		}
 		parent, err := e.getAny(*it.ParentID, "parent")
 		if err != nil {
@@ -136,6 +123,29 @@ func (e *engine) chain(it model.Item) ([]uuid.UUID, error) {
 		ids = append(ids, it.ID)
 	}
 	return ids, nil
+}
+
+// live loads an item other than the workspace, runs check on it if given, and
+// fails if the item or a page above it is in the trash.
+func (e *engine) live(id uuid.UUID, what string, check func(model.Item) error) (model.Item, error) {
+	it, err := e.get(id, what)
+	if err != nil {
+		return model.Item{}, err
+	}
+	if check != nil {
+		if err := check(it); err != nil {
+			return model.Item{}, err
+		}
+	}
+	if _, err := e.chain(it); err != nil {
+		return model.Item{}, err
+	}
+	return it, nil
+}
+
+func (e *engine) workspaceID() *uuid.UUID {
+	id := e.ws.ID
+	return &id
 }
 
 func (e *engine) save(it model.Item) error {
@@ -149,10 +159,10 @@ func (e *engine) save(it model.Item) error {
 func (e *engine) checkSize(props model.Props) error {
 	raw, err := json.Marshal(props)
 	if err != nil {
-		return e.fail(Invalid, "props cannot be stored: %v", err)
+		return e.fail(apperr.Invalid, "props cannot be stored: %v", err)
 	}
 	if len(raw) > MaxPropsBytes {
-		return e.fail(Invalid, "props must be at most %d KB", MaxPropsBytes>>10)
+		return e.fail(apperr.TooLarge, "props must be at most %d KB", MaxPropsBytes>>10)
 	}
 	return nil
 }
@@ -163,8 +173,16 @@ func (e *engine) detach(parentID, id uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	parent.ChildIDs = slices.DeleteFunc(slices.Clone(parent.ChildIDs), func(c uuid.UUID) bool { return c == id })
-	e.touched[parentID] = true
+	return e.setChildren(parent, withoutChild(parent.ChildIDs, id))
+}
+
+func withoutChild(ids []uuid.UUID, id uuid.UUID) []uuid.UUID {
+	return slices.DeleteFunc(slices.Clone(ids), func(c uuid.UUID) bool { return c == id })
+}
+
+func (e *engine) setChildren(parent model.Item, ids []uuid.UUID) error {
+	parent.ChildIDs = ids
+	e.touched[parent.ID] = true
 	return e.save(parent)
 }
 
@@ -177,11 +195,11 @@ func (e *engine) attach(parentID, id uuid.UUID, position *int) error {
 	if err != nil {
 		return err
 	}
-	ids := slices.DeleteFunc(slices.Clone(parent.ChildIDs), func(c uuid.UUID) bool { return c == id })
+	ids := withoutChild(parent.ChildIDs, id)
 	at := len(ids)
 	if position != nil {
 		if *position < 0 || *position > len(ids) {
-			return e.fail(Conflict, "position %d is out of range: the parent has %d other children", *position, len(ids))
+			return e.fail(apperr.Conflict, "position %d is out of range: the parent has %d other children", *position, len(ids))
 		}
 		at = *position
 	} else if parent.Type == model.ItemTypePage && len(ids) > 0 {
@@ -199,9 +217,7 @@ func (e *engine) attach(parentID, id uuid.UUID, position *int) error {
 			}
 		}
 	}
-	parent.ChildIDs = slices.Insert(ids, at, id)
-	e.touched[parentID] = true
-	return e.save(parent)
+	return e.setChildren(parent, slices.Insert(ids, at, id))
 }
 
 func isEmptyParagraph(it model.Item) bool {
@@ -216,21 +232,21 @@ func isEmptyParagraph(it model.Item) bool {
 // It returns the parent's chain up to the workspace.
 func (e *engine) parentFor(parentID *uuid.UUID, typ model.ItemType) ([]uuid.UUID, error) {
 	if parentID == nil {
-		return nil, e.fail(Invalid, "parent_id is required")
+		return nil, e.fail(apperr.Invalid, "parent_id is required")
 	}
 	parent, err := e.getAny(*parentID, "parent")
 	if err != nil {
 		return nil, err
 	}
 	if parent.ID == e.ws.ID && typ != model.ItemTypePage {
-		return nil, e.fail(Invalid, "only pages can be at the top level")
+		return nil, e.fail(apperr.Invalid, "only pages can be at the top level")
 	}
 	chain, err := e.chain(parent)
 	if err != nil {
 		return nil, err
 	}
 	if len(chain) >= MaxTreeDepth {
-		return nil, e.fail(Invalid, "items are nested too deeply")
+		return nil, e.fail(apperr.Invalid, "items are nested too deeply")
 	}
 	return chain, nil
 }
@@ -269,7 +285,7 @@ func Apply(s Store, workspaceID uuid.UUID, ops []model.Op, now time.Time) error 
 		case model.OpRestore:
 			err = e.restore(op)
 		default:
-			err = e.fail(Invalid, "unknown op %q", op.Op)
+			err = e.fail(apperr.Invalid, "unknown op %q", op.Op)
 		}
 		if err != nil {
 			return err
@@ -282,7 +298,7 @@ func (e *engine) completeProps(t model.ItemType, props model.Props) (model.Props
 	out, err := model.CompleteProps(t, props)
 	var missing *model.MissingPropError
 	if errors.As(err, &missing) {
-		return nil, e.fail(Invalid, "%s", missing.Error())
+		return nil, e.fail(apperr.Invalid, "%s", missing.Error())
 	}
 	if err != nil {
 		return nil, err
@@ -291,14 +307,17 @@ func (e *engine) completeProps(t model.ItemType, props model.Props) (model.Props
 }
 
 func (e *engine) create(op model.Op) error {
-	if op.Type == nil || *op.Type == model.ItemTypeWorkspace || !op.Type.Valid() {
-		return e.fail(Invalid, "a valid type is required")
+	if op.Type == nil {
+		return e.fail(apperr.Invalid, "a valid type is required")
+	}
+	if err := e.checkType(*op.Type); err != nil {
+		return err
 	}
 	if _, err := e.parentFor(op.ParentID, *op.Type); err != nil {
 		return err
 	}
 	if _, cached := e.cache[op.ID]; cached && !e.gone[op.ID] {
-		return e.fail(Conflict, "item %s already exists", op.ID)
+		return e.fail(apperr.Conflict, "item %s already exists", op.ID)
 	}
 	props, err := e.completeProps(*op.Type, op.Props)
 	if err != nil {
@@ -310,9 +329,8 @@ func (e *engine) create(op model.Op) error {
 		Props: props, CreatedAt: e.now, UpdatedAt: e.now,
 	}
 	err = e.s.Insert(it)
-	var exists *pkg.AlreadyExistsError
-	if errors.As(err, &exists) {
-		return e.fail(Conflict, "item %s already exists", op.ID)
+	if apperr.Is(err, apperr.Conflict) {
+		return e.fail(apperr.Conflict, "item %s already exists", op.ID)
 	}
 	if err != nil {
 		return err
@@ -325,10 +343,6 @@ func (e *engine) create(op model.Op) error {
 // mergeProps sets each given key on a copy of current. A null value is skipped,
 // and so is a value the type relies on that is not acceptable for that key.
 func mergeProps(t model.ItemType, current, changes model.Props) model.Props {
-	rules := map[string]model.PropRule{}
-	for _, r := range model.PropRules(t) {
-		rules[r.Key] = r
-	}
 	out := maps.Clone(current)
 	if out == nil {
 		out = model.Props{}
@@ -337,7 +351,7 @@ func mergeProps(t model.ItemType, current, changes model.Props) model.Props {
 		if v == nil {
 			continue
 		}
-		if rule, ok := rules[k]; ok {
+		if rule, ok := model.RuleFor(t, k); ok {
 			checked, valid := rule.Check(v)
 			if !valid {
 				continue
@@ -349,18 +363,25 @@ func mergeProps(t model.ItemType, current, changes model.Props) model.Props {
 	return out
 }
 
-func (e *engine) update(op model.Op) error {
-	it, err := e.get(op.ID, "item")
-	if err != nil {
-		return err
+func (e *engine) checkType(t model.ItemType) error {
+	if t == model.ItemTypeWorkspace || !t.Valid() {
+		return e.fail(apperr.Invalid, "unknown type %s", t)
 	}
-	if _, err := e.chain(it); err != nil {
+	return nil
+}
+
+func (e *engine) update(op model.Op) error {
+	it, err := e.live(op.ID, "item", nil)
+	if err != nil {
 		return err
 	}
 	typ := it.Type
 	if op.Type != nil {
+		if err := e.checkType(*op.Type); err != nil {
+			return err
+		}
 		if (*op.Type == model.ItemTypePage) != (it.Type == model.ItemTypePage) {
-			return e.fail(Invalid, "an item cannot change between page and block")
+			return e.fail(apperr.Invalid, "an item cannot change between page and block")
 		}
 		typ = *op.Type
 	}
@@ -373,11 +394,8 @@ func (e *engine) update(op model.Op) error {
 }
 
 func (e *engine) move(op model.Op) error {
-	it, err := e.get(op.ID, "item")
+	it, err := e.live(op.ID, "item", nil)
 	if err != nil {
-		return err
-	}
-	if _, err := e.chain(it); err != nil {
 		return err
 	}
 	parentChain, err := e.parentFor(op.ParentID, it.Type)
@@ -385,7 +403,7 @@ func (e *engine) move(op model.Op) error {
 		return err
 	}
 	if slices.Contains(parentChain, it.ID) {
-		return e.fail(Conflict, "an item cannot be moved inside itself")
+		return e.fail(apperr.Conflict, "an item cannot be moved inside itself")
 	}
 	if err := e.detach(*it.ParentID, it.ID); err != nil {
 		return err
@@ -400,14 +418,13 @@ func (e *engine) move(op model.Op) error {
 // delete removes a block and everything under it. Pages under it are not deleted:
 // they go to the trash, taking their own content with them.
 func (e *engine) delete(op model.Op) error {
-	it, err := e.get(op.ID, "item")
+	it, err := e.live(op.ID, "item", func(it model.Item) error {
+		if it.Type == model.ItemTypePage {
+			return e.fail(apperr.Invalid, "pages cannot be deleted here; trash them instead")
+		}
+		return nil
+	})
 	if err != nil {
-		return err
-	}
-	if it.Type == model.ItemTypePage {
-		return e.fail(Invalid, "pages cannot be deleted here; trash them instead")
-	}
-	if _, err := e.chain(it); err != nil {
 		return err
 	}
 	below, err := e.s.Descendants(it.ID)
@@ -449,21 +466,19 @@ func (e *engine) delete(op model.Op) error {
 // toTrash moves a page under the workspace and stamps it, leaving it out of the
 // workspace's child_ids.
 func (e *engine) toTrash(page model.Item) error {
-	wsID := e.ws.ID
-	page.ParentID = &wsID
+	page.ParentID = e.workspaceID()
 	page.TrashedAt = &e.now
 	return e.save(page)
 }
 
 func (e *engine) trash(op model.Op) error {
-	it, err := e.get(op.ID, "item")
+	it, err := e.live(op.ID, "item", func(it model.Item) error {
+		if it.Type != model.ItemTypePage {
+			return e.fail(apperr.Invalid, "only pages go to the trash; delete blocks instead")
+		}
+		return nil
+	})
 	if err != nil {
-		return err
-	}
-	if it.Type != model.ItemTypePage {
-		return e.fail(Invalid, "only pages go to the trash; delete blocks instead")
-	}
-	if _, err := e.chain(it); err != nil {
 		return err
 	}
 	if err := e.detach(*it.ParentID, it.ID); err != nil {

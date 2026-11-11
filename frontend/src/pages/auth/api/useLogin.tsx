@@ -1,8 +1,11 @@
 import { login } from '@/shared/api'
-import { useMutation } from '@tanstack/react-query'
+import { startSession } from '@/shared/hooks/useSession'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 export default function useLogin() {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: login,
+    onSuccess: (user) => startSession(queryClient, user),
   })
 }

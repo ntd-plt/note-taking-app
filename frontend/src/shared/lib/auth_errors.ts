@@ -10,8 +10,20 @@ const AUTH_ERROR_MESSAGES: Record<number, string> = {
 
 const DEFAULT_AUTH_ERROR_MESSAGE = 'Something went wrong. Please try again.'
 
-export function getAuthErrorMessage(error: unknown): string {
+export interface AuthErrorOptions {
+  // Show the server's own message for a 400. Signup turns this on: the server
+  // says which rule failed (name length, password length, email format).
+  serverMessageFor400?: boolean
+}
+
+export function getAuthErrorMessage(
+  error: unknown,
+  { serverMessageFor400 = false }: AuthErrorOptions = {},
+): string {
   if (error instanceof ApiError) {
+    if (serverMessageFor400 && error.status === 400 && error.message) {
+      return error.message
+    }
     return AUTH_ERROR_MESSAGES[error.status] ?? error.message
   }
   if (error instanceof Error && error.message) {

@@ -17,7 +17,7 @@ const docTemplate = `{
     "paths": {
         "/auth/login": {
             "post": {
-                "description": "Authenticates a user and returns access/refresh tokens",
+                "description": "Checks the email and password, starts a session and sets it in the sid cookie (HttpOnly, SameSite=Lax). Returns the user.",
                 "consumes": [
                     "application/json"
                 ],
@@ -35,7 +35,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/backend_internal_pkg.LoginRequest"
+                            "$ref": "#/definitions/internal_handlers.LoginRequest"
                         }
                     }
                 ],
@@ -43,7 +43,13 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/backend_internal_pkg.AuthResponse"
+                            "$ref": "#/definitions/internal_handlers.UserResponse"
+                        },
+                        "headers": {
+                            "Set-Cookie": {
+                                "type": "string",
+                                "description": "sid=\u003csession id\u003e"
+                            }
                         }
                     },
                     "400": {
@@ -56,7 +62,25 @@ const docTemplate = `{
                         }
                     },
                     "401": {
-                        "description": "Unauthorized",
+                        "description": "wrong email or password, the same for an unknown email",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -67,39 +91,19 @@ const docTemplate = `{
                 }
             }
         },
-        "/auth/refresh-token": {
+        "/auth/logout": {
             "post": {
-                "description": "Exchanges a refresh token for a new access token",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Ends the session in the sid cookie and clears the cookie. Succeeds without a session too.",
                 "tags": [
                     "auth"
                 ],
-                "summary": "Refresh access token",
-                "parameters": [
-                    {
-                        "description": "Refresh token",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/backend_internal_pkg.RefreshTokenRequest"
-                        }
-                    }
-                ],
+                "summary": "Log out",
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/backend_internal_pkg.AuthResponse"
-                        }
+                    "204": {
+                        "description": "No Content"
                     },
-                    "400": {
-                        "description": "Bad Request",
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -107,8 +111,54 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout-all": {
+            "post": {
+                "security": [
+                    {
+                        "SessionCookie": []
+                    }
+                ],
+                "description": "Ends every session of the logged-in user, on every device, and clears the sid cookie.",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Log out of all devices",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -121,7 +171,7 @@ const docTemplate = `{
         },
         "/auth/signup": {
             "post": {
-                "description": "Creates a new user account and returns access/refresh tokens",
+                "description": "Creates an account, starts a session and sets it in the sid cookie (HttpOnly, SameSite=Lax). Returns the new user. The name is trimmed and must be 1 to 50 characters; the password must be 6 to 72 bytes; the email must be a valid, deliverable address.",
                 "consumes": [
                     "application/json"
                 ],
@@ -139,19 +189,34 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/backend_internal_pkg.SignupResponse"
+                            "$ref": "#/definitions/internal_handlers.SignupRequest"
                         }
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/backend_internal_pkg.AuthResponse"
+                            "$ref": "#/definitions/internal_handlers.UserResponse"
+                        },
+                        "headers": {
+                            "Set-Cookie": {
+                                "type": "string",
+                                "description": "sid=\u003csession id\u003e"
+                            }
                         }
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -193,7 +258,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "For a page id, returns the page and everything under it as one flat list in document order (child pages included, not their content), plus its ancestor pages. For a block id, returns the page that contains the block, with focus_id set to the block. The workspace root cannot be opened.",
@@ -217,7 +282,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.ItemResponse"
+                            "$ref": "#/definitions/internal_handlers.ItemResponse"
                         }
                     },
                     "400": {
@@ -263,7 +328,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "Deep-copies the item and everything under it, child pages included, with new ids, and places the copy right after the original. A copied page is named \"Name (Copy N)\". Copied pages are not favorites.",
@@ -342,7 +407,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "Applies up to 500 create, update, move, delete, trash and restore operations in order, all-or-nothing. restore takes a page out of the trash and puts it under parent_id at position, or at the end of the top level without parent_id; a page inside a trashed page cannot be restored on its own. A batch that moves pages to the trash also removes the user's pages that have been in the trash longer than the retention period. Ids are chosen by the client. position is an index into the parent's child_ids when the operation runs, not counting the item itself; without it the item goes at the end, except that a page added to the end of a page goes before its trailing empty paragraph. update merges props key by key: null values, and wrong values for keys the type relies on, are ignored. Rejected: unknown types, other users' items, items inside a trashed page, positions out of range, cycles, delete on a page, trash on a block, changing between page and block, a heading without a level, and props over 64 KB. A rejection names the failing operation in op_index.",
@@ -363,7 +428,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_services.ApplyOpsRequest"
+                            "$ref": "#/definitions/internal_handlers.ApplyOpsRequest"
                         }
                     }
                 ],
@@ -424,7 +489,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "Returns every page that is not in the trash, in document order. parent_id is the direct parent (a block, a page or the workspace); parent_page_id is the nearest page above, left out for a top-level page.",
@@ -470,7 +535,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "Returns the pages in the trash, most recently trashed first. Pages inside a trashed page are not listed on their own. Pages past the retention period are left out; they are removed the next time something is moved to the trash.",
@@ -485,7 +550,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.TrashResponse"
+                            "$ref": "#/definitions/internal_handlers.TrashResponse"
                         }
                     },
                     "401": {
@@ -511,7 +576,7 @@ const docTemplate = `{
             "delete": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "Removes every page in the trash, and everything inside them, for good.",
@@ -557,7 +622,7 @@ const docTemplate = `{
             "delete": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "Removes a page in the trash and everything inside it. This cannot be undone.",
@@ -621,7 +686,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "Puts the page back at the end of the top level, with everything that was inside it. To restore it somewhere else, send a restore operation to /ops. A page inside a trashed page cannot be restored on its own.",
@@ -688,7 +753,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "Returns the authenticated user's profile (never includes the password hash)",
@@ -703,7 +768,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.UserResponse"
+                            "$ref": "#/definitions/internal_handlers.UserResponse"
                         }
                     },
                     "401": {
@@ -738,10 +803,10 @@ const docTemplate = `{
             "put": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
-                "description": "Updates the authenticated user's own profile (name and/or email). Partial update: omitted fields are left unchanged.",
+                "description": "Changes the logged-in user's name: trimmed, 1 to 50 characters. The email cannot be changed yet; a body with \"email\" gets 400.",
                 "consumes": [
                     "application/json"
                 ],
@@ -759,7 +824,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_services.UpdateUserRequest"
+                            "$ref": "#/definitions/internal_handlers.UpdateUserRequest"
                         }
                     }
                 ],
@@ -767,7 +832,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_services.UserResponse"
+                            "$ref": "#/definitions/internal_handlers.UserResponse"
                         }
                     },
                     "400": {
@@ -797,15 +862,6 @@ const docTemplate = `{
                             }
                         }
                     },
-                    "409": {
-                        "description": "Conflict",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -822,7 +878,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "BearerAuth": []
+                        "SessionCookie": []
                     }
                 ],
                 "description": "Returns the user's hidden workspace item. Its child_ids are the top-level pages; create a top-level page with it as parent_id.",
@@ -993,66 +1049,7 @@ const docTemplate = `{
             "type": "object",
             "additionalProperties": {}
         },
-        "backend_internal_pkg.AuthResponse": {
-            "type": "object",
-            "properties": {
-                "access_token": {
-                    "type": "string"
-                },
-                "refresh_token": {
-                    "type": "string"
-                }
-            }
-        },
-        "backend_internal_pkg.LoginRequest": {
-            "type": "object",
-            "required": [
-                "email",
-                "password"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string",
-                    "minLength": 6
-                }
-            }
-        },
-        "backend_internal_pkg.RefreshTokenRequest": {
-            "type": "object",
-            "required": [
-                "token"
-            ],
-            "properties": {
-                "token": {
-                    "type": "string"
-                }
-            }
-        },
-        "backend_internal_pkg.SignupResponse": {
-            "type": "object",
-            "required": [
-                "email",
-                "name",
-                "password"
-            ],
-            "properties": {
-                "email": {
-                    "type": "string",
-                    "maxLength": 254
-                },
-                "name": {
-                    "type": "string"
-                },
-                "password": {
-                    "type": "string",
-                    "minLength": 6
-                }
-            }
-        },
-        "internal_services.ApplyOpsRequest": {
+        "internal_handlers.ApplyOpsRequest": {
             "type": "object",
             "properties": {
                 "ops": {
@@ -1063,7 +1060,7 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_services.ItemResponse": {
+        "internal_handlers.ItemResponse": {
             "type": "object",
             "properties": {
                 "ancestors": {
@@ -1086,18 +1083,52 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_services.TrashResponse": {
+        "internal_handlers.LoginRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handlers.SignupRequest": {
+            "type": "object",
+            "required": [
+                "email",
+                "name",
+                "password"
+            ],
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_handlers.TrashResponse": {
             "type": "object",
             "properties": {
                 "pages": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_services.TrashedPage"
+                        "$ref": "#/definitions/internal_handlers.TrashedPage"
                     }
                 }
             }
         },
-        "internal_services.TrashedPage": {
+        "internal_handlers.TrashedPage": {
             "type": "object",
             "properties": {
                 "child_ids": {
@@ -1138,18 +1169,15 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_services.UpdateUserRequest": {
+        "internal_handlers.UpdateUserRequest": {
             "type": "object",
             "properties": {
-                "email": {
-                    "type": "string"
-                },
                 "name": {
                     "type": "string"
                 }
             }
         },
-        "internal_services.UserResponse": {
+        "internal_handlers.UserResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -1171,11 +1199,11 @@ const docTemplate = `{
         }
     },
     "securityDefinitions": {
-        "BearerAuth": {
-            "description": "Type \"Bearer\" followed by a space and the JWT access token.",
+        "SessionCookie": {
+            "description": "Set by POST /auth/login or /auth/signup; the browser sends it by itself.",
             "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
+            "name": "sid",
+            "in": "cookie"
         }
     }
 }`
@@ -1187,7 +1215,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Note Taking App API",
-	Description:      "API for managing users and their pages and blocks.",
+	Description:      "API for managing users and their pages and blocks.\nAuthentication: log in with POST /auth/login (or sign up), which sets the session in the HttpOnly \"sid\" cookie. The browser sends it with every later request, including from this page. State-changing requests from other sites are refused.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

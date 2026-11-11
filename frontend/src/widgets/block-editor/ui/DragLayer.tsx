@@ -4,7 +4,9 @@
 // block is moved in the editor keeping its id, so the next save sends one move.
 import * as React from 'react'
 import { createPortal } from 'react-dom'
+import { useLatest } from '#/shared/hooks/useLatest'
 import { dropTarget } from '../model/dropTarget'
+import { appendChild } from '../model/editorOps'
 import type { BlockRow, DropGeometry, EditorDrop } from '../model/dropTarget'
 import type { PageEditor } from '../model/schema'
 
@@ -98,18 +100,6 @@ export function applyDrop(
   })
 }
 
-function appendChild(
-  editor: PageEditor,
-  parentId: string,
-  block: NonNullable<ReturnType<PageEditor['getBlock']>>,
-) {
-  const parent = editor.getBlock(parentId)
-  if (!parent) return
-  const last = parent.children.at(-1)
-  if (last) editor.insertBlocks([block], last, 'after')
-  else editor.updateBlock(parentId, { children: [block] })
-}
-
 interface DragState {
   id: string
   drop: EditorDrop | null
@@ -127,12 +117,8 @@ export function useBlockDrag(
   onActiveChange?: (active: boolean) => void,
 ): BlockDrag {
   const [state, setState] = React.useState<DragState | null>(null)
-  const onDropRef = React.useRef(onDrop)
-  const onActiveRef = React.useRef(onActiveChange)
-  React.useEffect(() => {
-    onDropRef.current = onDrop
-    onActiveRef.current = onActiveChange
-  })
+  const onDropRef = useLatest(onDrop)
+  const onActiveRef = useLatest(onActiveChange)
 
   const start = React.useCallback(
     (id: string, first: { x: number; y: number }) => {
@@ -191,7 +177,7 @@ export function useBlockDrag(
       update()
       frame = requestAnimationFrame(tick)
     },
-    [editor],
+    [editor, onDropRef, onActiveRef],
   )
 
   return { start, overlay: state ? <Indicator state={state} /> : null }

@@ -2,7 +2,7 @@
 // last change it diffs the document against the last saved snapshot and sends
 // the result. Saves run one at a time, in order. A failed save stops the saver;
 // the caller shows a toast and reloads the page.
-import { MAX_OPS_PER_BATCH, changesPages } from '#/entities/item'
+import { MAX_OPS_PER_BATCH } from '#/entities/item'
 import type { Op } from '#/entities/item'
 import { childList } from './blocks'
 import type { Snapshot } from './blocks'
@@ -21,7 +21,7 @@ export interface TrashedBlock {
 export interface PageSaverOptions {
   saved: Snapshot
   read: () => Snapshot
-  send: (ops: Op[], refreshPages: boolean) => Promise<void>
+  send: (ops: Op[]) => Promise<void>
   onError: (err: unknown) => void
   onSavingChange?: (saving: boolean) => void
   // Called after a save that sent child pages to the trash, with each page
@@ -86,19 +86,13 @@ export class PageSaver {
           : op,
     )
     if (ops.length === 0) return
-    const refresh =
-      this.extra.length > 0 ||
-      changesPages(ops) ||
-      ops.some(
-        (op) => op.op === 'move' && next.nodes.get(op.id)?.type === 'page',
-      )
     const before = this.saved
     this.opts.onSavingChange?.(true)
     try {
       // Batches run in order and each op sees the ones before it, so a long
       // diff can go in several batches.
       for (let i = 0; i < ops.length; i += MAX_OPS_PER_BATCH) {
-        await this.opts.send(ops.slice(i, i + MAX_OPS_PER_BATCH), refresh)
+        await this.opts.send(ops.slice(i, i + MAX_OPS_PER_BATCH))
       }
       this.saved = next
       this.extra = []

@@ -59,7 +59,6 @@ describe('PageSaver', () => {
           props: { content: [{ type: 'text', text: 'xy', styles: {} }] },
         },
       ],
-      false,
     ])
   })
 
@@ -76,13 +75,12 @@ describe('PageSaver', () => {
     ])
   })
 
-  it('asks for a sidebar refresh when a page block is created, moved or removed', async () => {
+  it('sends a moved page block as one move', async () => {
     const s = setup([p('a'), page('c')])
     s.edit([page('c'), p('a')])
     await s.saver.flush()
     expect(s.send.mock.calls[0]).toEqual([
       [{ op: 'move', id: 'c', parentId: 'pg', position: 0 }],
-      true,
     ])
   })
 
@@ -123,12 +121,11 @@ describe('PageSaver', () => {
     const s = setup([p('a'), page('c')])
     s.edit([p('a')])
     await s.saver.flush()
-    expect(s.send.mock.calls[0]).toEqual([[{ op: 'trash', id: 'c' }], true])
+    expect(s.send.mock.calls[0]).toEqual([[{ op: 'trash', id: 'c' }]])
     s.edit([page('c'), p('a')])
     await s.saver.flush()
     expect(s.send.mock.calls[1]).toEqual([
       [{ op: 'restore', id: 'c', parentId: 'pg', position: 0 }],
-      true,
     ])
     // Once restored it is an ordinary page block again.
     s.edit([p('a')])

@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 
-migrate -path ./migrations -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable" up
+# dburl prints DATABASE_URL as given, or the escaped URL built from POSTGRES_*.
+MIGRATE_URL="$(./dburl -sslmode=disable)"
+migrate -path ./migrations -database "${MIGRATE_URL}" up
 
 exec ./server

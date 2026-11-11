@@ -3,7 +3,13 @@ import { pageName } from '#/entities/item'
 import type { Item } from '#/entities/item'
 import { seedTree } from '#/entities/item/api/mockSeed'
 import { fromWireItem } from '#/entities/item/api/wire'
-import { buildPageTree, favoritePages, isWithin, visibleRows } from './pageTree'
+import {
+  buildPageTree,
+  favoritePages,
+  isWithin,
+  pageAncestors,
+  visibleRows,
+} from './pageTree'
 import type { PageNode } from './pageTree'
 
 const pages = () => seedTree().tree.listPages().map(fromWireItem)
@@ -65,6 +71,23 @@ describe('favoritePages', () => {
       'Getting Started',
       'Weekly sync',
     ])
+  })
+})
+
+describe('pageAncestors', () => {
+  it('lists the pages above, nearest first, through blocks', () => {
+    const { tree, ids } = seedTree()
+    const all = tree.listPages().map(fromWireItem)
+    expect(pageAncestors(ids['Design checklist'], all).map(pageName)).toEqual([
+      'Website Redesign',
+      'Work',
+    ])
+    // Weekly sync sits in the Meetings bullet, a block.
+    expect(pageAncestors(ids['Weekly sync'], all).map(pageName)).toEqual([
+      'Work',
+    ])
+    expect(pageAncestors(ids.Work, all)).toEqual([])
+    expect(pageAncestors('unknown', all)).toEqual([])
   })
 })
 

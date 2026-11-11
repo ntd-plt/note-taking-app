@@ -1,150 +1,78 @@
 package services
 
 import (
+	"context"
 	"log"
-	"net/http"
 	"time"
 
 	"backend/internal/model"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-// TrashResponse lists the pages in the trash, most recently trashed first. Each
-// page's purge_at is when it will be removed for good.
-type TrashResponse struct {
-	Pages []TrashedPage `json:"pages"`
+// purgeTimeout bounds the trash cleanup that follows a trash batch.
+const purgeTimeout = 10 * time.Second
+
+type TrashService struct {
+	db TrashStore
+	// retention is how long a page stays in the trash before it is removed.
+	retention time.Duration
 }
 
+func NewTrashService(db TrashStore, retention time.Duration) *TrashService {
+	return &TrashService{db: db, retention: retention}
+}
+
+// trashCutoff is the moment before which a trashed page has expired.
+func trashCutoff(now time.Time, retention time.Duration) time.Time {
+	return now.Add(-retention)
+}
+
+// TrashedPage is a page in the trash and when it will be removed for good.
 type TrashedPage struct {
-	model.Item
-	PurgeAt string `json:"purge_at"`
+	Page    model.Item
+	PurgeAt time.Time
 }
 
-// purgeExpiredTrash removes the user's pages that have been in the trash longer
-// than the retention period. It runs after a batch that moved pages to the trash,
-// so the trash is cleaned lazily; a failure is logged, not reported.
-func (s *ItemsService) purgeExpiredTrash(userID uuid.UUID) {
-	before := s.now().Add(-s.retention)
-	if n, err := s.db.EmptyTrash(userID, &before); err != nil {
-		log.Printf("purging the trash of %s: %v", userID, err)
-	} else if n > 0 {
-		log.Printf("purged %d expired pages from the trash of %s", n, userID)
-	}
-}
-
-// ListTrash godoc
-// @Summary      List the trash
-// @Description  Returns the pages in the trash, most recently trashed first. Pages inside a trashed page are not listed on their own. Pages past the retention period are left out; they are removed the next time something is moved to the trash.
-// @Tags         trash
-// @Produce      json
-// @Security     BearerAuth
-// @Success      200  {object}  TrashResponse
-// @Failure      401  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /trash [get]
-func (s *ItemsService) ListTrash(c *gin.Context) {
-	userID, ok := currentUser(c)
-	if !ok {
-		return
-	}
-	pages, err := s.db.ListTrash(userID)
+// ListTrash returns the pages in the trash, most recently trashed first, leaving
+// out the ones past the retention period.
+func (s *TrashService) ListTrash(ctx context.Context, userID uuid.UUID) ([]TrashedPage, error) {
+	pages, err := s.db.ListTrash(ctx, userID)
 	if err != nil {
-		respondError(c, err)
-		return
+		return nil, err
 	}
-	expired := s.now().Add(-s.retention)
-	out := TrashResponse{Pages: []TrashedPage{}}
+	expired := trashCutoff(time.Now(), s.retention)
+	out := []TrashedPage{}
 	for _, p := range pages {
 		if p.TrashedAt.Before(expired) {
 			continue
 		}
-		out.Pages = append(out.Pages, TrashedPage{Item: p, PurgeAt: p.TrashedAt.Add(s.retention).UTC().Format(time.RFC3339)})
+		out = append(out, TrashedPage{Page: p, PurgeAt: p.TrashedAt.Add(s.retention)})
 	}
-	c.JSON(http.StatusOK, out)
+	return out, nil
 }
 
-// RestoreFromTrash godoc
-// @Summary      Restore a page from the trash
-// @Description  Puts the page back at the end of the top level, with everything that was inside it. To restore it somewhere else, send a restore operation to /ops. A page inside a trashed page cannot be restored on its own.
-// @Tags         trash
-// @Security     BearerAuth
-// @Param        id   path  string  true  "Page id"
-// @Success      204  "No Content"
-// @Failure      400  {object}  map[string]any
-// @Failure      401  {object}  map[string]string
-// @Failure      404  {object}  map[string]any
-// @Failure      409  {object}  map[string]any
-// @Failure      500  {object}  map[string]string
-// @Router       /trash/{id}/restore [post]
-func (s *ItemsService) RestoreFromTrash(c *gin.Context) {
-	userID, ok := currentUser(c)
-	if !ok {
-		return
-	}
-	id, ok := itemIDParam(c)
-	if !ok {
-		return
-	}
-	if err := s.db.ApplyOps(userID, []model.Op{{Op: model.OpRestore, ID: id}}); err != nil {
-		respondOpError(c, err)
-		return
-	}
-	c.Status(http.StatusNoContent)
+func (s *TrashService) Restore(ctx context.Context, userID, id uuid.UUID) error {
+	return s.db.ApplyOps(ctx, userID, []model.Op{{Op: model.OpRestore, ID: id}})
 }
 
-// DeleteFromTrash godoc
-// @Summary      Delete a page for good
-// @Description  Removes a page in the trash and everything inside it. This cannot be undone.
-// @Tags         trash
-// @Security     BearerAuth
-// @Param        id   path  string  true  "Page id"
-// @Success      204  "No Content"
-// @Failure      400  {object}  map[string]string
-// @Failure      401  {object}  map[string]string
-// @Failure      404  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /trash/{id} [delete]
-func (s *ItemsService) DeleteFromTrash(c *gin.Context) {
-	userID, ok := currentUser(c)
-	if !ok {
-		return
-	}
-	id, ok := itemIDParam(c)
-	if !ok {
-		return
-	}
-	if err := s.db.DeleteFromTrash(userID, id); err != nil {
-		if isNotFound(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "page is not in the trash"})
-			return
-		}
-		respondError(c, err)
-		return
-	}
-	c.Status(http.StatusNoContent)
+func (s *TrashService) DeleteFromTrash(ctx context.Context, userID, id uuid.UUID) error {
+	return s.db.DeleteFromTrash(ctx, userID, id)
 }
 
-// EmptyTrash godoc
-// @Summary      Empty the trash
-// @Description  Removes every page in the trash, and everything inside them, for good.
-// @Tags         trash
-// @Produce      json
-// @Security     BearerAuth
-// @Success      200  {object}  map[string]int  "deleted: how many pages were removed"
-// @Failure      401  {object}  map[string]string
-// @Failure      500  {object}  map[string]string
-// @Router       /trash [delete]
-func (s *ItemsService) EmptyTrash(c *gin.Context) {
-	userID, ok := currentUser(c)
-	if !ok {
-		return
+func (s *TrashService) EmptyTrash(ctx context.Context, userID uuid.UUID) (int, error) {
+	return s.db.EmptyTrash(ctx, userID, nil)
+}
+
+// PurgeExpired removes pages past the retention period. It keeps going if the
+// client disconnects; a failure is logged, not reported.
+func (s *TrashService) PurgeExpired(ctx context.Context, userID uuid.UUID) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), purgeTimeout)
+	defer cancel()
+	before := trashCutoff(time.Now(), s.retention)
+	if n, err := s.db.EmptyTrash(ctx, userID, &before); err != nil {
+		log.Printf("purging the trash of %s: %v", userID, err)
+	} else if n > 0 {
+		log.Printf("purged %d expired pages from the trash of %s", n, userID)
 	}
-	n, err := s.db.EmptyTrash(userID, nil)
-	if err != nil {
-		respondError(c, err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"deleted": n})
 }

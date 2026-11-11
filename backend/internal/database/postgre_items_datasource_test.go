@@ -12,9 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/database"
 	"backend/internal/model"
-	"backend/internal/pkg"
+	"backend/internal/testutil"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -91,17 +92,14 @@ func newItemsDB(t *testing.T) (*database.PostgreItemsDataSource, *pgxpool.Pool) 
 // newUser signs a user up, which also creates their workspace.
 func newUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	t.Helper()
-	u := model.New().WithEmail(uuid.NewString() + "@example.com").WithUsername("u").WithPasswordHash([]byte("h"))
-	if err := database.NewPostgreUserDataSource(pool).AddUser(*u); err != nil {
+	u := model.NewUser("u", uuid.NewString()+"@example.com", []byte("h"))
+	if err := database.NewPostgreUserDataSource(pool).AddUser(ctx, u); err != nil {
 		t.Fatalf("creating user: %v", err)
 	}
 	return u.ID
 }
 
-func isNotFound(err error) bool {
-	var nf *pkg.NotFoundError
-	return errors.As(err, &nf)
-}
+func isNotFound(err error) bool { return apperr.Is(err, apperr.NotFound) }
 
 // builder collects items so a test can create a whole tree in one ApplyOps batch,
 // each item appended to its parent.
@@ -137,16 +135,16 @@ func mustInsert(t *testing.T, db *database.PostgreItemsDataSource, userID uuid.U
 	t.Helper()
 	ops := make([]model.Op, len(b.items))
 	for i, it := range b.items {
-		ops[i] = model.Op{Op: model.OpCreate, ID: it.ID, Type: ptr(it.Type), ParentID: it.ParentID, Props: it.Props}
+		ops[i] = model.Op{Op: model.OpCreate, ID: it.ID, Type: testutil.Ptr(it.Type), ParentID: it.ParentID, Props: it.Props}
 	}
-	if err := db.ApplyOps(userID, ops); err != nil {
+	if err := db.ApplyOps(ctx, userID, ops); err != nil {
 		t.Fatalf("creating: %v", err)
 	}
 }
 
 func workspaceOf(t *testing.T, db *database.PostgreItemsDataSource, userID uuid.UUID) model.Item {
 	t.Helper()
-	ws, err := db.GetWorkspace(userID)
+	ws, err := db.GetWorkspace(ctx, userID)
 	if err != nil {
 		t.Fatalf("getting workspace: %v", err)
 	}
@@ -223,7 +221,7 @@ func TestPostgresPageTreeFollowsChildIDsAndStopsAtChildPages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	items, err := db.GetPageTree(me, page)
+	items, err := db.GetPageTree(ctx, me, page)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,10 +245,10 @@ func TestPostgresPageTreeFollowsChildIDsAndStopsAtChildPages(t *testing.T) {
 		t.Errorf("workspace child_ids = %v, want the new page appended", got)
 	}
 
-	if _, err := db.GetPageTree(me, bullet); !isNotFound(err) {
+	if _, err := db.GetPageTree(ctx, me, bullet); !isNotFound(err) {
 		t.Errorf("page tree of a block: err = %v, want not found", err)
 	}
-	if _, err := db.GetPageTree(newUser(t, pool), page); !isNotFound(err) {
+	if _, err := db.GetPageTree(ctx, newUser(t, pool), page); !isNotFound(err) {
 		t.Errorf("page tree of another user's page: err = %v, want not found", err)
 	}
 }
@@ -269,24 +267,24 @@ func TestPostgresResolveItemAndAncestors(t *testing.T) {
 	deep := b.add(quote, model.ItemTypeParagraph, "deep")
 	mustInsert(t, db, me, b)
 
-	loc, err := db.ResolveItem(me, deep)
+	loc, err := db.ResolveItem(ctx, me, deep)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if loc.PageID != leaf || loc.Type != model.ItemTypeParagraph || loc.InTrash {
 		t.Errorf("resolve block = %+v", loc)
 	}
-	if loc, err := db.ResolveItem(me, mid); err != nil || loc.PageID != mid {
+	if loc, err := db.ResolveItem(ctx, me, mid); err != nil || loc.PageID != mid {
 		t.Errorf("resolve page = %+v, %v", loc, err)
 	}
-	if _, err := db.ResolveItem(me, ws); !isNotFound(err) {
+	if _, err := db.ResolveItem(ctx, me, ws); !isNotFound(err) {
 		t.Errorf("resolve workspace: err = %v, want not found", err)
 	}
-	if _, err := db.ResolveItem(newUser(t, pool), deep); !isNotFound(err) {
+	if _, err := db.ResolveItem(ctx, newUser(t, pool), deep); !isNotFound(err) {
 		t.Errorf("resolve another user's block: err = %v, want not found", err)
 	}
 
-	crumbs, err := db.Ancestors(me, leaf)
+	crumbs, err := db.Ancestors(ctx, me, leaf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,7 +295,7 @@ func TestPostgresResolveItemAndAncestors(t *testing.T) {
 	if !slices.Equal(names, []string{"Top", "Mid"}) {
 		t.Errorf("ancestors = %v", names)
 	}
-	if crumbs, err := db.Ancestors(me, top); err != nil || len(crumbs) != 0 {
+	if crumbs, err := db.Ancestors(ctx, me, top); err != nil || len(crumbs) != 0 {
 		t.Errorf("ancestors of a top-level page = %v, %v", crumbs, err)
 	}
 
@@ -309,7 +307,7 @@ func TestPostgresResolveItemAndAncestors(t *testing.T) {
 	if _, err := pool.Exec(context.Background(), "UPDATE items SET child_ids = '{}' WHERE id = $1", ws); err != nil {
 		t.Fatal(err)
 	}
-	if loc, err := db.ResolveItem(me, deep); err != nil || !loc.InTrash {
+	if loc, err := db.ResolveItem(ctx, me, deep); err != nil || !loc.InTrash {
 		t.Errorf("resolve inside a trashed page = %+v, %v; want in_trash", loc, err)
 	}
 }
@@ -343,7 +341,7 @@ func TestPostgresListPagesInDocumentOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pages, err := db.ListPages(me)
+	pages, err := db.ListPages(ctx, me)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +381,7 @@ func TestPostgresTrashedPageHiddenAtAnyDepth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pages, err := db.ListPages(me)
+	pages, err := db.ListPages(ctx, me)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +392,7 @@ func TestPostgresTrashedPageHiddenAtAnyDepth(t *testing.T) {
 	if !slices.Equal(ids, []uuid.UUID{a, kept}) {
 		t.Errorf("pages = %v, want A and Kept", ids)
 	}
-	items, err := db.GetPageTree(me, a)
+	items, err := db.GetPageTree(ctx, me, a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,7 +423,7 @@ func TestPostgresTrashRestoreAndDelete(t *testing.T) {
 
 	trash := func(user uuid.UUID, id uuid.UUID) {
 		t.Helper()
-		if err := db.ApplyOps(user, []model.Op{{Op: model.OpTrash, ID: id}}); err != nil {
+		if err := db.ApplyOps(ctx, user, []model.Op{{Op: model.OpTrash, ID: id}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -436,32 +434,32 @@ func TestPostgresTrashRestoreAndDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pages, err := db.ListTrash(me)
+	pages, err := db.ListTrash(ctx, me)
 	if err != nil || len(pages) != 2 || pages[0].ID != child || pages[1].ID != old {
 		t.Fatalf("trash = %+v (%v), want Child then Old, and not Deep or another user's page", pages, err)
 	}
 
 	// Back to its old place, then into the trash again.
 	pos := 0
-	if err := db.ApplyOps(me, []model.Op{{Op: model.OpRestore, ID: child, ParentID: &bullet, Position: &pos}}); err != nil {
+	if err := db.ApplyOps(ctx, me, []model.Op{{Op: model.OpRestore, ID: child, ParentID: &bullet, Position: &pos}}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := db.GetItem(me, bullet); !slices.Equal(got.ChildIDs, []uuid.UUID{child}) {
+	if got, _ := db.GetItem(ctx, me, bullet); !slices.Equal(got.ChildIDs, []uuid.UUID{child}) {
 		t.Errorf("bullet children = %v, want Child back", got.ChildIDs)
 	}
 	trash(me, child)
 
 	before := time.Now().Add(-30 * 24 * time.Hour)
-	if n, err := db.EmptyTrash(me, &before); err != nil || n != 1 {
+	if n, err := db.EmptyTrash(ctx, me, &before); err != nil || n != 1 {
 		t.Fatalf("purge removed %d (%v), want only Old", n, err)
 	}
-	if err := db.DeleteFromTrash(me, deep); !isNotFound(err) {
+	if err := db.DeleteFromTrash(ctx, me, deep); !isNotFound(err) {
 		t.Errorf("deleting a page inside a trashed page: %v, want not found", err)
 	}
-	if err := db.DeleteFromTrash(me, theirs); !isNotFound(err) {
+	if err := db.DeleteFromTrash(ctx, me, theirs); !isNotFound(err) {
 		t.Errorf("deleting another user's page: %v, want not found", err)
 	}
-	if err := db.DeleteFromTrash(me, child); err != nil {
+	if err := db.DeleteFromTrash(ctx, me, child); err != nil {
 		t.Fatal(err)
 	}
 	var left int
@@ -469,7 +467,7 @@ func TestPostgresTrashRestoreAndDelete(t *testing.T) {
 		[]uuid.UUID{child, inChild, deep, old}).Scan(&left); err != nil || left != 0 {
 		t.Errorf("%d rows left (%v), want the trashed pages and all inside them gone", left, err)
 	}
-	if n, err := db.EmptyTrash(other, nil); err != nil || n != 1 {
+	if n, err := db.EmptyTrash(ctx, other, nil); err != nil || n != 1 {
 		t.Errorf("other user's empty removed %d (%v), want 1", n, err)
 	}
 }
@@ -485,7 +483,7 @@ func TestPostgresOpenItem(t *testing.T) {
 	quote := b.add(page, model.ItemTypeQuote, "quote")
 	mustInsert(t, db, me, b)
 
-	opened, err := db.OpenItem(me, quote)
+	opened, err := db.OpenItem(ctx, me, quote)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -498,7 +496,7 @@ func TestPostgresOpenItem(t *testing.T) {
 	if len(opened.Ancestors) != 1 || opened.Ancestors[0].ID != top {
 		t.Errorf("ancestors = %+v", opened.Ancestors)
 	}
-	if _, err := db.OpenItem(me, ws); !isNotFound(err) {
+	if _, err := db.OpenItem(ctx, me, ws); !isNotFound(err) {
 		t.Errorf("opening the workspace: err = %v, want not found", err)
 	}
 }
@@ -528,7 +526,7 @@ func TestPostgresMigrationGivesExistingUsersAWorkspace(t *testing.T) {
 	}
 	applyFiles(t, pool, migrationFiles(t, "003_*.up.sql")...)
 
-	if _, err := database.NewPostgreItemsDataSource(pool).GetWorkspace(me); err != nil {
+	if _, err := database.NewPostgreItemsDataSource(pool).GetWorkspace(ctx, me); err != nil {
 		t.Errorf("existing user has no workspace: %v", err)
 	}
 
@@ -541,5 +539,28 @@ func TestPostgresMigrationGivesExistingUsersAWorkspace(t *testing.T) {
 	}
 	if tables != 3 {
 		t.Errorf("after the down migration found %d of the old tables, want 3", tables)
+	}
+}
+
+func TestPostgresQueriesStopWhenTheRequestIsCanceled(t *testing.T) {
+	db, pool := newItemsDB(t)
+	me := newUser(t, pool)
+	users := database.NewPostgreUserDataSource(pool)
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := db.ListPages(canceled, me); !errors.Is(err, context.Canceled) {
+		t.Errorf("ListPages with a canceled context: err = %v, want context.Canceled", err)
+	}
+	if _, err := users.GetUserByID(canceled, me); !errors.Is(err, context.Canceled) {
+		t.Errorf("GetUserByID with a canceled context: err = %v, want context.Canceled", err)
+	}
+	ws := workspaceOf(t, db, me)
+	op := model.Op{Op: model.OpCreate, ID: uuid.New(), Type: testutil.Ptr(model.ItemTypePage), ParentID: &ws.ID}
+	if err := db.ApplyOps(canceled, me, []model.Op{op}); !errors.Is(err, context.Canceled) {
+		t.Errorf("ApplyOps with a canceled context: err = %v, want context.Canceled", err)
+	}
+	if pages, err := db.ListPages(ctx, me); err != nil || len(pages) != 0 {
+		t.Errorf("after the canceled batch: pages = %d, err = %v; want nothing created", len(pages), err)
 	}
 }

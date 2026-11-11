@@ -1,7 +1,7 @@
 # Backend Makefile — setup, migrations, docs, run.
 # All commands assume they're run from the backend/ directory ($ cd backend && make ...).
 #
-# POSTGRES_* / JWT_SECRET are NOT loaded as Make variables (a plain `-include .env`
+# POSTGRES_* are NOT loaded as Make variables (a plain `-include .env`
 # freezes them at parse time, before `env` has a chance to create the file on
 # a fresh clone). Instead, any recipe that needs them sources .env itself at
 # run time via `. ./.env`, after `env` (its prerequisite) has guaranteed the
@@ -20,20 +20,15 @@ help: ## Show this help
 
 ## --- Setup -----------------------------------------------------------------
 
-setup: env tools tidy db-create migrate-up seed-user ## One-shot setup: env file (secret auto-generated), tools, deps, database, migrations, dev user — no manual steps required
+setup: env tools tidy db-create migrate-up seed-user ## One-shot setup: env file, tools, deps, database, migrations, dev user — no manual steps required
 	@echo "Setup complete. Run 'make run' to start the server."
 
-env: ## Create .env from .env.example if missing, auto-generating a JWT secret
+env: ## Create .env from .env.example if missing
 	@test -f .env || cp .env.example .env
-	@if [ -z "$$(grep '^JWT_SECRET=' .env | cut -d'=' -f2-)" ]; then \
-		SECRET=$$(openssl rand -base64 48); \
-		perl -i -pe "s|^JWT_SECRET=.*|JWT_SECRET=$$SECRET|" .env; \
-		echo "Generated a random JWT_SECRET in .env."; \
-	fi
 
 tools: ## Install swag (Swagger generator) and migrate (schema migrations) CLIs
-	go install github.com/swaggo/swag/cmd/swag@latest
-	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	go install github.com/swaggo/swag/cmd/swag@v1.16.6
+	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1
 
 tidy: ## Download and tidy Go module dependencies
 	go mod download
@@ -49,10 +44,10 @@ db-drop: env ## Drop the Postgres database named in .env (POSTGRES_DB), terminat
 	@. ./.env; PGPASSWORD=$$POSTGRES_PASSWORD psql -h $$POSTGRES_HOST -p $$POSTGRES_PORT -U $$POSTGRES_USER -d postgres -c "DROP DATABASE IF EXISTS $$POSTGRES_DB;"
 
 migrate-up: env ## Apply all pending SQL migrations
-	@. ./.env; $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@$$POSTGRES_HOST:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable" up
+	@URL=$$(go run ./cmd/dburl -sslmode=disable) && $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "$$URL" up
 
 migrate-down: env ## Roll back the most recent migration
-	@. ./.env; $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "postgres://$$POSTGRES_USER:$$POSTGRES_PASSWORD@$$POSTGRES_HOST:$$POSTGRES_PORT/$$POSTGRES_DB?sslmode=disable" down 1
+	@URL=$$(go run ./cmd/dburl -sslmode=disable) && $(GOBIN)/migrate -path $(MIGRATIONS_DIR) -database "$$URL" down 1
 
 migrate-create: ## Create a new migration pair: make migrate-create name=add_something
 	@test -n "$(name)" || (echo "usage: make migrate-create name=<migration_name>"; exit 1)

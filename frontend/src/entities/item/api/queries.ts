@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { QueryClient } from '@tanstack/react-query'
 import type { Op } from '../model/types'
 import {
   applyOps,
@@ -52,18 +53,34 @@ export function useTrash() {
   return useQuery({ queryKey: itemKeys.trash, queryFn: fetchTrash })
 }
 
-// useTrashAction wraps a trash endpoint: afterwards the trash and the sidebar
-// are refetched, and so is any open page, which may have held a restored page.
+// What a tree change does to open items: 'reload' refetches them, which
+// remounts the editor; 'stale' only marks them, for the editor's own saves;
+// 'keep' leaves them alone, for changes the editor never shows.
+export type EditorRefresh = 'reload' | 'stale' | 'keep'
+
+// invalidateTree refetches the sidebar and the trash after a change to the tree.
+export async function invalidateTree(
+  queryClient: QueryClient,
+  { editor = 'reload' }: { editor?: EditorRefresh } = {},
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
+    queryClient.invalidateQueries({ queryKey: itemKeys.trash }),
+    editor !== 'keep' &&
+      queryClient.invalidateQueries({
+        queryKey: itemKeys.items,
+        refetchType: editor === 'stale' ? 'none' : 'active',
+      }),
+  ])
+}
+
+// useTrashAction wraps a trash endpoint. Any open page is reloaded, as it may
+// have held a restored page.
 function useTrashAction<T>(fn: (arg: T) => Promise<unknown>) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: fn,
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: itemKeys.trash }),
-        queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
-        queryClient.invalidateQueries({ queryKey: itemKeys.items }),
-      ]),
+    onSuccess: () => invalidateTree(queryClient),
   })
 }
 
@@ -71,36 +88,16 @@ export const useRestoreFromTrash = () => useTrashAction(restoreFromTrash)
 export const useDeleteFromTrash = () => useTrashAction(deleteFromTrash)
 export const useEmptyTrash = () => useTrashAction((_: void) => emptyTrash())
 
-// changesPages reports whether a batch can change the sidebar without the caller
-// knowing item types: creating a page, trashing one, or deleting a block (pages
-// inside it go to the trash). Moves and updates of pages must say so themselves.
-export const changesPages = (ops: Op[]) =>
-  ops.some(
-    (op) =>
-      op.op === 'trash' ||
-      op.op === 'restore' ||
-      op.op === 'delete' ||
-      (op.op === 'create' && op.type === 'page'),
-  )
-
 export interface ApplyOpsInput {
   ops: Op[]
-  // Refetch /pages afterwards. Defaults to changesPages(ops).
-  refreshPages?: boolean
+  editor?: EditorRefresh
 }
 
 export function useApplyOps() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ ops }: ApplyOpsInput) => applyOps(ops),
-    onSuccess: (_data, { ops, refreshPages }) => {
-      if (refreshPages ?? changesPages(ops)) {
-        return Promise.all([
-          queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
-          queryClient.invalidateQueries({ queryKey: itemKeys.trash }),
-        ])
-      }
-    },
+    onSuccess: (_data, { editor }) => invalidateTree(queryClient, { editor }),
   })
 }
 
@@ -108,7 +105,6 @@ export function useDuplicateItem() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: duplicateItem,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
+    onSuccess: () => invalidateTree(queryClient),
   })
 }

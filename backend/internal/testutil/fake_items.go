@@ -1,22 +1,46 @@
 package testutil
 
 import (
+	"context"
 	"sort"
 	"time"
 
+	"backend/internal/apperr"
 	"backend/internal/database"
 	"backend/internal/model"
-	"backend/internal/pkg"
+	"backend/internal/services"
 
 	"github.com/google/uuid"
 )
 
-// The FakeDatabase item methods follow the Postgres datasource: children are
+// FakeItemStore is an in-memory item tree. Set a field of Fail to make that
+// method fail.
+type FakeItemStore struct {
+	Items map[uuid.UUID]model.Item
+	Fail  ItemFailures
+}
+
+type ItemFailures struct {
+	GetWorkspace, GetItem, ResolveItem, GetPageTree, Ancestors, ListPages error
+	ApplyOps, Duplicate, ListTrash, DeleteFromTrash, EmptyTrash           error
+}
+
+var (
+	_ services.PageReader = (*FakeItemStore)(nil)
+	_ services.TreeWriter = (*FakeItemStore)(nil)
+	_ services.TrashStore = (*FakeItemStore)(nil)
+)
+
+func NewFakeItemStore() *FakeItemStore {
+	return &FakeItemStore{Items: map[uuid.UUID]model.Item{}}
+}
+
+// The FakeItemStore methods follow the Postgres datasource: children are
 // ordered by their parent's child_ids, children the parent does not list come
 // last, by creation time, and trashed pages are skipped wherever they sit. Writes
 // go through package tree (see fake_tree.go), as they do in Postgres.
 
-func (f *FakeDatabase) addWorkspace(userID uuid.UUID) model.Item {
+func (f *FakeItemStore) addWorkspace(userID uuid.UUID) model.Item {
 	now := time.Now()
 	ws := model.Item{
 		ID: uuid.New(), UserID: userID, Type: model.ItemTypeWorkspace, ChildIDs: []uuid.UUID{},
@@ -28,7 +52,7 @@ func (f *FakeDatabase) addWorkspace(userID uuid.UUID) model.Item {
 
 // Workspace returns the user's workspace, creating it if the test has not
 // added the user through AddUser.
-func (f *FakeDatabase) Workspace(userID uuid.UUID) model.Item {
+func (f *FakeItemStore) Workspace(userID uuid.UUID) model.Item {
 	for _, it := range f.Items {
 		if it.UserID == userID && it.Type == model.ItemTypeWorkspace {
 			return it
@@ -37,7 +61,7 @@ func (f *FakeDatabase) Workspace(userID uuid.UUID) model.Item {
 	return f.addWorkspace(userID)
 }
 
-func (f *FakeDatabase) owned(userID, id uuid.UUID) (model.Item, bool) {
+func (f *FakeItemStore) owned(userID, id uuid.UUID) (model.Item, bool) {
 	it, ok := f.Items[id]
 	if !ok || it.UserID != userID {
 		return model.Item{}, false
@@ -45,7 +69,7 @@ func (f *FakeDatabase) owned(userID, id uuid.UUID) (model.Item, bool) {
 	return it, true
 }
 
-func (f *FakeDatabase) children(parent model.Item) []model.Item {
+func (f *FakeItemStore) children(parent model.Item) []model.Item {
 	var kids []model.Item
 	for _, it := range f.Items {
 		if it.ParentID != nil && *it.ParentID == parent.ID {
@@ -75,8 +99,8 @@ func (f *FakeDatabase) children(parent model.Item) []model.Item {
 	return kids
 }
 
-func (f *FakeDatabase) GetWorkspace(userID uuid.UUID) (model.Item, error) {
-	if err := f.Errs["GetWorkspace"]; err != nil {
+func (f *FakeItemStore) GetWorkspace(ctx context.Context, userID uuid.UUID) (model.Item, error) {
+	if err := f.Fail.GetWorkspace; err != nil {
 		return model.Item{}, err
 	}
 	for _, it := range f.Items {
@@ -84,28 +108,28 @@ func (f *FakeDatabase) GetWorkspace(userID uuid.UUID) (model.Item, error) {
 			return it, nil
 		}
 	}
-	return model.Item{}, pkg.NewNotFoundError("item")
+	return model.Item{}, apperr.NotFoundf("item")
 }
 
-func (f *FakeDatabase) GetItem(userID, id uuid.UUID) (model.Item, error) {
-	if err := f.Errs["GetItem"]; err != nil {
+func (f *FakeItemStore) GetItem(ctx context.Context, userID, id uuid.UUID) (model.Item, error) {
+	if err := f.Fail.GetItem; err != nil {
 		return model.Item{}, err
 	}
 	it, ok := f.owned(userID, id)
 	if !ok {
-		return model.Item{}, pkg.NewNotFoundError("item")
+		return model.Item{}, apperr.NotFoundf("item")
 	}
 	return it, nil
 }
 
-func (f *FakeDatabase) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, error) {
+func (f *FakeItemStore) ResolveItem(ctx context.Context, userID, id uuid.UUID) (model.ItemLocation, error) {
 	var loc model.ItemLocation
-	if err := f.Errs["ResolveItem"]; err != nil {
+	if err := f.Fail.ResolveItem; err != nil {
 		return loc, err
 	}
 	it, ok := f.owned(userID, id)
 	if !ok {
-		return loc, pkg.NewNotFoundError("item")
+		return loc, apperr.NotFoundf("item")
 	}
 	loc.Type = it.Type
 	found := false
@@ -122,33 +146,33 @@ func (f *FakeDatabase) ResolveItem(userID, id uuid.UUID) (model.ItemLocation, er
 		it = f.Items[*it.ParentID]
 	}
 	if !found {
-		return loc, pkg.NewNotFoundError("item")
+		return loc, apperr.NotFoundf("item")
 	}
 	return loc, nil
 }
 
-func (f *FakeDatabase) OpenItem(userID, id uuid.UUID) (database.OpenedItem, error) {
-	var out database.OpenedItem
+func (f *FakeItemStore) OpenItem(ctx context.Context, userID, id uuid.UUID) (model.OpenedItem, error) {
+	var out model.OpenedItem
 	var err error
-	if out.Location, err = f.ResolveItem(userID, id); err != nil {
-		return database.OpenedItem{}, err
+	if out.Location, err = f.ResolveItem(ctx, userID, id); err != nil {
+		return model.OpenedItem{}, err
 	}
-	if out.Items, err = f.GetPageTree(userID, out.Location.PageID); err != nil {
-		return database.OpenedItem{}, err
+	if out.Items, err = f.GetPageTree(ctx, userID, out.Location.PageID); err != nil {
+		return model.OpenedItem{}, err
 	}
-	if out.Ancestors, err = f.Ancestors(userID, out.Location.PageID); err != nil {
-		return database.OpenedItem{}, err
+	if out.Ancestors, err = f.Ancestors(ctx, userID, out.Location.PageID); err != nil {
+		return model.OpenedItem{}, err
 	}
 	return out, nil
 }
 
-func (f *FakeDatabase) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, error) {
-	if err := f.Errs["GetPageTree"]; err != nil {
+func (f *FakeItemStore) GetPageTree(ctx context.Context, userID, pageID uuid.UUID) ([]model.Item, error) {
+	if err := f.Fail.GetPageTree; err != nil {
 		return nil, err
 	}
 	page, ok := f.owned(userID, pageID)
 	if !ok || page.Type != model.ItemTypePage {
-		return nil, pkg.NewNotFoundError("page")
+		return nil, apperr.NotFoundf("item")
 	}
 	items := []model.Item{page}
 	var walk func(parent model.Item, depth int)
@@ -170,8 +194,8 @@ func (f *FakeDatabase) GetPageTree(userID, pageID uuid.UUID) ([]model.Item, erro
 	return items, nil
 }
 
-func (f *FakeDatabase) Ancestors(userID, id uuid.UUID) ([]model.Item, error) {
-	if err := f.Errs["Ancestors"]; err != nil {
+func (f *FakeItemStore) Ancestors(ctx context.Context, userID, id uuid.UUID) ([]model.Item, error) {
+	if err := f.Fail.Ancestors; err != nil {
 		return nil, err
 	}
 	pages := []model.Item{}
@@ -188,12 +212,12 @@ func (f *FakeDatabase) Ancestors(userID, id uuid.UUID) ([]model.Item, error) {
 	return pages, nil
 }
 
-func (f *FakeDatabase) ListPages(userID uuid.UUID) ([]model.Item, error) {
-	if err := f.Errs["ListPages"]; err != nil {
+func (f *FakeItemStore) ListPages(ctx context.Context, userID uuid.UUID) ([]model.Item, error) {
+	if err := f.Fail.ListPages; err != nil {
 		return nil, err
 	}
 	pages := []model.Item{}
-	ws, err := f.GetWorkspace(userID)
+	ws, err := f.GetWorkspace(ctx, userID)
 	if err != nil {
 		return pages, nil
 	}

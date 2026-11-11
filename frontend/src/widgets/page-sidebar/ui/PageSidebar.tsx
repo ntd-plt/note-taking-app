@@ -2,29 +2,18 @@
 // trash link. Pages are dragged with the pointer: onto a page, or between rows
 // (see model/sidebarDrop.ts). One page at a time; there is no multi-select.
 import * as React from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { toast } from 'sonner'
-import { showUndoToast } from '#/shared/ui/undoToast'
-import { openSettings } from '#/shared/lib/settingsDialog'
 import {
   ChevronRight,
-  ChevronsUpDown,
   Copy,
   HelpCircle,
-  LogOut,
   MoreHorizontal,
   PanelLeft,
-  PanelLeftClose,
   Plus,
-  Search,
-  Settings,
   Star,
   StarOff,
   Trash2,
-  User,
 } from 'lucide-react'
-import { logout, validateSession } from '#/shared/api'
 import {
   Sidebar,
   SidebarContent,
@@ -45,44 +34,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
-import {
-  Command,
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '#/components/ui/command'
 import { cn } from '#/lib/utils'
 import {
-  PROP,
-  applyOps,
-  duplicateItem,
-  fetchItem,
-  flushOpenEditor,
   isFavorite,
-  itemKeys,
   pageIcon,
   pageName,
   usePages,
   useWorkspace,
 } from '#/entities/item'
-import type { Item, Op } from '#/entities/item'
+import type { Item } from '#/entities/item'
 import {
   buildPageTree,
   favoritePages,
-  isWithin,
+  pageAncestors,
   visibleRows,
 } from '../model/pageTree'
 import type { PageNode } from '../model/pageTree'
-import {
-  knownChildIds,
-  placementToMove,
-  pointerToDrop,
-  resolveSidebarDrop,
-} from '../model/sidebarDrop'
+import { pointerToDrop, resolveSidebarDrop } from '../model/sidebarDrop'
 import type { SidebarDrop } from '../model/sidebarDrop'
+import { usePageActions } from '../model/usePageActions'
+import type { PageActions } from '../model/usePageActions'
+import { AccountMenu } from './AccountMenu'
+import { QuickFind } from './QuickFind'
 
 const ROW_INDENT = 12
 // Where a top-level row starts its icon, so it lines up with the text of the
@@ -106,73 +79,6 @@ function SidebarOpenButton() {
   )
 }
 
-function AccountMenu() {
-  const navigate = useNavigate()
-  const { toggleSidebar } = useSidebar()
-  const [user, setUser] = React.useState<{ name: string } | null>(null)
-  React.useEffect(() => {
-    void validateSession().then((auth) => {
-      if (auth.isAuthenticated && auth.user)
-        setUser({ name: auth.user.username || auth.user.email.split('@')[0] })
-    })
-  }, [])
-  const name = user?.name ?? 'User'
-  return (
-    <div className="flex items-center gap-1">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="flex min-w-0 flex-1 items-center justify-between rounded-lg px-2 py-1.5 text-left transition-all hover:bg-sidebar-accent/50 focus:outline-none">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 font-semibold text-link shadow-sm ring-1 ring-primary/20">
-                {name.substring(0, 2).toUpperCase()}
-              </div>
-              <span className="text-[10px] font-semibold tracking-wide text-sidebar-foreground">
-                {name}
-              </span>
-            </div>
-            <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground opacity-60" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent className="w-56" align="start" sideOffset={6}>
-          <DropdownMenuItem
-            className="cursor-pointer px-2 py-1.5 text-xs"
-            onClick={() => void navigate({ to: '/profile' })}
-          >
-            <User className="mr-2 h-3.5 w-3.5 opacity-60" />
-            Profile Settings
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="cursor-pointer px-2 py-1.5 text-xs"
-            onClick={() => openSettings()}
-          >
-            <Settings className="mr-2 h-3.5 w-3.5 opacity-60" />
-            Settings
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="cursor-pointer px-2 py-1.5 text-xs text-destructive"
-            onClick={async () => {
-              await logout()
-              void navigate({ to: '/login' })
-            }}
-          >
-            <LogOut className="mr-2 h-3.5 w-3.5 opacity-60" />
-            Log Out
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <button
-        onClick={toggleSidebar}
-        title="Close sidebar"
-        aria-label="Close sidebar"
-        className="shrink-0 cursor-pointer rounded-md p-1.5 text-muted-foreground/70 transition-all hover:bg-sidebar-accent/60 hover:text-foreground"
-      >
-        <PanelLeftClose className="h-4 w-4" />
-      </button>
-    </div>
-  )
-}
-
 interface DragState {
   id: string
   drop: SidebarDrop | null
@@ -180,7 +86,6 @@ interface DragState {
 
 export function PageSidebar({ currentId }: { currentId?: string | null }) {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const pagesQuery = usePages()
   const workspace = useWorkspace()
   const pages = React.useMemo(() => pagesQuery.data ?? [], [pagesQuery.data])
@@ -193,7 +98,6 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
     [tree, expanded],
   )
   const [drag, setDrag] = React.useState<DragState | null>(null)
-  const [searchOpen, setSearchOpen] = React.useState(false)
   const listRef = React.useRef<HTMLDivElement>(null)
 
   const expand = React.useCallback((ids: (string | null | undefined)[]) => {
@@ -206,165 +110,16 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
   // Keep the open page visible: expand the pages above it.
   React.useEffect(() => {
     if (!currentId) return
-    const byId = new Map(pages.map((p) => [p.id, p]))
-    const above: string[] = []
-    for (
-      let p = byId.get(byId.get(currentId)?.parentPageId ?? '');
-      p;
-      p = byId.get(p.parentPageId ?? '')
-    )
-      above.push(p.id)
-    expand(above)
+    expand(pageAncestors(currentId, pages).map((p) => p.id))
   }, [currentId, pages, expand])
 
-  React.useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        setSearchOpen((o) => !o)
-      }
-    }
-    document.addEventListener('keydown', down)
-    return () => document.removeEventListener('keydown', down)
-  }, [])
-
-  const open = (id: string) =>
-    void navigate({ to: '/items/$itemId', params: { itemId: id } })
-
-  // Sends a change made from the sidebar. When it changes the tree, the open
-  // editor saves first, so its positions still match, and reloads afterwards
-  // to show the change.
-  const refresh = (reloadEditor = true) =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
-      queryClient.invalidateQueries({ queryKey: itemKeys.trash }),
-      reloadEditor &&
-        queryClient.invalidateQueries({ queryKey: itemKeys.items }),
-    ])
-  const send = async (ops: Op[]) => {
-    await applyOps(ops)
-    await refresh()
-  }
-
-  // A favorite is a prop the editor never shows, so the editor is left alone.
-  const toggleFavorite = async (page: Item) => {
-    try {
-      await applyOps([
-        {
-          op: 'update',
-          id: page.id,
-          props: { [PROP.isFavorite]: !isFavorite(page) },
-        },
-      ])
-      await refresh(false)
-    } catch (err) {
-      toast.error(`Couldn't update favorites: ${(err as Error).message}`)
-    }
-  }
-
-  // The copy goes right after the original, in the same parent, and opens.
-  const duplicatePage = async (page: Item) => {
-    try {
-      await flushOpenEditor()
-      const copy = await duplicateItem(page.id)
-      await refresh()
-      open(copy.id)
-    } catch (err) {
-      toast.error(`Couldn't duplicate the page: ${(err as Error).message}`)
-    }
-  }
-
-  // undoTrash puts the page back at the end of the parent it was in. If that
-  // parent is gone (deleted or trashed meanwhile), it goes to the end of the
-  // top level instead.
-  const undoTrash = async (page: Item, parentId: string, reopen: boolean) => {
-    try {
-      await flushOpenEditor()
-      try {
-        await applyOps([{ op: 'restore', id: page.id, parentId }])
-      } catch {
-        await applyOps([{ op: 'restore', id: page.id }])
-        toast.info(
-          `Its old place is gone; "${pageName(page)}" is at the top level`,
-        )
-      }
-      await refresh()
-      if (reopen) open(page.id)
-    } catch (err) {
-      toast.error(`Couldn't restore the page: ${(err as Error).message}`)
-    }
-  }
-
-  // Trashing hides the page and everything under it. If the open page is among
-  // them, leave it first so the editor is not reloaded into a trashed page.
-  // Undo in the toast puts it back in the parent it was in.
-  const trashPage = async (page: Item) => {
-    try {
-      await flushOpenEditor()
-      const leaving = !!currentId && isWithin(currentId, page.id, pages)
-      const reopen = currentId === page.id
-      const parentId = page.parentId!
-      await applyOps([{ op: 'trash', id: page.id }])
-      if (leaving) await navigate({ to: '/items' })
-      await refresh()
-      showUndoToast(`Moved "${pageName(page)}" to the trash`, () => {
-        void undoTrash(page, parentId, reopen)
-      })
-    } catch (err) {
-      toast.error(
-        `Couldn't move the page to the trash: ${(err as Error).message}`,
-      )
-    }
-  }
-
-  const actions: PageActions = {
-    onToggleFavorite: (p) => void toggleFavorite(p),
-    onDuplicate: (p) => void duplicatePage(p),
-    onTrash: (p) => void trashPage(p),
-  }
+  const { open, actions, addPage, movePage } = usePageActions({
+    currentId,
+    pages,
+    rows,
+    expand,
+  })
   const favorites = favoritePages(pages)
-
-  const addPage = async (parentId: string | undefined) => {
-    if (!parentId) return
-    const id = crypto.randomUUID()
-    try {
-      await flushOpenEditor()
-      await send([{ op: 'create', id, type: 'page', parentId }])
-      expand([parentId])
-      open(id)
-    } catch (err) {
-      toast.error(`Couldn't add a page: ${(err as Error).message}`)
-    }
-  }
-
-  const movePage = async (draggedId: string, drop: SidebarDrop) => {
-    const placement = resolveSidebarDrop(draggedId, drop, rows, pages)
-    if (!placement) return
-    try {
-      await flushOpenEditor()
-      let siblings: string[] | undefined
-      if (placement.kind === 'beside') {
-        siblings = knownChildIds(placement.parentId, pages)
-        if (!siblings) {
-          // The parent is a block: its children come with the page holding it.
-          const holder = pages.find(
-            (p) => p.id === placement.anchorId,
-          )?.parentPageId
-          if (!holder) return
-          const opened = await fetchItem(holder)
-          siblings = opened.items.find(
-            (i) => i.id === placement.parentId,
-          )?.childIds
-        }
-      }
-      const op = placementToMove(draggedId, placement, siblings)
-      if (!op) return
-      await send([op])
-      if (placement.kind === 'onto') expand([placement.pageId])
-    } catch (err) {
-      toast.error(`Couldn't move the page: ${(err as Error).message}`)
-    }
-  }
 
   const startDrag = (id: string, e: React.PointerEvent) => {
     if (e.button !== 0) return
@@ -438,10 +193,6 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
           depth: rows.find((r) => r.item.id === placement.anchorId)?.depth ?? 0,
         }
       : null
-
-  const matches = (q: string) =>
-    pages.filter((p) => pageName(p).toLowerCase().includes(q.toLowerCase()))
-  const [query, setQuery] = React.useState('')
 
   return (
     <>
@@ -561,63 +312,9 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
         <SidebarRail />
       </Sidebar>
 
-      <CommandDialog
-        open={searchOpen}
-        onOpenChange={setSearchOpen}
-        title="Quick Find"
-        description="Search pages by name"
-      >
-        <Command shouldFilter={false}>
-          <CommandInput
-            placeholder="Search pages by name..."
-            value={query}
-            onValueChange={setQuery}
-          />
-          <CommandList className="max-h-80 overflow-y-auto p-2">
-            <CommandEmpty className="py-6 text-center text-xs italic text-muted-foreground/60">
-              No pages found.
-            </CommandEmpty>
-            <CommandGroup heading="Pages">
-              {matches(query).map((p) => (
-                <CommandItem
-                  key={p.id}
-                  value={p.id}
-                  onSelect={() => {
-                    open(p.id)
-                    setSearchOpen(false)
-                    setQuery('')
-                  }}
-                  className="flex cursor-pointer items-center gap-2.5 rounded-lg p-2"
-                >
-                  <span className="text-base">{pageIcon(p)}</span>
-                  <div className="flex flex-col truncate">
-                    <span className="truncate text-xs font-semibold">
-                      {pageName(p)}
-                    </span>
-                    <span className="truncate text-[10px] text-muted-foreground/65">
-                      {location(p, pages) || 'Top level'}
-                    </span>
-                  </div>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </CommandDialog>
+      <QuickFind pages={pages} onOpen={open} />
     </>
   )
-}
-
-function location(page: Item, pages: Item[]): string {
-  const byId = new Map(pages.map((p) => [p.id, p]))
-  const names: string[] = []
-  for (
-    let p = byId.get(page.parentPageId ?? '');
-    p;
-    p = byId.get(p.parentPageId ?? '')
-  )
-    names.unshift(pageName(p))
-  return names.join(' / ')
 }
 
 function DropLine({ depth }: { depth: number }) {
@@ -628,12 +325,6 @@ function DropLine({ depth }: { depth: number }) {
       style={{ marginLeft: ROW_INSET + depth * ROW_INDENT }}
     />
   )
-}
-
-interface PageActions {
-  onToggleFavorite: (page: Item) => void
-  onDuplicate: (page: Item) => void
-  onTrash: (page: Item) => void
 }
 
 // The ⋯ menu of a page row. Its events stay out of the row, which would
