@@ -33,8 +33,7 @@ func (e *engine) restore(op model.Op) error {
 	}
 	parentID := op.ParentID
 	if parentID == nil {
-		wsID := e.ws.ID
-		parentID = &wsID
+		parentID = e.workspaceID()
 	}
 	if _, err := e.parentFor(parentID, model.ItemTypePage); err != nil {
 		return err

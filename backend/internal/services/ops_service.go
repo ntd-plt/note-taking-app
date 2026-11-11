@@ -2,11 +2,9 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 
 	"backend/internal/apperr"
 	"backend/internal/model"
-	"backend/internal/tree"
 
 	"github.com/google/uuid"
 )
@@ -17,26 +15,14 @@ func badOp(i int, msg string) *apperr.Error {
 	return apperr.New(apperr.Invalid, "%s", msg).AtOp(i)
 }
 
-// validateOp checks one operation on its own, without looking at the tree. The
-// tree rules, and the props each type needs, are checked when the batch runs.
+// validateOp checks the shape of one operation: which fields it needs and allows.
+// Types, props and the tree rules are checked by the engine when the batch runs.
 func validateOp(i int, op model.Op) error {
 	if op.ID == uuid.Nil {
 		return badOp(i, "id is required")
 	}
-	if op.Type != nil && (*op.Type == model.ItemTypeWorkspace || !op.Type.Valid()) {
-		return badOp(i, "unknown type "+string(*op.Type))
-	}
 	if op.Position != nil && *op.Position < 0 {
 		return badOp(i, "position cannot be negative")
-	}
-	if op.Props != nil {
-		raw, err := json.Marshal(op.Props)
-		if err != nil {
-			return badOp(i, "props cannot be stored")
-		}
-		if len(raw) > tree.MaxPropsBytes {
-			return apperr.New(apperr.TooLarge, "props must be at most 64 KB").AtOp(i)
-		}
 	}
 	placed := op.ParentID != nil || op.Position != nil
 

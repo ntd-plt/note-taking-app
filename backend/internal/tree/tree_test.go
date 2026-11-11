@@ -347,7 +347,7 @@ func TestRejections(t *testing.T) {
 		{"block at the top level", apperr.Invalid, createBlock(uuid.New(), f.ws, nil, model.ItemTypeParagraph, "x")},
 		{"block moved to the top level", apperr.Invalid, move(a, f.ws, nil)},
 		{"heading without level", apperr.Invalid, model.Op{Op: model.OpCreate, ID: uuid.New(), Type: ptr(model.ItemTypeHeading), ParentID: &page}},
-		{"props too large after merge", apperr.Invalid, update(c, model.Props{"more": big})},
+		{"props too large after merge", apperr.TooLarge, update(c, model.Props{"more": big})},
 		{"existing id", apperr.Conflict, createBlock(a, page, nil, model.ItemTypeParagraph, "x")},
 		{"another user's id", apperr.Conflict, createBlock(theirs, page, nil, model.ItemTypeParagraph, "x")},
 	}

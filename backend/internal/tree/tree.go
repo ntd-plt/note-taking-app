@@ -123,6 +123,29 @@ func (e *engine) chain(it model.Item) ([]uuid.UUID, error) {
 	return ids, nil
 }
 
+// live loads an item other than the workspace, runs check on it if given, and
+// fails if the item or a page above it is in the trash.
+func (e *engine) live(id uuid.UUID, what string, check func(model.Item) error) (model.Item, error) {
+	it, err := e.get(id, what)
+	if err != nil {
+		return model.Item{}, err
+	}
+	if check != nil {
+		if err := check(it); err != nil {
+			return model.Item{}, err
+		}
+	}
+	if _, err := e.chain(it); err != nil {
+		return model.Item{}, err
+	}
+	return it, nil
+}
+
+func (e *engine) workspaceID() *uuid.UUID {
+	id := e.ws.ID
+	return &id
+}
+
 func (e *engine) save(it model.Item) error {
 	if err := e.s.Save(it); err != nil {
 		return err
@@ -137,7 +160,7 @@ func (e *engine) checkSize(props model.Props) error {
 		return e.fail(apperr.Invalid, "props cannot be stored: %v", err)
 	}
 	if len(raw) > MaxPropsBytes {
-		return e.fail(apperr.Invalid, "props must be at most %d KB", MaxPropsBytes>>10)
+		return e.fail(apperr.TooLarge, "props must be at most %d KB", MaxPropsBytes>>10)
 	}
 	return nil
 }
@@ -148,8 +171,16 @@ func (e *engine) detach(parentID, id uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	parent.ChildIDs = slices.DeleteFunc(slices.Clone(parent.ChildIDs), func(c uuid.UUID) bool { return c == id })
-	e.touched[parentID] = true
+	return e.setChildren(parent, withoutChild(parent.ChildIDs, id))
+}
+
+func withoutChild(ids []uuid.UUID, id uuid.UUID) []uuid.UUID {
+	return slices.DeleteFunc(slices.Clone(ids), func(c uuid.UUID) bool { return c == id })
+}
+
+func (e *engine) setChildren(parent model.Item, ids []uuid.UUID) error {
+	parent.ChildIDs = ids
+	e.touched[parent.ID] = true
 	return e.save(parent)
 }
 
@@ -162,7 +193,7 @@ func (e *engine) attach(parentID, id uuid.UUID, position *int) error {
 	if err != nil {
 		return err
 	}
-	ids := slices.DeleteFunc(slices.Clone(parent.ChildIDs), func(c uuid.UUID) bool { return c == id })
+	ids := withoutChild(parent.ChildIDs, id)
 	at := len(ids)
 	if position != nil {
 		if *position < 0 || *position > len(ids) {
@@ -184,9 +215,7 @@ func (e *engine) attach(parentID, id uuid.UUID, position *int) error {
 			}
 		}
 	}
-	parent.ChildIDs = slices.Insert(ids, at, id)
-	e.touched[parentID] = true
-	return e.save(parent)
+	return e.setChildren(parent, slices.Insert(ids, at, id))
 }
 
 func isEmptyParagraph(it model.Item) bool {
@@ -276,8 +305,11 @@ func (e *engine) completeProps(t model.ItemType, props model.Props) (model.Props
 }
 
 func (e *engine) create(op model.Op) error {
-	if op.Type == nil || *op.Type == model.ItemTypeWorkspace || !op.Type.Valid() {
+	if op.Type == nil {
 		return e.fail(apperr.Invalid, "a valid type is required")
+	}
+	if err := e.checkType(*op.Type); err != nil {
+		return err
 	}
 	if _, err := e.parentFor(op.ParentID, *op.Type); err != nil {
 		return err
@@ -309,10 +341,6 @@ func (e *engine) create(op model.Op) error {
 // mergeProps sets each given key on a copy of current. A null value is skipped,
 // and so is a value the type relies on that is not acceptable for that key.
 func mergeProps(t model.ItemType, current, changes model.Props) model.Props {
-	rules := map[string]model.PropRule{}
-	for _, r := range model.PropRules(t) {
-		rules[r.Key] = r
-	}
 	out := maps.Clone(current)
 	if out == nil {
 		out = model.Props{}
@@ -321,7 +349,7 @@ func mergeProps(t model.ItemType, current, changes model.Props) model.Props {
 		if v == nil {
 			continue
 		}
-		if rule, ok := rules[k]; ok {
+		if rule, ok := model.RuleFor(t, k); ok {
 			checked, valid := rule.Check(v)
 			if !valid {
 				continue
@@ -333,16 +361,23 @@ func mergeProps(t model.ItemType, current, changes model.Props) model.Props {
 	return out
 }
 
-func (e *engine) update(op model.Op) error {
-	it, err := e.get(op.ID, "item")
-	if err != nil {
-		return err
+func (e *engine) checkType(t model.ItemType) error {
+	if t == model.ItemTypeWorkspace || !t.Valid() {
+		return e.fail(apperr.Invalid, "unknown type %s", t)
 	}
-	if _, err := e.chain(it); err != nil {
+	return nil
+}
+
+func (e *engine) update(op model.Op) error {
+	it, err := e.live(op.ID, "item", nil)
+	if err != nil {
 		return err
 	}
 	typ := it.Type
 	if op.Type != nil {
+		if err := e.checkType(*op.Type); err != nil {
+			return err
+		}
 		if (*op.Type == model.ItemTypePage) != (it.Type == model.ItemTypePage) {
 			return e.fail(apperr.Invalid, "an item cannot change between page and block")
 		}
@@ -357,11 +392,8 @@ func (e *engine) update(op model.Op) error {
 }
 
 func (e *engine) move(op model.Op) error {
-	it, err := e.get(op.ID, "item")
+	it, err := e.live(op.ID, "item", nil)
 	if err != nil {
-		return err
-	}
-	if _, err := e.chain(it); err != nil {
 		return err
 	}
 	parentChain, err := e.parentFor(op.ParentID, it.Type)
@@ -384,14 +416,13 @@ func (e *engine) move(op model.Op) error {
 // delete removes a block and everything under it. Pages under it are not deleted:
 // they go to the trash, taking their own content with them.
 func (e *engine) delete(op model.Op) error {
-	it, err := e.get(op.ID, "item")
+	it, err := e.live(op.ID, "item", func(it model.Item) error {
+		if it.Type == model.ItemTypePage {
+			return e.fail(apperr.Invalid, "pages cannot be deleted here; trash them instead")
+		}
+		return nil
+	})
 	if err != nil {
-		return err
-	}
-	if it.Type == model.ItemTypePage {
-		return e.fail(apperr.Invalid, "pages cannot be deleted here; trash them instead")
-	}
-	if _, err := e.chain(it); err != nil {
 		return err
 	}
 	below, err := e.s.Descendants(it.ID)
@@ -433,21 +464,19 @@ func (e *engine) delete(op model.Op) error {
 // toTrash moves a page under the workspace and stamps it, leaving it out of the
 // workspace's child_ids.
 func (e *engine) toTrash(page model.Item) error {
-	wsID := e.ws.ID
-	page.ParentID = &wsID
+	page.ParentID = e.workspaceID()
 	page.TrashedAt = &e.now
 	return e.save(page)
 }
 
 func (e *engine) trash(op model.Op) error {
-	it, err := e.get(op.ID, "item")
+	it, err := e.live(op.ID, "item", func(it model.Item) error {
+		if it.Type != model.ItemTypePage {
+			return e.fail(apperr.Invalid, "only pages go to the trash; delete blocks instead")
+		}
+		return nil
+	})
 	if err != nil {
-		return err
-	}
-	if it.Type != model.ItemTypePage {
-		return e.fail(apperr.Invalid, "only pages go to the trash; delete blocks instead")
-	}
-	if _, err := e.chain(it); err != nil {
 		return err
 	}
 	if err := e.detach(*it.ParentID, it.ID); err != nil {

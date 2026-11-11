@@ -70,7 +70,7 @@ func TestApplyOpsRejectsBadShapes(t *testing.T) {
 		"move with props":      {opsBody(fmt.Sprintf(`{"op":"move","id":"%s","parent_id":"%s","props":{}}`, id, page)), http.StatusBadRequest},
 		"delete with fields":   {opsBody(fmt.Sprintf(`{"op":"delete","id":"%s","props":{}}`, id)), http.StatusBadRequest},
 		"trash with position":  {opsBody(fmt.Sprintf(`{"op":"trash","id":"%s","position":0}`, id)), http.StatusBadRequest},
-		"props too large":      {opsBody(fmt.Sprintf(`{"op":"update","id":"%s","props":{"content":[%s]}}`, id, big)), http.StatusRequestEntityTooLarge},
+		"props too large":      {opsBody(fmt.Sprintf(`{"op":"update","id":"%s","props":{"note":%s}}`, page, big)), http.StatusRequestEntityTooLarge},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

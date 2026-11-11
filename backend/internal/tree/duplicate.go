@@ -44,11 +44,12 @@ func Duplicate(s Store, workspaceID, id uuid.UUID, now time.Time) (model.Item, e
 	if err != nil {
 		return model.Item{}, err
 	}
-	src, err := e.get(id, "item")
+	src, err := e.live(id, "item", nil)
 	if err != nil {
 		return model.Item{}, err
 	}
-	if _, err := e.chain(src); err != nil {
+	parent, err := e.getAny(*src.ParentID, "parent")
+	if err != nil {
 		return model.Item{}, err
 	}
 	below, err := s.Descendants(src.ID)
@@ -84,10 +85,6 @@ func Duplicate(s Store, workspaceID, id uuid.UUID, now time.Time) (model.Item, e
 
 	root := clone(src, *src.ParentID)
 	if root.Type == model.ItemTypePage {
-		parent, err := e.getAny(*src.ParentID, "parent")
-		if err != nil {
-			return model.Item{}, err
-		}
 		occupied := map[string]bool{}
 		for _, sib := range parent.ChildIDs {
 			if it, err := e.getAny(sib, "sibling"); err == nil && it.Type == model.ItemTypePage {
@@ -119,10 +116,6 @@ func Duplicate(s Store, workspaceID, id uuid.UUID, now time.Time) (model.Item, e
 		}
 	}
 
-	parent, err := e.getAny(*src.ParentID, "parent")
-	if err != nil {
-		return model.Item{}, err
-	}
 	at := slices.Index(parent.ChildIDs, src.ID) + 1
 	if err := e.attach(parent.ID, root.ID, &at); err != nil {
 		return model.Item{}, err

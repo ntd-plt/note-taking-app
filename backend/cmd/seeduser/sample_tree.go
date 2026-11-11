@@ -80,10 +80,10 @@ func validateNode(n node) error {
 			return fmt.Errorf(`%s: use "text" or props.content, not both`, n.Type)
 		}
 	}
-	for _, rule := range model.PropRules(n.Type) {
-		if v, ok := n.Props[rule.Key]; ok {
+	for key, v := range n.Props {
+		if rule, ok := model.RuleFor(n.Type, key); ok {
 			if _, valid := rule.Check(v); !valid {
-				return fmt.Errorf(`%s: props.%s is not valid`, n.Type, rule.Key)
+				return fmt.Errorf(`%s: props.%s is not valid`, n.Type, key)
 			}
 		}
 	}
