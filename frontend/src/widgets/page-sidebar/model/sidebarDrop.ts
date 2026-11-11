@@ -12,6 +12,7 @@
 // childIds, and the sidebar knows those only for pages and the workspace. When the
 // parent is a block, the caller fetches the page holding it first.
 import type { Item, Op } from '#/entities/item'
+import { isWithin } from './pageTree'
 import type { PageNode } from './pageTree'
 
 export type SidebarDrop =
@@ -34,13 +35,7 @@ export function resolveSidebarDrop(
   rows: readonly PageNode[],
   pages: readonly Item[],
 ): SidebarPlacement | null {
-  const byId = new Map(pages.map((p) => [p.id, p]))
-  const insideDragged = (id: string) => {
-    for (let p = byId.get(id); p; p = byId.get(p.parentPageId ?? '')) {
-      if (p.id === draggedId) return true
-    }
-    return false
-  }
+  const insideDragged = (id: string) => isWithin(id, draggedId, pages)
 
   if (drop.kind === 'onto') {
     return insideDragged(drop.pageId) ? null : drop
