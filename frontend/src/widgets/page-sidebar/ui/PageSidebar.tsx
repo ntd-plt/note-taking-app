@@ -58,14 +58,13 @@ import {
 import { cn } from '#/lib/utils'
 import {
   PROP,
-  applyOps,
-  duplicateItem,
   fetchItem,
   flushOpenEditor,
   isFavorite,
-  itemKeys,
   pageIcon,
   pageName,
+  useApplyOps,
+  useDuplicateItem,
   usePages,
   useWorkspace,
 } from '#/entities/item'
@@ -185,7 +184,8 @@ interface DragState {
 
 export function PageSidebar({ currentId }: { currentId?: string | null }) {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
+  const { mutateAsync: applyOps } = useApplyOps()
+  const { mutateAsync: duplicateItem } = useDuplicateItem()
   const pagesQuery = usePages()
   const workspace = useWorkspace()
   const pages = React.useMemo(() => pagesQuery.data ?? [], [pagesQuery.data])
@@ -236,32 +236,23 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
   const open = (id: string) =>
     void navigate({ to: '/items/$itemId', params: { itemId: id } })
 
-  // Sends a change made from the sidebar. When it changes the tree, the open
-  // editor saves first, so its positions still match, and reloads afterwards
-  // to show the change.
-  const refresh = (reloadEditor = true) =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: itemKeys.pages }),
-      queryClient.invalidateQueries({ queryKey: itemKeys.trash }),
-      reloadEditor &&
-        queryClient.invalidateQueries({ queryKey: itemKeys.items }),
-    ])
-  const send = async (ops: Op[]) => {
-    await applyOps(ops)
-    await refresh()
-  }
+  // A change made from the sidebar. The open editor saves first, so its
+  // positions still match, and reloads afterwards to show the change.
+  const send = (ops: Op[]) => applyOps({ ops })
 
   // A favorite is a prop the editor never shows, so the editor is left alone.
   const toggleFavorite = async (page: Item) => {
     try {
-      await applyOps([
-        {
-          op: 'update',
-          id: page.id,
-          props: { [PROP.isFavorite]: !isFavorite(page) },
-        },
-      ])
-      await refresh(false)
+      await applyOps({
+        ops: [
+          {
+            op: 'update',
+            id: page.id,
+            props: { [PROP.isFavorite]: !isFavorite(page) },
+          },
+        ],
+        editor: 'keep',
+      })
     } catch (err) {
       toast.error(`Couldn't update favorites: ${errorMessage(err)}`)
     }
@@ -272,7 +263,6 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
     try {
       await flushOpenEditor()
       const copy = await duplicateItem(page.id)
-      await refresh()
       open(copy.id)
     } catch (err) {
       toast.error(`Couldn't duplicate the page: ${errorMessage(err)}`)
@@ -286,14 +276,13 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
     try {
       await flushOpenEditor()
       try {
-        await applyOps([{ op: 'restore', id: page.id, parentId }])
+        await send([{ op: 'restore', id: page.id, parentId }])
       } catch {
-        await applyOps([{ op: 'restore', id: page.id }])
+        await send([{ op: 'restore', id: page.id }])
         toast.info(
           `Its old place is gone; "${pageName(page)}" is at the top level`,
         )
       }
-      await refresh()
       if (reopen) open(page.id)
     } catch (err) {
       toast.error(`Couldn't restore the page: ${errorMessage(err)}`)
@@ -309,9 +298,13 @@ export function PageSidebar({ currentId }: { currentId?: string | null }) {
       const leaving = !!currentId && isWithin(currentId, page.id, pages)
       const reopen = currentId === page.id
       const parentId = page.parentId!
-      await applyOps([{ op: 'trash', id: page.id }])
+      // When leaving, the open page is only marked stale: reloading it now
+      // would show it trashed before the navigation.
+      await applyOps({
+        ops: [{ op: 'trash', id: page.id }],
+        editor: leaving ? 'stale' : 'reload',
+      })
       if (leaving) await navigate({ to: '/items' })
-      await refresh()
       showUndoToast(`Moved "${pageName(page)}" to the trash`, () => {
         void undoTrash(page, parentId, reopen)
       })

@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { ApiError } from '#/shared/api/client'
 import {
   applyOps,
-  changesPages,
   duplicateItem,
   fetchItem,
   fetchPages,
@@ -333,23 +332,6 @@ describe('duplicating', () => {
 
     const again = await duplicateItem(original)
     expect(pageName(again)).toBe('Getting Started (Copy 2)')
-  })
-})
-
-describe('changesPages', () => {
-  it('flags batches that can change the sidebar on their own', () => {
-    expect(changesPages([{ op: 'trash', id: 'x' }])).toBe(true)
-    expect(changesPages([{ op: 'delete', id: 'x' }])).toBe(true)
-    expect(
-      changesPages([{ op: 'create', id: 'x', type: 'page', parentId: 'p' }]),
-    ).toBe(true)
-    expect(
-      changesPages([
-        { op: 'create', id: 'x', type: 'paragraph', parentId: 'p' },
-        { op: 'update', id: 'x', props: { content: [] } },
-        { op: 'move', id: 'x', parentId: 'p' },
-      ]),
-    ).toBe(false)
   })
 })
 

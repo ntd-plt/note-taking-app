@@ -4,7 +4,7 @@ import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { applyOps, itemKeys, useItem } from '#/entities/item'
+import { applyOps, invalidateTree, itemKeys, useItem } from '#/entities/item'
 import type { Item, Op } from '#/entities/item'
 import { errorMessage } from '#/shared/lib/errors'
 import { BlockEditor } from './BlockEditor'
@@ -24,16 +24,11 @@ export function PageView({ itemId, trashBanner }: PageViewProps) {
   const reloading = React.useRef(false)
 
   const send = React.useCallback(
-    async (ops: Op[], refreshPages: boolean) => {
+    async (ops: Op[]) => {
       await applyOps(ops)
-      // The cached page is now behind the editor. Mark it stale without
+      // The cached page is now behind the editor: mark it stale without
       // refetching, so it loads fresh next time it is opened.
-      void queryClient.invalidateQueries({
-        queryKey: itemKeys.items,
-        refetchType: 'none',
-      })
-      if (refreshPages)
-        await queryClient.invalidateQueries({ queryKey: itemKeys.pages })
+      await invalidateTree(queryClient, { editor: 'stale' })
     },
     [queryClient],
   )
@@ -91,7 +86,7 @@ export function PageView({ itemId, trashBanner }: PageViewProps) {
   const key = `${page.id}:${query.dataUpdatedAt}`
   const savePage = async (props: { name?: string; icon?: string }) => {
     try {
-      await send([{ op: 'update', id: page.id, props }], true)
+      await send([{ op: 'update', id: page.id, props }])
     } catch (err) {
       onSaveFailed(err)
     }

@@ -94,7 +94,7 @@ function putBack(editor: PageEditor, pageId: string, t: TrashedBlock) {
 export interface BlockEditorProps {
   opened: OpenedItem
   editable: boolean
-  send: (ops: Op[], refreshPages: boolean) => Promise<void>
+  send: (ops: Op[]) => Promise<void>
   onSaveFailed: (err: unknown) => void
   onSavingChange: (saving: boolean) => void
   // Scrolls to and focuses this block once loaded, then calls onFocused.
@@ -169,7 +169,7 @@ export function BlockEditor({
       new PageSaver({
         saved: fromBlockNote(pageId, editor.document as unknown as BNBlock[]),
         read: () => fromBlockNote(pageId, editor.document),
-        send: (ops, refresh) => callbacks.current.send(ops, refresh),
+        send: (ops) => callbacks.current.send(ops),
         onError: (err) => callbacks.current.onSaveFailed(err),
         onSavingChange: (s) => callbacks.current.onSavingChange(s),
         onTrashed: (pages) => onTrashedRef.current(pages),
