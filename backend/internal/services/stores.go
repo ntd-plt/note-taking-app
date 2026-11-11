@@ -15,7 +15,8 @@ type UserStore interface {
 	GetUserByEmail(ctx context.Context, email string) (model.User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (model.User, error)
 	AddUser(ctx context.Context, user model.User) error
-	UpdateUser(ctx context.Context, user model.User) error
+	// UpdateUser saves the user and returns it as stored.
+	UpdateUser(ctx context.Context, user model.User) (model.User, error)
 }
 
 type PageReader interface {

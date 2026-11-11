@@ -75,7 +75,7 @@ func TestSignupAppliesTheAccountRules(t *testing.T) {
 func TestRename(t *testing.T) {
 	db := testutil.NewFakeUserStore()
 	users := services.NewUserService(db)
-	u := *model.New().WithEmail("alice@example.com").WithUsername("Alice")
+	u := model.NewUser("Alice", "alice@example.com", []byte("h"))
 	if err := db.AddUser(ctx, u); err != nil {
 		t.Fatal(err)
 	}

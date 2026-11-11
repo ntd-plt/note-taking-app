@@ -69,7 +69,7 @@ func (s *AuthService) Signup(ctx context.Context, rawName, rawEmail, password st
 	if err != nil {
 		return model.User{}, err
 	}
-	user := *model.New().WithEmail(email).WithPasswordHash(passwordHash).WithUsername(name)
+	user := model.NewUser(name, email, passwordHash)
 	if err := s.users.AddUser(ctx, user); err != nil {
 		if apperr.Is(err, apperr.Conflict) {
 			return model.User{}, ErrEmailAlreadyExists

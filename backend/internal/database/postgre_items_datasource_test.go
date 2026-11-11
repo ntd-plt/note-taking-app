@@ -91,8 +91,8 @@ func newItemsDB(t *testing.T) (*database.PostgreItemsDataSource, *pgxpool.Pool) 
 // newUser signs a user up, which also creates their workspace.
 func newUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	t.Helper()
-	u := model.New().WithEmail(uuid.NewString() + "@example.com").WithUsername("u").WithPasswordHash([]byte("h"))
-	if err := database.NewPostgreUserDataSource(pool).AddUser(ctx, *u); err != nil {
+	u := model.NewUser("u", uuid.NewString()+"@example.com", []byte("h"))
+	if err := database.NewPostgreUserDataSource(pool).AddUser(ctx, u); err != nil {
 		t.Fatalf("creating user: %v", err)
 	}
 	return u.ID

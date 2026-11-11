@@ -48,20 +48,22 @@ func (db *PostgreUserDataSource) GetUserByID(ctx context.Context, id uuid.UUID) 
 	return u, nil
 }
 
-func (db *PostgreUserDataSource) UpdateUser(ctx context.Context, u user.User) error {
-	queryString := "UPDATE users SET name = $1, email = $2, updated_at = NOW() WHERE id = $3"
-	tag, err := db.conn.Exec(ctx, queryString, u.Name, u.Email, u.ID)
+func (db *PostgreUserDataSource) UpdateUser(ctx context.Context, u user.User) (user.User, error) {
+	var out user.User
+	err := db.conn.QueryRow(ctx,
+		"UPDATE users SET name = $1, email = $2, updated_at = NOW() WHERE id = $3 RETURNING id, email, name, password_hash, created_at, updated_at",
+		u.Name, u.Email, u.ID).Scan(&out.ID, &out.Email, &out.Name, &out.PasswordHash, &out.CreatedAt, &out.UpdatedAt)
+	if stderrors.Is(err, pgx.ErrNoRows) {
+		return user.User{}, apperr.NotFoundf("user")
+	}
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if stderrors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
-			return apperr.New(apperr.Conflict, "user with this email already exists")
+			return user.User{}, apperr.New(apperr.Conflict, "user with this email already exists")
 		}
-		return err
+		return user.User{}, err
 	}
-	if tag.RowsAffected() == 0 {
-		return apperr.NotFoundf("user")
-	}
-	return nil
+	return out, nil
 }
 
 // AddUser creates the user together with their workspace, the hidden root item

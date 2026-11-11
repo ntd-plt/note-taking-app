@@ -11,15 +11,12 @@ import (
 	"os"
 	"strings"
 
-	"backend/internal/apperr"
 	"backend/internal/configs"
 	"backend/internal/database"
-	"backend/internal/model"
 	"backend/internal/pkg/hash"
 	"backend/internal/services"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -46,19 +43,6 @@ func run() error {
 		fmt.Println("seed-user: SEED_USER_EMAIL, SEED_USER_PASSWORD and SEED_USER_NAME are not all set in .env; skipping.")
 		return nil
 	}
-	// The same rules as signup, so the dev user is an account signup could make.
-	email, err := services.CheckEmailFormat(rawEmail)
-	if err != nil {
-		return fmt.Errorf("SEED_USER_EMAIL: %w", err)
-	}
-	name, err := services.CheckName(rawName)
-	if err != nil {
-		return fmt.Errorf("SEED_USER_NAME: %w", err)
-	}
-	if err := services.CheckPassword(password); err != nil {
-		return fmt.Errorf("SEED_USER_PASSWORD: %w", err)
-	}
-
 	// Read the sample tree first, so a mistake in the file fails before anything is created.
 	tree, err := parseTree(sampleTreeJSON)
 	if err != nil {
@@ -71,30 +55,25 @@ func run() error {
 	}
 	defer pool.Close()
 
-	passwordHash, err := hash.NewBcryptHasher().Hash([]byte(password))
-	if err != nil {
-		return err
-	}
 	users := database.NewPostgreUserDataSource(pool)
 	items := database.NewPostgreItemsDataSource(pool)
+	auth := services.NewAuthService(users, hash.NewBcryptHasher(), services.NoopEmailValidator{})
 
-	user := model.New().WithEmail(email).WithUsername(name).WithPasswordHash(passwordHash)
-	err = users.AddUser(ctx, *user)
+	user, err := auth.Signup(ctx, rawName, rawEmail, password)
+	email := services.NormalizeEmail(rawEmail)
 	switch {
-	case apperr.Is(err, apperr.Conflict):
-		existing, err := users.GetUserByEmail(ctx, email)
-		if err != nil {
+	case err == services.ErrEmailAlreadyExists:
+		if user, err = users.GetUserByEmail(ctx, email); err != nil {
 			return err
 		}
-		user = &existing
 		fmt.Printf("seed-user: %s already exists.\n", email)
 	case err != nil:
 		return err
 	default:
-		fmt.Printf("seed-user: created %s (%s).\n", email, name)
+		fmt.Printf("seed-user: created %s (%s).\n", email, user.Name)
 	}
 
-	seeded, err := hasPages(ctx, pool, user.ID)
+	seeded, err := hasPages(ctx, items, user.ID)
 	if err != nil {
 		return err
 	}
@@ -116,9 +95,11 @@ func run() error {
 
 // hasPages reports whether the user already has any page, trashed ones included, so
 // running the seed twice does not add a second sample tree.
-func hasPages(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) (bool, error) {
-	var found bool
-	err := pool.QueryRow(ctx,
-		"SELECT EXISTS (SELECT 1 FROM items WHERE user_id = $1 AND type = 'page')", userID).Scan(&found)
-	return found, err
+func hasPages(ctx context.Context, items *database.PostgreItemsDataSource, userID uuid.UUID) (bool, error) {
+	pages, err := items.ListPages(ctx, userID)
+	if err != nil || len(pages) > 0 {
+		return len(pages) > 0, err
+	}
+	trashed, err := items.ListTrash(ctx, userID)
+	return len(trashed) > 0, err
 }

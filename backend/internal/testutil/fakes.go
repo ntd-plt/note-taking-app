@@ -10,6 +10,7 @@ import (
 	"backend/internal/services"
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -80,15 +81,16 @@ func (f *FakeUserStore) AddUser(ctx context.Context, user model.User) error {
 	return nil
 }
 
-func (f *FakeUserStore) UpdateUser(ctx context.Context, user model.User) error {
+func (f *FakeUserStore) UpdateUser(ctx context.Context, user model.User) (model.User, error) {
 	if err := f.Fail.UpdateUser; err != nil {
-		return err
+		return model.User{}, err
 	}
 	if _, ok := f.Users[user.ID]; !ok {
-		return ErrUserNotFound
+		return model.User{}, ErrUserNotFound
 	}
+	user.UpdatedAt = time.Now()
 	f.Users[user.ID] = user
-	return nil
+	return user, nil
 }
 
 // FakeHasher is a trivial hash.Hasher: Hash prefixes the password with

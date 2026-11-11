@@ -36,7 +36,7 @@ func newAuthRouterWithValidator(db *testutil.FakeUserStore, ev *testutil.FakeEma
 }
 
 func addUser(db *testutil.FakeUserStore, email, password string) model.User {
-	u := *model.New().WithEmail(email).WithPasswordHash([]byte("hashed:" + password))
+	u := model.NewUser("Test", email, []byte("hashed:"+password))
 	db.Users[u.ID] = u
 	return u
 }

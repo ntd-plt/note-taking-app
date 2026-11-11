@@ -15,28 +15,7 @@ type User struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-func New() *User {
-	return &User{
-		ID:           uuid.New(),
-		Name:         "Default",
-		Email:        "default@gmail.com",
-		PasswordHash: []byte("default"),
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
-	}
-}
-
-func (u *User) WithEmail(email string) *User {
-	u.Email = email
-	return u
-}
-
-func (u *User) WithUsername(username string) *User {
-	u.Name = username
-	return u
-}
-
-func (u *User) WithPasswordHash(passwordHash []byte) *User {
-	u.PasswordHash = passwordHash
-	return u
+func NewUser(name, email string, passwordHash []byte) User {
+	now := time.Now()
+	return User{ID: uuid.New(), Name: name, Email: email, PasswordHash: passwordHash, CreatedAt: now, UpdatedAt: now}
 }

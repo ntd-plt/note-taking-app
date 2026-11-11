@@ -58,20 +58,6 @@ const (
 	DefaultSessionAbsoluteTTL = 30 * 24 * time.Hour
 )
 
-func Default() *Config {
-	return &Config{
-		DBHost: "localhost",
-		DBPort: "5432",
-		DBUser: "postgres",
-		DBPass: "password",
-		DBName: "db",
-		Port:   DefaultPort,
-		AppEnv: "development",
-
-		TrashRetention: DefaultTrashRetention,
-	}
-}
-
 func Load() (*Config, error) {
 	// Attempt to load .env file, but do not fail if it is missing (as in production)
 	_ = godotenv.Load()

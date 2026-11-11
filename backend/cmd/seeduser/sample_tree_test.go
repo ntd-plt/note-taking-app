@@ -15,8 +15,8 @@ import (
 func seedFake(t *testing.T, nodes []node) (*testutil.FakeItemStore, uuid.UUID, []model.Item) {
 	t.Helper()
 	users, db := testutil.NewFakeStores()
-	user := model.New()
-	if err := users.AddUser(ctx, *user); err != nil {
+	user := model.NewUser("Seed", uuid.NewString()+"@example.com", []byte("h"))
+	if err := users.AddUser(ctx, user); err != nil {
 		t.Fatal(err)
 	}
 	rows, _ := buildItems(db.Workspace(user.ID).ID, nodes)

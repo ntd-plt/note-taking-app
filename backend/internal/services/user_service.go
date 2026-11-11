@@ -31,8 +31,5 @@ func (s *UserService) Rename(ctx context.Context, id uuid.UUID, rawName string) 
 		return model.User{}, err
 	}
 	user.Name = name
-	if err := s.db.UpdateUser(ctx, user); err != nil {
-		return model.User{}, err
-	}
-	return s.db.GetUserByID(ctx, id)
+	return s.db.UpdateUser(ctx, user)
 }
