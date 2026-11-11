@@ -2,16 +2,15 @@
 // (backend/internal/tree and services/ops_service.go) so the app behaves the same
 // against the mocks as against the real backend: same checks, same error statuses,
 // all-or-nothing batches. It works on the wire shapes, as the server does.
-import { BLOCK_TYPES } from '../model/types'
+import { MAX_ICON_LENGTH, MAX_NAME_LENGTH } from '../model/props'
+import { BLOCK_TYPES, MAX_OPS_PER_BATCH } from '../model/types'
 import type { ItemType, Props } from '../model/types'
 import type { WireItem, WireOp } from './wire'
 
+// Server limits the client itself doesn't need.
 export const MAX_TREE_DEPTH = 256
 export const MAX_PROPS_BYTES = 64 * 1024
-export const MAX_OPS_PER_BATCH = 500
 export const MAX_DUPLICATE_ROWS = 1000
-const MAX_NAME_LENGTH = 255
-const MAX_ICON_LENGTH = 32
 
 // TreeError is a rejected request. index is the failing operation, when there is one.
 export class TreeError extends Error {
