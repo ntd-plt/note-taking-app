@@ -17,10 +17,6 @@ import (
 const MaxTreeDepth = tree.MaxTreeDepth
 
 const (
-	pgForeignKeyViolation = "23503"
-	pgUniqueViolation     = "23505"
-	pgCheckViolation      = "23514"
-
 	itemColumns = "i.id, i.user_id, i.parent_id, i.type, i.child_ids, i.props, i.trashed_at, i.created_at, i.updated_at"
 )
 

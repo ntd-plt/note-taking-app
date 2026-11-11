@@ -14,9 +14,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// postgresUniqueViolationCode is the Postgres SQLSTATE for unique_violation.
-const postgresUniqueViolationCode = "23505"
-
 type PostgreUserDataSource struct {
 	conn *pgxpool.Pool
 }
@@ -56,7 +53,7 @@ func (db *PostgreUserDataSource) UpdateUser(ctx context.Context, u user.User) er
 	tag, err := db.conn.Exec(ctx, queryString, u.Name, u.Email, u.ID)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if stderrors.As(err, &pgErr) && pgErr.Code == postgresUniqueViolationCode {
+		if stderrors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
 			return apperr.New(apperr.Conflict, "user with this email already exists")
 		}
 		return err
@@ -79,7 +76,7 @@ func (db *PostgreUserDataSource) AddUser(ctx context.Context, u user.User) error
 	_, err = tx.Exec(ctx, "INSERT INTO users (id, name, email, password_hash, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)", u.ID, u.Name, u.Email, u.PasswordHash, u.CreatedAt, u.UpdatedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if stderrors.As(err, &pgErr) && pgErr.Code == postgresUniqueViolationCode {
+		if stderrors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation {
 			return apperr.New(apperr.Conflict, "user with this email already exists")
 		}
 		return err
